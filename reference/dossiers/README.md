@@ -20,3 +20,5 @@ work without redoing the RE. Keep it factual: what was done, how it was checked,
 6. **VERIFY list.** Every uncertain spot, with what would settle it (a disassembly read, a runtime
    test, another file's reconstruction).
 7. **Behavior worth testing.** What to try in-game against the original once it can run.
+8. **Original bugs.** Each bug or oddity of the original you found: where, what it does, and
+   whether you kept it or changed it. The coordinator copies them into `reference/ORIGINAL_BUGS.md`.

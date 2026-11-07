@@ -53,6 +53,11 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
   copies an error message into a read-only `""`, which crashes. Ours returns `""` without the write
   (`dlls/flag.cpp`, marked VERIFY).
 
+- **CVEC frees with `delete[]`** (`dlls/bot_prefs.h`). The original uses scalar delete on memory
+  from `new[]`, which corrupts its heap at shutdown for `CVEC<sHeading>`.
+- **The houndeye and alien grunt pickups test for NULL before calling `IsPlayer()`.** The original
+  calls it first; same behavior for any real caller.
+
 ## Layout
 
 - **`m_pOwner` lives in `CBaseDriveEnt`.** Each original drive class declares its own driver

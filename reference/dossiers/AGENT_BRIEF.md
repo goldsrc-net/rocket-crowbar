@@ -60,6 +60,8 @@ git worktree. The bar is identical behavior. Exact binary layout is NOT a goal.
 - Each class's base from `hierarchy.tsv`; its new virtuals in the original's slot order.
 - Every function gets a one-line provenance comment with its original address
   (`// orig 0x15a2f0`). Mark every uncertain spot `// VERIFY: <why>`.
+- Keep the original's bugs (its crashes too, unless told otherwise) and list each in the
+  dossier's "Original bugs" section; `reference/ORIGINAL_BUGS.md` collects them.
 - Never invent behavior. If the decompile and the disassembly don't settle it, write the most
   literal reading, mark it VERIFY, and put it in the dossier.
 - Already in the tree (don't redo): RC's 46 cvars (`game.h`), the 23 virtuals RC added to
