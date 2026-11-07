@@ -1,0 +1,16 @@
+//-- mod-rockcrowbar : Rocket Crowbar 1.9 rebuilt on halflife-updated @ 64bit-demo
+//
+// Mounts as `rockcrowbar/` and falls back to valve/ for everything it does not
+// override. Server-only like the original (cldll 0): clients use Half-Life's
+// own client library. RC uses single-player models and sounds, which the
+// fallback to valve/ covers.
+game "Rocket Crowbar"
+gamedir "rockcrowbar"
+fallback_dir "valve"
+version "19"
+mpentity "info_player_deathmatch"
+gamedll "dlls\hl.dll"
+gamedll_linux "dlls/hl.so"
+svonly "1"
+cldll "0"
+type "multiplayer_only"
