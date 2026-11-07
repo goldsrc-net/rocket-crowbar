@@ -77,6 +77,11 @@ if [ ! -d "$RIG2" ]; then
 fi
 server_gamedir "$RIG2/rockcrowbar" "dlls/hl.so"
 put_lib "$OURS" "$RIG2/rockcrowbar/dlls/hl.so"
+# smoke.py's copy of ours (gamedir rcours in the first rig): refreshed too, or a smoke run tests
+# whatever build was there last
+if [ -d "$RIG/rcours/dlls" ]; then
+	put_lib "$OURS" "$RIG/rcours/dlls/hl.so"
+fi
 
 # client: the v19 content (pak and all; the Steam client reads paks), with the player's valve binds
 if [ ! -d "$CLIENT/rockcrowbar" ]; then
