@@ -1406,13 +1406,15 @@ int CBaseMonster::CheckLocalMove(const Vector& vecStart, const Vector& vecEnd, C
 }
 
 
+// orig 0x1c6400
 float CBaseMonster::OpenDoorAndWait(entvars_t* pevDoor)
 {
 	float flTravelTime = 0;
 
 	//ALERT(at_aiconsole, "A door. ");
 	CBaseEntity* pcbeDoor = CBaseEntity::Instance(pevDoor);
-	if (pcbeDoor && !pcbeDoor->IsLockedByMaster())
+	// RC 1.9's own: no IsLockedByMaster() test, so a monster opens a door its master keeps locked
+	if (pcbeDoor)
 	{
 		//ALERT(at_aiconsole, "unlocked! ");
 		pcbeDoor->Use(this, this, USE_ON, 0.0);
@@ -2114,8 +2116,8 @@ void CBaseMonster::StartMonster()
 		// Try to move the monster to make sure it's not stuck in a brush.
 		if (!WALK_MOVE(ENT(pev), 0, 0, WALKMOVE_NORMAL))
 		{
-			ALERT(at_error, "Monster %s stuck in wall--level design error", STRING(pev->classname));
-			pev->effects = EF_BRIGHTFIELD;
+			// RC 1.9's own: only the message (with a newline); no EF_BRIGHTFIELD on the stuck monster
+			ALERT(at_error, "Monster %s stuck in wall--level design error\n", STRING(pev->classname));
 		}
 	}
 	else
@@ -2923,7 +2925,8 @@ void CBaseMonster::ReportAIState()
 {
 	ALERT_TYPE level = at_console;
 
-	static const char* pStateNames[] = {"None", "Idle", "Combat", "Alert", "Hunt", "Prone", "Scripted", "PlayDead", "Dead"};
+	// RC 1.9's (as SDK 2.1); halflife-updated added "PlayDead", so PLAYDEAD prints "Dead" and DEAD nothing
+	static const char* pStateNames[] = {"None", "Idle", "Combat", "Alert", "Hunt", "Prone", "Scripted", "Dead"};
 
 	ALERT(level, "%s: ", STRING(pev->classname));
 	if ((int)m_MonsterState < ARRAYSIZE(pStateNames))

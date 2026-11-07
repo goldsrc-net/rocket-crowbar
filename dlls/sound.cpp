@@ -221,6 +221,9 @@ void CAmbientGeneric::Spawn()
 }
 
 
+// orig 0x212a10
+// RC 1.9's own: ambient_generic plays on its own CHAN_STATIC (EMIT_SOUND_DYN), not as an ambient
+// sound at pev->origin (UTIL_EmitAmbientSound); every call in Precache, RampThink and ToggleUse.
 void CAmbientGeneric::Precache()
 {
 	char* szSoundFile = (char*)STRING(pev->message);
@@ -241,7 +244,9 @@ void CAmbientGeneric::Precache()
 	}
 	if (m_fActive)
 	{
-		UTIL_EmitAmbientSound(ENT(pev), pev->origin, szSoundFile,
+		// VERIFY: an entity sound sent at map load, before any client is in, may reach nobody (an
+		// ambient sound goes into the signon data); if so, loops that start on spawn are silent, as in RC 1.9
+		EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, szSoundFile,
 			(m_dpv.vol * 0.01), m_flAttenuation, SND_SPAWNING, m_dpv.pitch);
 
 		pev->nextthink = gpGlobals->time + 0.1;
@@ -253,6 +258,8 @@ void CAmbientGeneric::Precache()
 // ramp pitch and/or volume up or down, modify pitch/volume
 // with lfo if active.
 
+// orig 0x212b10
+// RC 1.9's own: CHAN_STATIC entity sound, as in Precache
 void CAmbientGeneric::RampThink()
 {
 	char* szSoundFile = (char*)STRING(pev->message);
@@ -291,7 +298,7 @@ void CAmbientGeneric::RampThink()
 			m_dpv.spindown = 0; // done with ramp down
 
 			// shut sound off
-			UTIL_EmitAmbientSound(ENT(pev), pev->origin, szSoundFile,
+			EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, szSoundFile,
 				0, 0, SND_STOP, 0);
 
 			// return without setting nextthink
@@ -335,7 +342,7 @@ void CAmbientGeneric::RampThink()
 			m_dpv.fadeout = 0; // done with ramp down
 
 			// shut sound off
-			UTIL_EmitAmbientSound(ENT(pev), pev->origin, szSoundFile,
+			EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, szSoundFile,
 				0, 0, SND_STOP, 0);
 
 			// return without setting nextthink
@@ -441,7 +448,7 @@ void CAmbientGeneric::RampThink()
 		if (pitch == PITCH_NORM)
 			pitch = PITCH_NORM + 1; // don't send 'no pitch' !
 
-		UTIL_EmitAmbientSound(ENT(pev), pev->origin, szSoundFile,
+		EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, szSoundFile,
 			(vol * 0.01), m_flAttenuation, flags, pitch);
 	}
 
@@ -539,6 +546,8 @@ void CAmbientGeneric::InitModulationParms()
 // if it's playing, innactive if not.  If the sound is not
 // a looping sound, never mark it as active.
 //
+// orig 0x213140
+// RC 1.9's own: CHAN_STATIC entity sound, as in Precache
 void CAmbientGeneric::ToggleUse(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE useType, float value)
 {
 	char* szSoundFile = (char*)STRING(pev->message);
@@ -563,7 +572,7 @@ void CAmbientGeneric::ToggleUse(CBaseEntity* pActivator, CBaseEntity* pCaller, U
 
 		m_dpv.pitch = fraction * 255;
 
-		UTIL_EmitAmbientSound(ENT(pev), pev->origin, szSoundFile,
+		EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, szSoundFile,
 			0, 0, SND_CHANGE_PITCH, m_dpv.pitch);
 
 		return;
@@ -618,7 +627,7 @@ void CAmbientGeneric::ToggleUse(CBaseEntity* pActivator, CBaseEntity* pCaller, U
 				pev->nextthink = gpGlobals->time + 0.1;
 			}
 			else
-				UTIL_EmitAmbientSound(ENT(pev), pev->origin, szSoundFile,
+				EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, szSoundFile,
 					0, 0, SND_STOP, 0);
 		}
 	}
@@ -634,14 +643,14 @@ void CAmbientGeneric::ToggleUse(CBaseEntity* pActivator, CBaseEntity* pCaller, U
 			m_fActive = true;
 		else
 			// shut sound off now - may be interrupting a long non-looping sound
-			UTIL_EmitAmbientSound(ENT(pev), pev->origin, szSoundFile,
+			EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, szSoundFile,
 				0, 0, SND_STOP, 0);
 
 		// init all ramp params for startup
 
 		InitModulationParms();
 
-		UTIL_EmitAmbientSound(ENT(pev), pev->origin, szSoundFile,
+		EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, szSoundFile,
 			(m_dpv.vol * 0.01), m_flAttenuation, 0, m_dpv.pitch);
 
 		pev->nextthink = gpGlobals->time + 0.1;

@@ -486,16 +486,11 @@ void CBaseToggle::LinearMove(Vector vecDest, float flSpeed)
 After moving, set origin to exact final destination, call "move done" function
 ============
 */
+// orig 0x21d9e0
 void CBaseToggle::LinearMoveDone()
 {
-	Vector delta = m_vecFinalDest - pev->origin;
-	float error = delta.Length();
-	if (error > 0.03125)
-	{
-		LinearMove(m_vecFinalDest, 100);
-		return;
-	}
-
+	// RC 1.9's (as SDK 2.1); halflife-updated keeps moving at speed 100 while more than 1/32 unit
+	// short of the destination, the original snaps there
 	UTIL_SetOrigin(pev, m_vecFinalDest);
 	pev->velocity = g_vecZero;
 	pev->nextthink = -1;

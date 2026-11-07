@@ -2048,7 +2048,7 @@ void CSave::WriteFunction(const char* pname, void** data, int count)
 	if (functionName)
 		BufferField(pname, strlen(functionName) + 1, functionName);
 	else
-		ALERT(at_error, "Invalid function pointer in entity!\n");
+		ALERT(at_error, "Invalid function pointer in entity\n"); // RC 1.9's own wording (SDK 2.1 has "entity!")
 }
 
 
