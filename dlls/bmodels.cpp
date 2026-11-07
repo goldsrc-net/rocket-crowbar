@@ -537,6 +537,9 @@ void CFuncRotating::HurtTouch(CBaseEntity* pOther)
 #define FANPITCHMIN 30
 #define FANPITCHMAX 100
 
+// SDK 2.1's abs() on a float: truncated to int first (gcc 2.95 in RC 1.9). halflife-updated uses fabs
+static int IntAbs(float f) { return abs(static_cast<int>(f)); } // name ours
+
 void CFuncRotating::RampPitchVol(bool fUp)
 {
 
@@ -550,13 +553,14 @@ void CFuncRotating::RampPitchVol(bool fUp)
 
 	// get current angular velocity
 
-	vecCur = fabs(vecAVel.x != 0 ? vecAVel.x : (vecAVel.y != 0 ? vecAVel.y : vecAVel.z));
+	// RC 1.9's (as SDK 2.1); halflife-updated used fabs, so the pitch and volume ramp kept fractions
+	vecCur = IntAbs(vecAVel.x != 0 ? vecAVel.x : (vecAVel.y != 0 ? vecAVel.y : vecAVel.z));
 
 	// get target angular velocity
 
 	vecFinal = (pev->movedir.x != 0 ? pev->movedir.x : (pev->movedir.y != 0 ? pev->movedir.y : pev->movedir.z));
 	vecFinal *= pev->speed;
-	vecFinal = fabs(vecFinal);
+	vecFinal = IntAbs(vecFinal);
 
 	// calc volume and pitch as % of final vol and pitch
 
@@ -591,9 +595,10 @@ void CFuncRotating::SpinUp()
 	vecAVel = pev->avelocity; // cache entity's rotational velocity
 
 	// if we've met or exceeded target speed, set target speed and stop thinking
-	if (fabs(vecAVel.x) >= fabs(pev->movedir.x * pev->speed) &&
-		fabs(vecAVel.y) >= fabs(pev->movedir.y * pev->speed) &&
-		fabs(vecAVel.z) >= fabs(pev->movedir.z * pev->speed))
+	// RC 1.9's (as SDK 2.1); halflife-updated used fabs, so the full-speed test compared fractions
+	if (IntAbs(vecAVel.x) >= IntAbs(pev->movedir.x * pev->speed) &&
+		IntAbs(vecAVel.y) >= IntAbs(pev->movedir.y * pev->speed) &&
+		IntAbs(vecAVel.z) >= IntAbs(pev->movedir.z * pev->speed))
 	{
 		pev->avelocity = pev->movedir * pev->speed; // set speed in case we overshot
 		EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, (char*)STRING(pev->noiseRunning),
