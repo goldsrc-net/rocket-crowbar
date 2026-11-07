@@ -1,0 +1,152 @@
+file	function	size	rc_names
+agrunt.cpp	CAGrunt::StartTask	1595	HasConditions SetConditions
+animation.cpp	GetBodygroup	77	GetSequenceCount
+bigmomma.cpp	CBigMomma::RunTask	499	HasConditions SetConditions
+bigmomma.cpp	CBigMomma::StartTask	1603	HasConditions SetConditions
+bullsquid.cpp	CBullsquid::StartTask	376	SetConditions
+buttons.cpp	CBaseButton::ButtonTouch	304	IsDriveent
+client.cpp	AllowLagCompensation	9	CountEntsInWorld
+client.cpp	ClientCommand	14540	PREFS_BinSearchHead__FPc PREFS_BinSearchKey__FPci PREFS_KeyLoopUpFloat__FPcT0f PREFS_LoadFile__FPc PREFS_LookUpKey PREFS_SetKey__FiiPc PREFS_WriteFile__FPc
+client.cpp	ClientDisconnect	476	CBaseFlag FlagDrop flag
+combat.cpp	CBaseMonster::TakeDamage	1965	IsDriveent deathball
+controller.cpp	CController::Move	1446	SetConditions
+controller.cpp	CController::StartTask	540	HasConditions SetConditions
+crossbow.cpp	CCrossbow::FireBolt	1141	GetGuassHull PREFS_KeyLoopUpFloat__FPcT0f impail_arrow
+crossbow.cpp	CCrossbow::FireSniperBolt	111	DoSniperFire PREFS_KeyLoopUpFloat__FPcT0f
+crossbow.cpp	CCrossbow::GetItemInfo	173	PREFS_KeyLoopUpIntClamp__FPcT0iii
+crossbow.cpp	CCrossbow::Precache	208	impail_arrow
+crossbow.cpp	CCrossbow::Spawn	128	PREFS_KeyLoopUpInt__FPcT0i
+crossbow.cpp	CCrossbow::WeaponIdle	336	DoSniperFire
+crowbar.cpp	CCrowbar::PrimaryAttack	106	PREFS_KeyLoopUpFloat__FPcT0f
+doors.cpp	CBaseDoor::DoorTouch	226	IsDriveent
+effects.cpp	CLightning::KeyValue	2425	Radius
+egon.cpp	CEgon::Attack	774	GetGuassHull
+egon.cpp	CEgon::DestroyEffect	103	StopTractor
+egon.cpp	CEgon::Fire	1053	HasRCCap PREFS_KeyLoopUpFloat__FPcT0f StartTractor UpdateTractor
+egon.cpp	CEgon::GetItemInfo	165	PREFS_KeyLoopUpIntClamp__FPcT0iii
+egon.cpp	CEgon::Precache	366	egon_mirv
+egon.cpp	CEgon::Spawn	115	PREFS_KeyLoopUpIntClamp__FPcT0iii
+func_break.cpp	CBreakable::Die	2016	ExplosionMagnitude
+func_tank.cpp	CFuncTankMortar::Fire	267	CPointExplo ExploCreate
+game.cpp	GameDLLInit	6647	allowgive allowiso allownuke allowrifts ceasefire chlevelwks ctf ctfppc ctfreturntime curses deathballs deathballsonly drvagrunt drvapache drvassassin drvbm drvcontroll drvgarg drvhe drvicky drvpanth drvslave drvsquid drvturret globaleject ignplayer ingameobserver kickbantime kickfract lowlag loyalnpcs mapcfg mapfract monsterspawn noexit pcall pcst prefsfile pregameobserver rockbarversion scikillfest serverclient tannoy transform tvelo votefreq
+gargantua.cpp	CGargantua::RunTask	1435	HasConditions
+gargantua.cpp	CGargantua::StartTask	301	HasConditions
+gauss.cpp	CGauss::GetItemInfo	165	PREFS_KeyLoopUpIntClamp__FPcT0iii
+gauss.cpp	CGauss::PrimaryAttack	3145	BeconTeleport CTeleBecon GetGuassHull PREFS_KeyLoopUpFloat__FPcT0f PREFS_KeyLoopUpInt__FPcT0i
+gauss.cpp	CGauss::SecondaryAttack	2256	BecCreate BeconTeleport CTeleBecon GetGuassHull PREFS_KeyLoopUpFloat__FPcT0f PREFS_KeyLoopUpInt__FPcT0i
+gauss.cpp	CGauss::Spawn	115	PREFS_KeyLoopUpIntClamp__FPcT0iii
+ggrenade.cpp	CGrenade::Explode	1440	sv_lowlag
+ggrenade.cpp	CGrenade::TumbleThink	376	DetonateSnark
+glock.cpp	CGlock::GetItemInfo	189	PREFS_KeyLoopUpIntClamp__FPcT0iii
+glock.cpp	CGlock::GlockFire	1592	AcidGibCreate CAcidGib PREFS_KeyLoopUpFloat__FPcT0f
+glock.cpp	CGlock::Reload	118	PREFS_KeyLoopUpIntClamp__FPcT0iii
+glock.cpp	CGlock::SecondaryAttack	1479	PREFS_KeyLoopUpFloat__FPcT0f PREFS_KeyLoopUpInt__FPcT0i
+glock.cpp	CGlock::Spawn	139	PREFS_KeyLoopUpIntClamp__FPcT0iii
+h_battery.cpp	CRecharge::Recharge	130	PREFS_KeyLoopUpFloat__FPcT0f
+h_battery.cpp	CRecharge::Spawn	229	PREFS_KeyLoopUpFloat__FPcT0f
+h_battery.cpp	CRecharge::Use	828	PREFS_KeyLoopUpFloat__FPcT0f PREFS_KeyLoopUpIntClamp__FPcT0iii
+handgrenade.cpp	CHandGrenade::GetItemInfo	162	PREFS_KeyLoopUpIntClamp__FPcT0iii
+handgrenade.cpp	CHandGrenade::Spawn	135	PREFS_KeyLoopUpIntClamp__FPcT0iii
+handgrenade.cpp	CHandGrenade::WeaponIdle	1429	CBubleGrenade CImplosionGrenade PREFS_KeyLoopUpFloat__FPcT0f ShootBubTimed ShootImpTimed
+hassassin.cpp	CHAssassin::RunTask	306	HasConditions
+hassassin.cpp	CHAssassin::StartTask	96	HasConditions
+headcrab.cpp	CHeadCrab::RunTask	112	HasConditions
+healthkit.cpp	CHealthKit::MyTouch	300	PREFS_KeyLoopUpFloat__FPcT0f
+healthkit.cpp	CWallHealth::Recharge	170	PREFS_KeyLoopUpFloat__FPcT0f
+healthkit.cpp	CWallHealth::Spawn	229	PREFS_KeyLoopUpFloat__FPcT0f
+healthkit.cpp	CWallHealth::Use	588	PREFS_KeyLoopUpFloat__FPcT0f
+hgrunt.cpp	CHGrunt::StartTask	512	HasConditions
+hornetgun.cpp	CHgun::AddToPlayer	221	PREFS_KeyLoopUpIntClamp__FPcT0iii
+hornetgun.cpp	CHgun::GetItemInfo	162	PREFS_KeyLoopUpIntClamp__FPcT0iii
+hornetgun.cpp	CHgun::PrimaryAttack	1320	CFreezeTimer CreateOrUpdateTimer PREFS_KeyLoopUpFloat__FPcT0f ReloadAmmo StartPrimaryFire
+hornetgun.cpp	CHgun::SecondaryAttack	247	PREFS_KeyLoopUpInt__FPcT0i
+hornetgun.cpp	CHgun::Spawn	125	PREFS_KeyLoopUpIntClamp__FPcT0iii
+hornetgun.cpp	CHgun::WeaponIdle	232	ReloadAmmo WeaponAttackIdle
+houndeye.cpp	CHoundeye::RunTask	720	HasConditions
+houndeye.cpp	CHoundeye::SonicAttack	1515	drive_houndeye
+ichthyosaur.cpp	CIchthyosaur::RunTask	2040	HasConditions
+monsters.cpp	CBaseMonster::Look	800	sv_ignoreplayer
+monsters.cpp	CBaseMonster::Move	1391	SetConditions
+monsters.cpp	CBaseMonster::MovementComplete	154	HasConditions
+mp5.cpp	CMP5::GetItemInfo	191	PREFS_KeyLoopUpIntClamp__FPcT0iii
+mp5.cpp	CMP5::PrimaryAttack	1562	FireBeam GetGuassHull PREFS_KeyLoopUpInt__FPcT0i
+mp5.cpp	CMP5::Reload	74	PREFS_KeyLoopUpIntClamp__FPcT0iii
+mp5.cpp	CMP5::SecondaryAttack	3779	PREFS_KeyLoopUpBool__FPcT0b PREFS_KeyLoopUpFloat__FPcT0f PREFS_KeyLoopUpInt__FPcT0i
+mp5.cpp	CMP5::Spawn	155	PREFS_KeyLoopUpIntClamp__FPcT0iii
+multiplay_gamerules.cpp	CHalfLifeMultiplay::ChangeLevel	688	sv_mapcfg
+multiplay_gamerules.cpp	CHalfLifeMultiplay::FlHEVChargerRechargeTime	47	PREFS_KeyLoopUpFloat__FPcT0f
+multiplay_gamerules.cpp	CHalfLifeMultiplay::FlHealthChargerRechargeTime	47	PREFS_KeyLoopUpFloat__FPcT0f
+multiplay_gamerules.cpp	CHalfLifeMultiplay::PlayerSpawn	783	PREFS_KeyLoopUpIntClamp__FPcT0iii PREFS_KeyLoopUpInt__FPcT0i PREFS_KeyLoopUpString__FPcN20
+plats.cpp	CPlatTrigger::Touch	166	IsDriveent
+player.cpp	CBasePlayer::CheatImpulseCommands	3868	drive_agrunt drive_apache drive_asl drive_assassin drive_bm drive_bullsquid drive_chumtoad drive_controller drive_garg drive_headcrab drive_panth drive_turret
+player.cpp	CBasePlayer::IsAlive	87	IsActingAsCam
+player.cpp	CBasePlayer::Jump	901	PREFS_KeyLoopUpFloat__FPcT0f PlayStepSound
+player.cpp	CBasePlayer::Killed	1340	CBaseFlag FlagDrop GetControllerName StartDyingCam flag
+player.cpp	CBasePlayer::PlayerUse	1317	pickup_drive_apache
+player.cpp	CBasePlayer::PostThink	1097	PREFS_KeyLoopUpFloat__FPcT0f PlayStepSound UpdateStepSound VeryHeavyDamageFract
+player.cpp	CBasePlayer::PreThink	1989	ButStompTouch ExtreemeDamageFract PREFS_KeyLoopUpFloat__FPcT0f PREFS_KeyLoopUpIntClamp__FPcT0iii PREFS_KeyLoopUpInt__FPcT0i PlayerDoID UpdateStepSound
+player.cpp	CBasePlayer::TakeDamage	2299	mp_teampush
+player.cpp	CBasePlayer::UpdateClientData	2556	IsBot
+player.cpp	CBasePlayer::UpdatePlayerSound	627	sv_ignoreplayer
+player.cpp	EntSelectSpawnPoint	656	info_teamspawn
+player.cpp	IsSpawnPointValid	113	PickRandomSpawnOfClassname
+pm_shared.c	PM_Init	102	PREFS_BinSearchHead
+pm_shared.c	PM_SpectatorMove	956	GetChaseOrigin
+python.cpp	CPython::GetItemInfo	183	PREFS_KeyLoopUpIntClamp__FPcT0iii
+python.cpp	CPython::PrimaryAttack	1085	CPythRound CreateRnd GetGuassHull PREFS_KeyLoopUpFloat__FPcT0f
+python.cpp	CPython::Reload	141	PREFS_KeyLoopUpIntClamp__FPcT0iii
+python.cpp	CPython::SecondaryAttack	2584	CPythRound CreateRnd GetGuassHull PREFS_KeyLoopUpFloat__FPcT0f PREFS_KeyLoopUpInt__FPcT0i
+python.cpp	CPython::Spawn	139	PREFS_KeyLoopUpIntClamp__FPcT0iii
+rpg.cpp	CRpg::GetItemInfo	183	PREFS_KeyLoopUpIntClamp__FPcT0iii
+rpg.cpp	CRpg::Precache	167	barneymine scientistbomb suck_mine
+rpg.cpp	CRpg::PrimaryAttack	1339	CBarneyBomb CScientistBomb GetGuassHull PREFS_KeyLoopUpFloat__FPcT0f PREFS_KeyLoopUpInt__FPcT0i SciCreate
+rpg.cpp	CRpg::Reload	160	PREFS_KeyLoopUpIntClamp__FPcT0iii
+rpg.cpp	CRpg::SecondaryAttack	900	GetGuassHull PREFS_KeyLoopUpFloat__FPcT0f PREFS_KeyLoopUpInt__FPcT0i suck_mine
+rpg.cpp	CRpg::Spawn	125	PREFS_KeyLoopUpIntClamp__FPcT0iii
+satchel.cpp	CSatchel::AddDuplicate	107	PREFS_KeyLoopUpBool__FPcT0b
+satchel.cpp	CSatchel::AddToPlayer	281	AddWeapon
+satchel.cpp	CSatchel::Deploy	328	PREFS_KeyLoopUpFloat__FPcT0f
+satchel.cpp	CSatchel::GetItemInfo	162	PREFS_KeyLoopUpIntClamp__FPcT0iii
+satchel.cpp	CSatchel::PrimaryAttack	369	PREFS_KeyLoopUpFloat__FPcT0f
+satchel.cpp	CSatchel::Spawn	115	PREFS_KeyLoopUpIntClamp__FPcT0iii
+satchel.cpp	CSatchel::Throw	511	PREFS_KeyLoopUpFloat__FPcT0f
+satchel.cpp	CSatchelCharge::Spawn	356	AtivateUse PREFS_KeyLoopUpFloat__FPcT0f
+schedule.cpp	CBaseMonster::RunTask	2093	HasConditions SetConditions VeryHeavyDamageFract
+schedule.cpp	CBaseMonster::StartTask	5061	HasConditions SetConditions VeryHeavyDamageFract
+scientist.cpp	CScientist::RunTask	915	HasConditions SetConditions
+scientist.cpp	CScientist::Spawn	472	mp_scikill
+scientist.cpp	CScientist::StartTask	658	HasConditions SetConditions
+scientist.cpp	CScientist::TakeDamage	150	sv_loyalnpcs
+shotgun.cpp	CShotgun::GetItemInfo	183	PREFS_KeyLoopUpIntClamp__FPcT0iii
+shotgun.cpp	CShotgun::Precache	755	pipebomb
+shotgun.cpp	CShotgun::PrimaryAttack	1676	CFlyinScientist GetGuassHull PREFS_KeyLoopUpFloat__FPcT0f PREFS_KeyLoopUpInt__FPcT0i PipeCreate
+shotgun.cpp	CShotgun::Reload	644	PREFS_KeyLoopUpFloat__FPcT0f PREFS_KeyLoopUpIntClamp__FPcT0iii
+shotgun.cpp	CShotgun::Spawn	131	PREFS_KeyLoopUpIntClamp__FPcT0iii
+shotgun.cpp	CShotgun::WeaponIdle	583	PREFS_KeyLoopUpIntClamp__FPcT0iii
+sound.cpp	EMIT_GROUPNAME_SUIT	150	memfgets
+sound.cpp	TEXTURETYPE_Find	98	TEXTURETYPE_MkTeAndPlaySound
+sound.cpp	TEXTURETYPE_PlaySound	1513	sv_lowlag
+squeakgrenade.cpp	CSqueak::GetItemInfo	162	PREFS_KeyLoopUpIntClamp__FPcT0iii
+squeakgrenade.cpp	CSqueak::Holster	358	GetPullOrg
+squeakgrenade.cpp	CSqueak::Precache	134	snark_cam
+squeakgrenade.cpp	CSqueak::PrimaryAttack	824	PREFS_KeyLoopUpFloat__FPcT0f
+squeakgrenade.cpp	CSqueak::SecondaryAttack	1309	CSqueakCam CreateCam GetGuassHull snark_cam
+squeakgrenade.cpp	CSqueak::Spawn	154	PREFS_KeyLoopUpIntClamp__FPcT0iii
+squeakgrenade.cpp	CSqueakGrenade::HuntThink	2230	PREFS_KeyLoopUpFloat__FPcT0f ShootLaser
+squeakgrenade.cpp	CSqueakGrenade::Spawn	600	PREFS_KeyLoopUpFloat__FPcT0f
+squeakgrenade.cpp	CSqueakGrenade::SuperBounceTouch	1037	PREFS_KeyLoopUpFloat__FPcT0f sv_ceasefire
+talkmonster.cpp	CTalkMonster::RunTask	1098	HasConditions SetConditions
+talkmonster.cpp	CTalkMonster::StartTask	1090	HasConditions SetConditions
+teamplay_gamerules.cpp	CHalfLifeTeamplay::Think	428	CBaseFlag CreateFlag SetFlagSpawns
+triggers.cpp	CBaseTrigger::HurtTouch	689	IsDriveent
+triggers.cpp	CBaseTrigger::MultiTouch	158	IsDriveent
+triggers.cpp	CChangeLevel::TouchChangeLevel	205	IsDriveent sv_noexit
+triggers.cpp	CChangeLevel::UseChangeLevel	148	sv_noexit
+tripmine.cpp	CTripmine::GetItemInfo	162	PREFS_KeyLoopUpIntClamp__FPcT0iii
+tripmine.cpp	CTripmine::PrimaryAttack	712	GetGuassHull PREFS_KeyLoopUpFloat__FPcT0f
+tripmine.cpp	CTripmine::Spawn	247	PREFS_KeyLoopUpIntClamp__FPcT0iii
+weapons.cpp	CBasePlayerWeapon::AddToPlayer	166	AddWeapon
+weapons.cpp	CBasePlayerWeapon::ItemPostFrame	889	IsHornetGun sv_ceasefire
+weapons.cpp	W_Precache	903	flag
+world.cpp	CWorld::Precache	3178	PREFS_LoadFile__FPc deathball drive_agrunt drive_apache drive_asl drive_assassin drive_bm drive_bullsquid drive_chumtoad drive_controller drive_garg drive_headcrab drive_houndeye drive_icky drive_panth drive_turret nuke_rocket pickup_drive_agrunt pickup_drive_apache pickup_drive_assassin pickup_drive_bm pickup_drive_bullsquid pickup_drive_controller pickup_drive_garg pickup_drive_houndeye pickup_drive_icky pickup_drive_panth pickup_drive_slave pickup_drive_turret sv_mapcfg sv_pcall sv_pcstuff sv_prefsfile
+world.cpp	bodyque	44	InitBodyQue
