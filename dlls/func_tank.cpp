@@ -391,7 +391,8 @@ bool CFuncTank::StartControl(CBasePlayer* pController)
 	{
 		m_pController->m_pActiveItem->Holster();
 		m_pController->pev->weaponmodel = 0;
-		// RC 1.9's (as SDK 2.1); halflife-updated also cleared the view model
+		// halflife-updated's fix, kept: the view model goes too, so the holstered weapon isn't shown
+		m_pController->pev->viewmodel = 0;
 	}
 
 	m_pController->m_iHideHUD |= HIDEHUD_WEAPONS;
@@ -408,10 +409,9 @@ void CFuncTank::StopControl()
 	if (!m_pController)
 		return;
 
-	// RC 1.9's (as SDK 2.1); halflife-updated's EquipWeapon skips a deployed weapon, checks
-	// CanDeploy and switches to the next best weapon when it can't
-	if (m_pController->m_pActiveItem)
-		m_pController->m_pActiveItem->Deploy();
+	// halflife-updated's fix, kept: EquipWeapon deploys the weapon only when it can, else switches to
+	// the next best, so an empty weapon doesn't come back invisible (halflife-updated #134)
+	m_pController->EquipWeapon();
 
 	ALERT(at_console, "stopped using TANK\n");
 

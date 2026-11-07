@@ -2925,8 +2925,9 @@ void CBaseMonster::ReportAIState()
 {
 	ALERT_TYPE level = at_console;
 
-	// RC 1.9's (as SDK 2.1); halflife-updated added "PlayDead", so PLAYDEAD prints "Dead" and DEAD nothing
-	static const char* pStateNames[] = {"None", "Idle", "Combat", "Alert", "Hunt", "Prone", "Scripted", "Dead"};
+	// halflife-updated's fix, kept: "PlayDead" is in the names, so PLAYDEAD and DEAD print their own
+	// (SDK 2.1's list was one short)
+	static const char* pStateNames[] = {"None", "Idle", "Combat", "Alert", "Hunt", "Prone", "Scripted", "PlayDead", "Dead"};
 
 	ALERT(level, "%s: ", STRING(pev->classname));
 	if ((int)m_MonsterState < ARRAYSIZE(pStateNames))

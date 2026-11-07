@@ -806,8 +806,11 @@ void CBaseDoor::Blocked(CBaseEntity* pOther)
 							}
 						}
 
-						// RC 1.9's (as SDK 2.1, orig 0x11b980); halflife-updated stopped this door's moving
-						// sound here
+						// orig 0x11b980. halflife-updated's fix, kept: this door's moving sound stops before
+						// the linked doors start again, so CHAN_STATIC loops don't stack (SDK 2.2+)
+						if (!FBitSet(pev->spawnflags, SF_DOOR_SILENT))
+							STOP_SOUND(ENT(pev), CHAN_STATIC, (char*)STRING(pev->noiseMoving));
+
 						if (pDoor->m_toggle_state == TS_GOING_DOWN)
 							pDoor->DoorGoUp();
 						else
@@ -1065,23 +1068,30 @@ void CMomentaryDoor::Use(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE
 
 	if (value > 1.0)
 		value = 1.0;
+	// orig 0x11c5a0. halflife-updated's fix, kept: the value is held at 0 too, a move to where the
+	// door is already heading isn't started again, and the moving sound stops on arrival
+	// (DoorMoveDone, StopMoveSound); SDK 2.1's loop never stopped
+	if (value < 0.0)
+		value = 0.0;
 
 	Vector move = m_vecPosition1 + (value * (m_vecPosition2 - m_vecPosition1));
 
 	Vector delta = move - pev->origin;
-	float speed = delta.Length() * 10;
+	//float speed = delta.Length() * 10;
+	float speed = delta.Length() / 0.1; // move there in 0.1 sec
+	if (speed == 0)
+		return;
 
-	// RC 1.9's (as SDK 2.1, orig 0x11c5a0); halflife-updated clamps value at 0, skips a move to the
-	// destination it's already heading for, and stops the sound at the end (DoorMoveDone, now unused)
-	if (speed != 0)
-	{
-		// This entity only thinks when it moves, so if it's thinking, it's in the process of moving
-		// play the sound when it starts moving
-		if (pev->nextthink < pev->ltime || pev->nextthink == 0)
-			EMIT_SOUND(ENT(pev), CHAN_STATIC, (char*)STRING(pev->noiseMoving), 1, ATTN_NORM);
+	// This entity only thinks when it moves, so if it's thinking, it's in the process of moving
+	// play the sound when it starts moving (not yet thinking)
+	if (pev->nextthink < pev->ltime || pev->nextthink == 0)
+		EMIT_SOUND(ENT(pev), CHAN_STATIC, (char*)STRING(pev->noiseMoving), 1, ATTN_NORM);
+	// If we already moving to designated point, return
+	else if (move == m_vecFinalDest)
+		return;
 
-		LinearMove(move, speed);
-	}
+	SetMoveDone(&CMomentaryDoor::DoorMoveDone);
+	LinearMove(move, speed);
 }
 
 //

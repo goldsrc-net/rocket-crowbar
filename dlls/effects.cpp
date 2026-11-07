@@ -1790,18 +1790,18 @@ Vector CBlood::BloodPosition(CBaseEntity* pActivator)
 {
 	if ((pev->spawnflags & SF_BLOOD_PLAYER) != 0)
 	{
-		edict_t* pPlayer;
+		CBaseEntity* pPlayer;
 
-		// RC 1.9's (as SDK 2.1): edict 1 even when that slot is free; halflife-updated's
-		// UTIL_GetLocalPlayer skips a free slot and falls back to our origin
+		// halflife-updated's fix, kept: UTIL_GetLocalPlayer skips a free slot 1 and bleeds at our
+		// origin; SDK 2.1 took edict 1 even when free, and bled at its stale origin
 		if (pActivator && pActivator->IsPlayer())
 		{
-			pPlayer = pActivator->edict();
+			pPlayer = pActivator;
 		}
 		else
-			pPlayer = g_engfuncs.pfnPEntityOfEntIndex(1);
+			pPlayer = UTIL_GetLocalPlayer();
 		if (pPlayer)
-			return (pPlayer->v.origin + pPlayer->v.view_ofs) + Vector(RANDOM_FLOAT(-10, 10), RANDOM_FLOAT(-10, 10), RANDOM_FLOAT(-10, 10));
+			return (pPlayer->pev->origin + pPlayer->pev->view_ofs) + Vector(RANDOM_FLOAT(-10, 10), RANDOM_FLOAT(-10, 10), RANDOM_FLOAT(-10, 10));
 	}
 
 	return pev->origin;
