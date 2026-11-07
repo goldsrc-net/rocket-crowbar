@@ -1003,10 +1003,21 @@ void CBaseTrigger::HurtTouch(CBaseEntity* pOther)
 	}
 #endif
 
-	// RC 1.9's (as SDK 2.1); halflife-updated skipped healing a player who isn't DEAD_NO in
-	// multiplayer
+	// halflife-updated's fix, kept: in multiplayer a dead player isn't healed
 	if (fldmg < 0)
-		pOther->TakeHealth(-fldmg, m_bitsDamageInflict);
+	{
+		bool bApplyHeal = true;
+
+		if (g_pGameRules->IsMultiplayer() && pOther->IsPlayer())
+		{
+			bApplyHeal = pOther->pev->deadflag == DEAD_NO;
+		}
+
+		if (bApplyHeal)
+		{
+			pOther->TakeHealth(-fldmg, m_bitsDamageInflict);
+		}
+	}
 	else
 		pOther->TakeDamage(pev, pev, fldmg, m_bitsDamageInflict);
 
@@ -2412,9 +2423,10 @@ void CTriggerCamera::FollowTarget()
 	if (dy > 180)
 		dy = dy - 360;
 
-	// RC 1.9's (as SDK 2.1); halflife-updated used a fixed 0.01 for the frame time
-	pev->avelocity.x = dx * 40 * gpGlobals->frametime;
-	pev->avelocity.y = dy * 40 * gpGlobals->frametime;
+	// halflife-updated's fix, kept: avelocity is per second and the engine applies the frame time,
+	// so SDK 2.1's * frametime applied it twice and the turn rate followed the server's frame rate
+	pev->avelocity.x = dx * 40 * 0.01;
+	pev->avelocity.y = dy * 40 * 0.01;
 
 
 	if (!(FBitSet(pev->spawnflags, SF_CAMERA_PLAYER_TAKECONTROL)))

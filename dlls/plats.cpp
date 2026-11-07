@@ -1136,9 +1136,9 @@ void CFuncTrackTrain::UpdateSound()
 	if (FStringNull(pev->noise))
 		return;
 
-	// orig 0x1e67c0. RC 1.9's own: SDK 2.1's int abs() (whole-number arithmetic on the truncated
-	// speed; halflife-updated used fabs()), then the pitch held to 0-255
-	flpitch = TRAIN_STARTPITCH + (abs(static_cast<int>(pev->speed)) * (TRAIN_MAXPITCH - TRAIN_STARTPITCH) / TRAIN_MAXSPEED);
+	// orig 0x1e67c0. halflife-updated's fix, kept: fabs where SDK 2.1 called the C abs() on a float,
+	// which truncated the speed to int. RC 1.9's own: the pitch held to 0-255
+	flpitch = TRAIN_STARTPITCH + (fabs(pev->speed) * (TRAIN_MAXPITCH - TRAIN_STARTPITCH) / TRAIN_MAXSPEED);
 	if (flpitch < 0)
 		flpitch = 0;
 	else if (flpitch > 255)

@@ -74,11 +74,47 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
 
 ## halflife-updated changes kept in stock functions
 
-RC 1.9's stock-named functions have the original's behavior back wherever halflife-updated's
-showed in multiplayer play (audit of 2026-11-07, `reference/audit/r1.md`-`r6.md`, one row per
-function; the original decides, since RC 1.9 was built on SDK 2.1 and may have changed a stock
-body). What halflife-updated changed there and we keep, besides restyling and the crash guards
-listed under "Crashes in the original":
+RC 1.9's stock-named functions have the original's behavior back wherever halflife-updated
+changed the game's design or balance, or added a feature; halflife-updated's evident bug fixes
+stay (audit of 2026-11-07, `reference/audit/r1.md`-`r6.md`, one row per function; the original
+decides, since RC 1.9 was built on SDK 2.1 and may have changed a stock body; the fix or design
+call per revert is in mod-rc2's `reference/audit/FIXES.md`, made the same way in both projects).
+What halflife-updated changed there and we keep, besides restyling and the crash guards listed
+under "Crashes in the original":
+
+- **halflife-updated's bug fixes in stock functions**, kept by Steven, 2026-11-07 (each marked
+  `// halflife-updated's fix, kept:` in the code; RC 1.9's own changes in the same functions stay):
+  - Gagged monsters don't idle-talk and swimming ones do (`dlls/monsterstate.cpp` RunAI, gag bit
+    in spawnflags); `ReportAIState` names PLAYDEAD and DEAD apart (`dlls/monsters.cpp`).
+  - A blocked door stops its moving sound before the linked doors start again
+    (`dlls/doors.cpp` Blocked); a `momentary_door` holds its value at 0, doesn't restart a move to
+    where it is heading, and stops its moving sound on arrival (CMomentaryDoor::Use).
+  - Buttons time their sparks on `pev->ltime`, spark at the button, and a `func_rot_button` with
+    X Axis doesn't spark (`dlls/buttons.cpp` ButtonSpark, ButtonBackHome); a
+    `momentary_rot_button` sends its target the value it is heading for (Use).
+  - `func_breakable`'s "explosion" 1 is directed, it can't break twice, and its break volume uses
+    `fabs` (`dlls/func_break.cpp` KeyValue, Die). Its directed gibs still fly along the attack
+    direction, as the original (FIXES.md, unclear).
+  - `fabs` where SDK 2.1 called the int `abs()` on a float: the fan's pitch, volume and full-speed
+    test (`dlls/bmodels.cpp` RampPitchVol, SpinUp), the roach's food height (`dlls/roach.cpp`
+    MonsterThink), the train's pitch (`dlls/plats.cpp` UpdateSound, which keeps RC's 0-255 clamp).
+  - `env_blood`'s player blood with no player in slot 1 bleeds at the entity, not at the free
+    edict's origin (`dlls/effects.cpp` BloodPosition).
+  - A `func_tank` hides the controller's view model and gives his weapon back with `EquipWeapon`,
+    so an empty one doesn't come back invisible (`dlls/func_tank.cpp` StartControl, StopControl).
+  - The nihilanth's ending fires with no enemy (notarget) (`dlls/nihilanth.cpp` CommandUse).
+  - `trigger_hurt` doesn't heal a dead player in multiplayer (`dlls/triggers.cpp` HurtTouch;
+    RC's driven-monster CLIENTONLYFIRE test stays), and `trigger_camera` turns at a rate that
+    doesn't follow the frame rate (FollowTarget).
+  - Players (`dlls/player.cpp`): a dead player with an empty active satchel drops no box
+    (PackDeadPlayerItems; dropped guns still aren't reloaded, as the original); RemoveAllItems lets
+    go of a func_tank (the empty CurWeapon at its end stays, as the original); drowning gives back
+    only the health lost, swim sounds play only with the head under water, and the server no
+    longer applies water friction on top of pm_shared's (WaterMove); PostThink tracks the buttons
+    on every path; ItemPostFrame runs no weapon frame on the frame a tank is taken; autoaim off
+    resets the crosshair angle (GetAutoaimVector, still on `sv_aim` alone); ammo for an
+    exhaustible weapon gives the weapon too (GiveAmmo, with RC's own count test kept), through the
+    pickup flow below.
 
 - **Players keep the engine's `FL_PROXY` and `FL_FAKECLIENT` flags** (`dlls/player.cpp` Spawn). The
   original sets `pev->flags` to `FL_CLIENT`, so HLTV proxies and bots stay marked as such.
@@ -121,6 +157,10 @@ Decided by Steven, 2026-11-07 (`reference/audit/r7.md`):
 - **A `func_tank` whose target is nearer than its barrel offset aims without the barrel
   correction** (`dlls/func_tank.cpp` AdjustAnglesForBarrel). The original takes the square root of
   a negative there and aims with NaN angles. Kept as a guard.
+
+Kept as the original until Steven decides (FIXES.md "Unclear"): `UpdatePlayerSound`'s
+`UTIL_MakeVectors`, the roach's 1-unit height, `LinearMoveDone`'s snap, and `func_breakable`'s gib
+direction.
 
 ## Weapons
 

@@ -133,13 +133,13 @@ drivebm.cpp DestoryFlames               keeps dangling beam pointers (never read
 items.cpp CItem::Spawn (0x1bb750)       an item placed in a wall or outside the map is kept,  kept
                                         floating (no "fell out of level" removal)
 ---- stock-function audit, 2026-11-07
-monsterstate.cpp CBaseMonster::RunAI    tests SF_MONSTER_GAG (2) against pev->flags, which    kept
-  (0x1cacf0)                            is FL_SWIM: a gagged monster still idles aloud, a
-                                        swimming one never does
+monsterstate.cpp CBaseMonster::RunAI    tests SF_MONSTER_GAG (2) against pev->flags, which    changed (halflife-
+  (0x1cacf0)                            is FL_SWIM: a gagged monster still idles aloud, a     updated's fix,
+                                        swimming one never does                               Steven 2026-11-07)
 doors.cpp CBaseDoor::Blocked (0x11b980) realigns a linked door only when its avelocity        kept
                                         equals this door's velocity (the wrong field)
-doors.cpp CMomentaryDoor::Use           starts the move sound and never stops it: a           kept
-  (0x11c5a0)                            momentary_door loops it after it stops
+doors.cpp CMomentaryDoor::Use           starts the move sound and never stops it: a           changed (halflife-
+  (0x11c5a0)                            momentary_door loops it after it stops                updated's fix)
 triggers.cpp CChangeLevel::             sets dmgtime 0.2 s ahead but still tests it with ==,  kept
   ChangeLevelNow (0x2276e0)             so the once-a-frame guard never matches (VERIFY)
 sound.cpp CAmbientGeneric               plays on CHAN_STATIC via EMIT_SOUND_DYN, so a loop    kept
@@ -147,18 +147,18 @@ sound.cpp CAmbientGeneric               plays on CHAN_STATIC via EMIT_SOUND_DYN,
   ToggleUse)                            (VERIFY)
 monsters.cpp CBaseMonster::             no IsLockedByMaster test: monsters open master-locked kept
   OpenDoorAndWait (0x1c6400)            doors
-monsters.cpp CBaseMonster::             state names lack PlayDead: PLAYDEAD prints "Dead",    kept
-  ReportAIState (0x1c9170)              DEAD prints none
-buttons.cpp CBaseButton::ButtonSpark    a MOVETYPE_PUSH button thinks on pev->ltime but the   kept
-  (0xf8460), ButtonBackHome (0xf89f0)   next spark is set from gpGlobals->time, so each spark
+monsters.cpp CBaseMonster::             state names lack PlayDead: PLAYDEAD prints "Dead",    changed (halflife-
+  ReportAIState (0x1c9170)              DEAD prints none                                      updated's fix)
+buttons.cpp CBaseButton::ButtonSpark    a MOVETYPE_PUSH button thinks on pev->ltime but the   changed (halflife-
+  (0xf8460), ButtonBackHome (0xf89f0)   next spark is set from gpGlobals->time, so each spark updated's fix)
                                         comes late by the server time the button spawned at
                                         (VERIFY in an engine run), and it sparks at pev->mins,
                                         not absmin (off for a button with an origin brush); a
                                         func_rot_button with its X axis flag (64) sparks too
-buttons.cpp CMomentaryRotButton::Use    retriggering sends the target the current angle's     kept
-  (0xf93f0)                             value, so the first impulse goes the wrong way
-effects.cpp CBlood::BloodPosition       "player" blood without a player activator bleeds at   kept
-  (0x17f480)                            edict 1, even when slot 1 is empty
+buttons.cpp CMomentaryRotButton::Use    retriggering sends the target the current angle's     changed (halflife-
+  (0xf93f0)                             value, so the first impulse goes the wrong way        updated's fix)
+effects.cpp CBlood::BloodPosition       "player" blood without a player activator bleeds at   changed (halflife-
+  (0x17f480)                            edict 1, even when slot 1 is empty                    updated's fix)
 func_tank.cpp CFuncTank::               target nearer than the barrel offset: sqrt of a       changed (skips the
   AdjustAnglesForBarrel (0x18eea0)      negative, NaN aim                                     correction; Steven
                                                                                               decides, audit r7)

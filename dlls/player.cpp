@@ -789,22 +789,35 @@ void CBasePlayer::PackDeadPlayerItems()
 	}
 	else
 	{
-		// RC 1.9's (as SDK 2.1); halflife-updated packed nothing when the active weapon was an
-		// out-of-ammo satchel
-		// pack the ammo
-		while (iPackAmmo[iPA] != -1)
+		// halflife-updated's fix, kept: nothing is packed when the active weapon is a satchel with
+		// none left to throw, so the box doesn't hand out an empty satchel
+		bool bPackItems = true;
+
+		if (iAmmoRules == GR_PLR_DROP_AMMO_ACTIVE && iWeaponRules == GR_PLR_DROP_GUN_ACTIVE)
 		{
-			pWeaponBox->PackAmmo(MAKE_STRING(CBasePlayerItem::AmmoInfoArray[iPackAmmo[iPA]].pszName), m_rgAmmo[iPackAmmo[iPA]]);
-			iPA++;
+			if (rgpPackWeapons[0] && FClassnameIs(rgpPackWeapons[0]->pev, "weapon_satchel") && (iPackAmmo[0] == -1 || (m_rgAmmo[iPackAmmo[0]] == 0)))
+			{
+				bPackItems = false;
+			}
 		}
 
-		// now pack all of the items in the lists
-		while (rgpPackWeapons[iPW])
+		if (bPackItems)
 		{
-			// weapon unhooked from the player. Pack it into der box.
-			pWeaponBox->PackWeapon(rgpPackWeapons[iPW]);
+			// pack the ammo
+			while (iPackAmmo[iPA] != -1)
+			{
+				pWeaponBox->PackAmmo(MAKE_STRING(CBasePlayerItem::AmmoInfoArray[iPackAmmo[iPA]].pszName), m_rgAmmo[iPackAmmo[iPA]]);
+				iPA++;
+			}
 
-			iPW++;
+			// now pack all of the items in the lists
+			while (rgpPackWeapons[iPW])
+			{
+				// weapon unhooked from the player. Pack it into der box.
+				pWeaponBox->PackWeapon(rgpPackWeapons[iPW]);
+
+				iPW++;
+			}
 		}
 
 		pWeaponBox->pev->velocity = pev->velocity * 1.2; // weaponbox has player's velocity, then some.
@@ -824,7 +837,13 @@ void CBasePlayer::RemoveAllItems(bool removeSuit)
 
 	m_pLastItem = NULL;
 
-	// RC 1.9's (as SDK 2.1); halflife-updated also let go of a func_tank the player was using
+	// halflife-updated's fix, kept: a func_tank the player was using is let go, so it isn't left
+	// controlled by a stripped player
+	if (m_pTank != NULL)
+	{
+		m_pTank->Use(this, this, USE_OFF, 0);
+		m_pTank = NULL;
+	}
 
 	int i;
 	CBasePlayerItem* pPendingItem;
@@ -1268,13 +1287,21 @@ void CBasePlayer::WaterMove()
 				if (pev->dmg > 5)
 					pev->dmg = 5;
 
+				const float oldHealth = pev->health;
+
 				TakeDamage(CWorld::World->pev, CWorld::World->pev, pev->dmg, DMG_DROWN);
 				pev->pain_finished = gpGlobals->time + 1;
 
 				// track drowning damage, give it back when
 				// player finally takes a breath
-				// RC 1.9's (as SDK 2.1); halflife-updated counted only the health actually lost
-				m_idrowndmg += pev->dmg;
+
+				// halflife-updated's fix, kept: only the health actually lost is given back, so god
+				// mode or a guard doesn't gain health on surfacing
+				// Account for god mode, the unkillable flag, potential damage mitigation
+				// and gaining health from drowning to avoid counting damage not actually taken.
+				const float drownDamageTaken = std::max(0.f, std::floor(oldHealth - pev->health));
+
+				m_idrowndmg += drownDamageTaken;
 			}
 		}
 		else
@@ -1293,24 +1320,28 @@ void CBasePlayer::WaterMove()
 	}
 
 	// make bubbles
-	// RC 1.9's (as SDK 2.1): at any water level; halflife-updated only with the head under water
-	air = (int)(pev->air_finished - gpGlobals->time);
-	if (!RANDOM_LONG(0, 0x1f) && RANDOM_LONG(0, AIRTIME - 1) >= air)
+	// halflife-updated's fix, kept: only with the head under water, so shallow water doesn't play
+	// breathing sounds (halflife #3110)
+	if (pev->waterlevel == 3)
 	{
-		switch (RANDOM_LONG(0, 3))
+		air = (int)(pev->air_finished - gpGlobals->time);
+		if (!RANDOM_LONG(0, 0x1f) && RANDOM_LONG(0, AIRTIME - 1) >= air)
 		{
-		case 0:
-			EMIT_SOUND(ENT(pev), CHAN_BODY, "player/pl_swim1.wav", 0.8, ATTN_NORM);
-			break;
-		case 1:
-			EMIT_SOUND(ENT(pev), CHAN_BODY, "player/pl_swim2.wav", 0.8, ATTN_NORM);
-			break;
-		case 2:
-			EMIT_SOUND(ENT(pev), CHAN_BODY, "player/pl_swim3.wav", 0.8, ATTN_NORM);
-			break;
-		case 3:
-			EMIT_SOUND(ENT(pev), CHAN_BODY, "player/pl_swim4.wav", 0.8, ATTN_NORM);
-			break;
+			switch (RANDOM_LONG(0, 3))
+			{
+			case 0:
+				EMIT_SOUND(ENT(pev), CHAN_BODY, "player/pl_swim1.wav", 0.8, ATTN_NORM);
+				break;
+			case 1:
+				EMIT_SOUND(ENT(pev), CHAN_BODY, "player/pl_swim2.wav", 0.8, ATTN_NORM);
+				break;
+			case 2:
+				EMIT_SOUND(ENT(pev), CHAN_BODY, "player/pl_swim3.wav", 0.8, ATTN_NORM);
+				break;
+			case 3:
+				EMIT_SOUND(ENT(pev), CHAN_BODY, "player/pl_swim4.wav", 0.8, ATTN_NORM);
+				break;
+			}
 		}
 	}
 
@@ -1331,9 +1362,8 @@ void CBasePlayer::WaterMove()
 		pev->dmgtime = 0;
 	}
 
-	// RC 1.9's (as SDK 2.1); halflife-updated left water friction to pm_shared alone
-	if (!FBitSet(pev->flags, FL_WATERJUMP))
-		pev->velocity = pev->velocity - 0.8 * pev->waterlevel * gpGlobals->frametime * pev->velocity;
+	// halflife-updated's fix, kept: no water friction here; pm_shared applies it, so SDK 2.1's line
+	// slowed the player twice and the client mispredicted it (SDK 2.2+)
 }
 
 
@@ -3412,11 +3442,6 @@ void CBasePlayer::PostThink()
 
 	UpdatePlayerSound();
 
-	// Track button info so we can detect 'pressed' and 'released' buttons next frame
-	// RC 1.9's (as SDK 2.1): only here, so the early exits above skip it; halflife-updated set it
-	// after pt_end on every path
-	m_afButtonLast = pev->button;
-
 pt_end:
 #if defined(CLIENT_WEAPONS)
 	// Decay timers on weapons
@@ -3480,7 +3505,11 @@ pt_end:
 			m_flAmmoStartCharge = -0.001;
 	}
 #endif
-	return;
+
+	// Track button info so we can detect 'pressed' and 'released' buttons next frame
+	// halflife-updated's fix, kept: set on every path, so after an early exit above (observer, game
+	// over, dead, driving) a held button doesn't read as pressed again
+	m_afButtonLast = pev->button;
 }
 
 
@@ -4840,8 +4869,16 @@ int CBasePlayer::GiveAmmo(int iCount, const char* szName, int iMax)
 	if (iAdd < 1)
 		return i;
 
-	// RC 1.9's (as SDK 2.1); halflife-updated also gave an exhaustible weapon (grenades,
-	// satchels, ...) with its ammo when the player lacked it
+	// halflife-updated's fix, kept: ammo for an exhaustible weapon (grenades, satchels, ...) also
+	// gives the weapon when the player lacks it (halflife-updated #153, #157)
+	// If this is an exhaustible weapon make sure the player has it.
+	if (const auto& ammoType = CBasePlayerItem::AmmoInfoArray[i]; ammoType.WeaponName != nullptr)
+	{
+		if (!HasNamedPlayerItem(ammoType.WeaponName))
+		{
+			GiveNamedItem(ammoType.WeaponName, 0);
+		}
+	}
 
 	m_rgAmmo[i] += iAdd;
 
@@ -4910,8 +4947,11 @@ void CBasePlayer::ItemPostFrame()
 
 	ImpulseCommands();
 
-	// RC 1.9's (as SDK 2.1); halflife-updated returned here too when PlayerUse had just started
-	// using a tank
+	// halflife-updated's fix, kept: no weapon frame on the frame PlayerUse started using a tank
+	// (halflife #3345)
+	// check again if the player is using a tank if they started using it in PlayerUse
+	if (m_pTank != NULL)
+		return;
 
 	if (!m_pActiveItem)
 		return;
@@ -5419,7 +5459,7 @@ Vector CBasePlayer::GetAutoaimVector(float flDelta)
 
 	// Don't send across network if sv_aim is 0
 	// RC 1.9's (as SDK 2.1): sv_aim alone; halflife-updated also tested the engine's
-	// sv_allow_autoaim (a null pointer on an engine without it) and reset the crosshair when off
+	// sv_allow_autoaim (a null pointer on an engine without it)
 	if (CVAR_GET_FLOAT("sv_aim") != 0)
 	{
 		if (m_vecAutoAim.x != m_lastx ||
@@ -5430,6 +5470,12 @@ Vector CBasePlayer::GetAutoaimVector(float flDelta)
 			m_lastx = m_vecAutoAim.x;
 			m_lasty = m_vecAutoAim.y;
 		}
+	}
+	else
+	{
+		// halflife-updated's fix, kept: autoaim off resets the crosshair angle, so it doesn't stay
+		// where a target held it (halflife #966)
+		ResetAutoaim();
 	}
 
 	// ALERT( at_console, "%f %f\n", angles.x, angles.y );
