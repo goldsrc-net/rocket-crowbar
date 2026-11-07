@@ -155,7 +155,7 @@ void COsprey::Spawn()
 	UTIL_SetSize(pev, Vector(-400, -400, -100), Vector(400, 400, 32));
 	UTIL_SetOrigin(pev, pev->origin);
 
-	pev->flags |= FL_MONSTER;
+	pev->flags |= FL_MONSTER | FL_FLY; // halflife-updated's fix, kept (Steven, 2026-11-07; halflife#3228): the client smooths it (AddToFullPack)
 	pev->takedamage = DAMAGE_YES;
 	m_flRightHealth = 200;
 	m_flLeftHealth = 200;

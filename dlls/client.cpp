@@ -2327,7 +2327,8 @@ we could also use the pas/ pvs that we set in SetupVisibility, if we wanted to. 
 //   aimable by host->fuser1 brightness;
 //   ent->iuser3 bit 0x20: renderamt from fuser2 (min) to fuser1 (max) by how squarely the
 //   aiment faces the host, between dots fuser4 and fuser3.
-// halflife-updated's FL_FLY slerp, m_EFlags and EFLAG_FLESH_SOUND are not in the original.
+// halflife-updated's FL_FLY slerp, m_EFlags and EFLAG_FLESH_SOUND are not in the original; kept
+// as bug fixes (Steven, 2026-11-07).
 int AddToFullPack(struct entity_state_s* state, int e, edict_t* ent, edict_t* host, int hostflags, int player, unsigned char* pSet)
 {
 	// Entities with an index greater than this will corrupt the client's heap because 
@@ -2439,15 +2440,24 @@ int AddToFullPack(struct entity_state_s* state, int e, edict_t* ent, edict_t* ho
 	state->skin = ent->v.skin;
 	state->effects = ent->v.effects;
 
-	// This non-player entity is being moved by the game .dll and not the physics simulation system
-	//  make sure that we interpolate it's position on the client if it moves
-	if (0 == player &&
-		0 != ent->v.animtime &&
-		ent->v.velocity[0] == 0 &&
-		ent->v.velocity[1] == 0 &&
-		ent->v.velocity[2] == 0)
-	{
+	// halflife-updated's fix, kept (Steven, 2026-11-07; halflife#3228): smooth flying monsters, which
+	// their think moves, by FL_FLY. The original's test here (a non-player with an animtime and no
+	// velocity) was SDK 2.x's, which halflife-updated replaced. Then the per-entity flags
+	// halflife-updated's other fixes set (m_EFlags), and EFLAG_FLESH_SOUND, which the client's
+	// bullet impacts read to play flesh sounds on living things.
+	if ((ent->v.flags & FL_FLY) != 0)
 		state->eflags |= EFLAG_SLERP;
+	else
+		state->eflags &= ~EFLAG_SLERP;
+
+	CBaseEntity* pFlagsEntity = static_cast<CBaseEntity*>(GET_PRIVATE(ent));
+	if (pFlagsEntity)
+	{
+		state->eflags |= pFlagsEntity->m_EFlags;
+		if (pFlagsEntity->Classify() != CLASS_NONE && pFlagsEntity->Classify() != CLASS_MACHINE)
+			state->eflags |= EFLAG_FLESH_SOUND;
+		else
+			state->eflags &= ~EFLAG_FLESH_SOUND;
 	}
 
 	state->scale = ent->v.scale;

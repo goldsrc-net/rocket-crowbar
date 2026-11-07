@@ -82,6 +82,12 @@ call per revert is in mod-rc2's `reference/audit/FIXES.md`, made the same way in
 What halflife-updated changed there and we keep, besides restyling and the crash guards listed
 under "Crashes in the original":
 
+- **Flying monsters are smoothed on the client, and living things sound like flesh**
+  (`dlls/client.cpp` AddToFullPack; the tentacle, nihilanth and osprey Spawn). halflife-updated's
+  fixes (halflife#3228 and its flesh impact sounds): EFLAG_SLERP from FL_FLY, in place of SDK 2.x's
+  guess from animtime and velocity, the per-entity `m_EFlags`, and EFLAG_FLESH_SOUND, which the
+  client's bullet impacts read. The original's AddToFullPack, the game's own here, has none of them.
+  Kept by Steven, 2026-11-07.
 - **halflife-updated's bug fixes in stock functions**, kept by Steven, 2026-11-07 (each marked
   `// halflife-updated's fix, kept:` in the code; RC 1.9's own changes in the same functions stay):
   - Gagged monsters don't idle-talk and swimming ones do (`dlls/monsterstate.cpp` RunAI, gag bit

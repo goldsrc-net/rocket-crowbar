@@ -265,6 +265,7 @@ void CTentacle::Spawn()
 
 	pev->takedamage = DAMAGE_AIM;
 	pev->flags |= FL_MONSTER;
+	m_EFlags |= EFLAG_SLERP; // halflife-updated's fix, kept (Steven, 2026-11-07; halflife#3228): the client smooths it (AddToFullPack)
 
 	m_bloodColor = BLOOD_COLOR_GREEN;
 
