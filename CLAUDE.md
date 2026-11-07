@@ -30,8 +30,16 @@ the commit that drops the valve-gamedir gate, which a mod in its own gamedir nee
 | Path | What |
 |---|---|
 | `game/rockcrowbar/` | the mod's gamedir manifest (`liblist.gam`) |
-| `reference/` | the original libraries, signature dumps, source file list, provenance (`reference/README.md`) |
-| `scripts/gnv2demangle.py` | gcc 2.x demangler, copied from mod-ts |
+| `reference/` | the original libraries and everything derived from them (`reference/README.md`) |
+| `reference/RECONSTRUCTION.md` | the work list (from `scripts/inventory.py`) |
+| `reference/DEVIATIONS.md` | everything we do differently from the original |
+| `reference/ORIGINAL_BUGS.md` | the original's bugs, kept or guarded |
+| `reference/dossiers/` | one per reconstruction package; `AGENT_BRIEF.md` is the brief for parallel workers |
+| `scripts/` | `build.sh`, the table generators (`inventory`, `hierarchy`, `vtables`, `savefields`, `cvars`, `sdk_baseline`), `check_file.py`, `ghidra/` (`re.sh`, `ApplyRC.java`) and small objdump helpers |
+
+How the decompile and tables are set up, and how to repeat it for RC2: `../DECOMPILE.md`. The
+typed decompile lives in `recovered/decomp/` (gitignored); rebuild it with
+`scripts/ghidra/re.sh setup && scripts/ghidra/re.sh export` (~20 min).
 
 ## Sources outside the repo
 
@@ -42,7 +50,20 @@ the commit that drops the valve-gamedir gate, which a mod in its own gamedir nee
 - `../mod-rc2`: Rocket Crowbar 2, scaffolded, not started. RC2 is a near-total rewrite; the two
   share one custom class (`CCrowbarRocket`).
 
-## Status
+## Status (2026-11-07)
 
-Scaffold only (2026-11-06): SDK base, gamedir manifest, reference binaries and dumps. No game code
-reconstructed yet.
+Built, not yet run in an engine. Builds on i386 and amd64.
+
+- Done: RC's 46 cvars, its additions to the SDK base classes (`CBaseEntity`'s 23 virtuals,
+  `CBaseDriveEnt`, the bot interface, `CanPlayerAnnoy`, the player's saved members), the
+  `LINK_ENTITY_TO_CLASS` precache-list change, and all 30 of RC's own source files: 1,093 of 1,093
+  original functions present (`scripts/check_file.py`). 281 `VERIFY` marks in `dlls/`.
+- Wave 2, next: RC's changes inside SDK files (`RECONSTRUCTION.md` "SDK files with RC additions",
+  791 functions): the weapons (egon, shotgun, rpg, crossbow, handgrenade, hornetgun, tripmine,
+  gauss, squeak, crowbar, python, mp5, glock, satchel), `player.cpp` (the drive hand-off in
+  PreThink/PostThink, `PlayerDoID`), `client.cpp` (RC's commands, `SetupVisibility` accepting NULL,
+  `IsClientListenServer`), `world.cpp` (the drive spawners at map start), `teamplay_gamerules.cpp`
+  (CTF scoring), `headcrab.cpp` (the killer babycrab), `combat.cpp` (`ThrowFakeGibs`). The callers
+  each package needs are in its dossier's section 5. Four `TEMP STUB`s remain (`grep -n "TEMP
+  STUB" dlls/*.cpp`).
+- Then: run it next to the original (32-bit engine) and test the dossiers' section 7 items.
