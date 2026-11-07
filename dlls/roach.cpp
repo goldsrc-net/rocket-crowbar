@@ -124,7 +124,8 @@ void CRoach::Spawn()
 	Precache();
 
 	SET_MODEL(ENT(pev), "models/roach.mdl");
-	UTIL_SetSize(pev, Vector(-1, -1, 0), Vector(1, 1, 2));
+	// RC 1.9's (as SDK 2.1, orig 0x1fb430); halflife-updated made the roach 2 units tall
+	UTIL_SetSize(pev, Vector(-1, -1, 0), Vector(1, 1, 1));
 
 	pev->solid = SOLID_SLIDEBOX;
 	pev->movetype = MOVETYPE_STEP;
@@ -265,7 +266,9 @@ void CRoach::MonsterThink()
 				pSound = CSoundEnt::SoundPointerForIndex(m_iAudibleList);
 
 				// roach smells food and is just standing around. Go to food unless food isn't on same z-plane.
-				if (pSound && fabs(pSound->m_vecOrigin.z - pev->origin.z) <= 3)
+				// RC 1.9's (as SDK 2.1, orig 0x1fb700): the integer abs of the truncated height difference;
+				// halflife-updated compares the exact float (fabs)
+				if (pSound && abs(static_cast<int>(pSound->m_vecOrigin.z - pev->origin.z)) <= 3)
 				{
 					PickNewDest(ROACH_SMELL_FOOD);
 					SetActivity(ACT_WALK);

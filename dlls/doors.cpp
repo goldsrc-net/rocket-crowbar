@@ -571,6 +571,10 @@ bool CBaseDoor::DoorActivate()
 	if (!UTIL_IsMasterTriggered(m_sMaster, m_hActivator))
 		return false;
 
+	// RC 1.9's own: stops the moving sound before the door starts either way (orig 0x11b190)
+	if (!FBitSet(pev->spawnflags, SF_DOOR_SILENT))
+		STOP_SOUND(ENT(pev), CHAN_STATIC, (char*)STRING(pev->noiseMoving));
+
 	if (FBitSet(pev->spawnflags, SF_DOOR_NO_AUTO_RETURN) && m_toggle_state == TS_AT_TOP)
 	{ // door should close
 		DoorGoDown();
@@ -608,10 +612,12 @@ void CBaseDoor::DoorGoUp()
 
 	// emit door moving and stop sounds on CHAN_STATIC so that the multicast doesn't
 	// filter them out and leave a client stuck with looping door sounds!
+	// RC 1.9's own: stops the moving sound and starts it again, every time (orig 0x11b2b0);
+	// halflife-updated plays it only when the door wasn't already moving
 	if (!FBitSet(pev->spawnflags, SF_DOOR_SILENT))
 	{
-		if (m_toggle_state != TS_GOING_UP && m_toggle_state != TS_GOING_DOWN)
-			EMIT_SOUND(ENT(pev), CHAN_STATIC, (char*)STRING(pev->noiseMoving), 1, ATTN_NORM);
+		STOP_SOUND(ENT(pev), CHAN_STATIC, (char*)STRING(pev->noiseMoving));
+		EMIT_SOUND(ENT(pev), CHAN_STATIC, (char*)STRING(pev->noiseMoving), 1, ATTN_NORM);
 	}
 
 	m_toggle_state = TS_GOING_UP;
@@ -692,10 +698,12 @@ void CBaseDoor::DoorHitTop()
 //
 void CBaseDoor::DoorGoDown()
 {
+	// RC 1.9's own: stops the moving sound and starts it again, every time (orig 0x11b710);
+	// halflife-updated plays it only when the door wasn't already moving
 	if (!FBitSet(pev->spawnflags, SF_DOOR_SILENT))
 	{
-		if (m_toggle_state != TS_GOING_UP && m_toggle_state != TS_GOING_DOWN)
-			EMIT_SOUND(ENT(pev), CHAN_STATIC, (char*)STRING(pev->noiseMoving), 1, ATTN_NORM);
+		STOP_SOUND(ENT(pev), CHAN_STATIC, (char*)STRING(pev->noiseMoving));
+		EMIT_SOUND(ENT(pev), CHAN_STATIC, (char*)STRING(pev->noiseMoving), 1, ATTN_NORM);
 	}
 
 #ifdef DOOR_ASSERT
@@ -798,9 +806,8 @@ void CBaseDoor::Blocked(CBaseEntity* pOther)
 							}
 						}
 
-						if (!FBitSet(pev->spawnflags, SF_DOOR_SILENT))
-							STOP_SOUND(ENT(pev), CHAN_STATIC, (char*)STRING(pev->noiseMoving));
-
+						// RC 1.9's (as SDK 2.1, orig 0x11b980); halflife-updated stopped this door's moving
+						// sound here
 						if (pDoor->m_toggle_state == TS_GOING_DOWN)
 							pDoor->DoorGoUp();
 						else
@@ -1058,27 +1065,23 @@ void CMomentaryDoor::Use(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE
 
 	if (value > 1.0)
 		value = 1.0;
-	if (value < 0.0)
-		value = 0.0;
 
 	Vector move = m_vecPosition1 + (value * (m_vecPosition2 - m_vecPosition1));
 
 	Vector delta = move - pev->origin;
-	//float speed = delta.Length() * 10;
-	float speed = delta.Length() / 0.1; // move there in 0.1 sec
-	if (speed == 0)
-		return;
+	float speed = delta.Length() * 10;
 
-	// This entity only thinks when it moves, so if it's thinking, it's in the process of moving
-	// play the sound when it starts moving (not yet thinking)
-	if (pev->nextthink < pev->ltime || pev->nextthink == 0)
-		EMIT_SOUND(ENT(pev), CHAN_STATIC, (char*)STRING(pev->noiseMoving), 1, ATTN_NORM);
-	// If we already moving to designated point, return
-	else if (move == m_vecFinalDest)
-		return;
+	// RC 1.9's (as SDK 2.1, orig 0x11c5a0); halflife-updated clamps value at 0, skips a move to the
+	// destination it's already heading for, and stops the sound at the end (DoorMoveDone, now unused)
+	if (speed != 0)
+	{
+		// This entity only thinks when it moves, so if it's thinking, it's in the process of moving
+		// play the sound when it starts moving
+		if (pev->nextthink < pev->ltime || pev->nextthink == 0)
+			EMIT_SOUND(ENT(pev), CHAN_STATIC, (char*)STRING(pev->noiseMoving), 1, ATTN_NORM);
 
-	SetMoveDone(&CMomentaryDoor::DoorMoveDone);
-	LinearMove(move, speed);
+		LinearMove(move, speed);
+	}
 }
 
 //
