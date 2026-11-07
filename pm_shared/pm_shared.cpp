@@ -2781,13 +2781,15 @@ void PM_Jump()
 
 #ifdef CLIENT_DLL
 	PM_PreventMegaBunnyJumping();
+#else
+	// orig 0xdfaf0: RC 1.9's server (SDK 2.0) has no bunny-hop cap. The client build keeps
+	// halflife-updated's.
+#endif
 
+	// halflife-updated's fix, kept (Steven 2026-11-07), on the server too: no jump sound while
+	// frozen (f3810c7); RC 1.9's server played it
 	// Don't play jump sounds while frozen.
 	if ((pmove->flags & FL_FROZEN) == 0)
-#else
-	// orig 0xdfaf0: RC 1.9's server (SDK 2.0) has no bunny-hop cap and plays the jump sound
-	// even while frozen. The client build keeps halflife-updated's.
-#endif
 	{
 		if (tfc)
 		{

@@ -62,7 +62,9 @@ All RC additions (orig addresses in each function's comment):
 | 0x17a660 / 0x181400 | CBeam::EntIsBeingRemoved / StartFade | ok |
 | 0x1800f0 / 0x180120 | env_fadeone, CFadeOne::Use | guarded (8) |
 
-Stock functions changed to the original:
+Stock functions changed to the original (as the package left them; halflife-updated's fixes in
+them went back after Steven's rule of 2026-11-07, listed in mod-rc2's `reference/audit/FIXES.md`
+and in `reference/DEVIATIONS.md`, which is current):
 
 - **client.cpp**: ClientDisconnect (flag drop + message, DispatchDissconnect, VK_VoteDissconnect,
   resets cl_forward/back/sidespeed; no m_pTank release), ClientPutInServer (clears
@@ -148,12 +150,13 @@ at defaults ours differs (StartFrame sends "bj" from that cvar; pm_shared isn't 
 - client.cpp: spectate's `iuser4 = 1` (what player.cpp's Killed does with it), EManipGetTempEnt's
   classname pointing at the caller's buffer, CPopOMatic HasHumanGibs cast, useent's world
   activator, showmaps' unfreed 1-byte file and the `cBuf[0] <= 12` test, lcputent's coordinates
-  with other arg counts (zeros), UpdateClientData `cd->fov = pev->fov` (0: check a current client's
-  FOV is unaffected).
+  with other arg counts (zeros). UpdateClientData's `cd->fov` is `m_iFOV` now (halflife-updated's,
+  Steven 2026-11-07).
 - multiplay: InitHUD/PlayerKilled ScoreInfo kept at halflife-updated's 5 fields (the original
   sends 3; a current client reads 5: decide), ChangeLevel's 33-byte buffers.
-- world: CFaderCorpse SET_MODEL with its own empty model, MyFadeOut's 24-unit drop, the dedicated
-  server's servercfgfile not run (engine runs server.cfg).
+- world: CFaderCorpse SET_MODEL with its own empty model, MyFadeOut's 24-unit drop. The server
+  config now runs from CWorld::Precache, once, as the original (f8627d1, found in the first
+  engine run).
 - teamplay.h: m_vecFlagSpawns name.
 
 ## 7. Behavior worth testing

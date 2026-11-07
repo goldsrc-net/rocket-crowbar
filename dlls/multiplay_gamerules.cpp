@@ -624,8 +624,7 @@ void CHalfLifeMultiplay::PlayerKilled(CBasePlayer* pVictim, entvars_t* pKiller, 
 // Deathnotice.
 //=========================================================
 // orig 0x1cf840. Rocket Crowbar names a monster victim "a <name>" in the log, logs in its own
-// formats and echoes the line to a dedicated server's console. No HLTV director message (the
-// original predates HLTV).
+// formats and echoes the line to a dedicated server's console.
 void CHalfLifeMultiplay::DeathNotice(CBasePlayer* pVictim, entvars_t* pKiller, entvars_t* pevInflictor)
 {
 	const char* killer_weapon_name = "world"; // by default, the player is killed by the world
@@ -691,6 +690,21 @@ void CHalfLifeMultiplay::DeathNotice(CBasePlayer* pVictim, entvars_t* pKiller, e
 	WRITE_BYTE(killer_index);				// the killer
 	WRITE_BYTE(ENTINDEX(pVictim->edict())); // the victim
 	WRITE_STRING(killer_weapon_name);		// what they were killed by (should this be a string?)
+	MESSAGE_END();
+
+	// halflife-updated's, kept (Steven 2026-11-07: unclear goes to halflife-updated): HLTV's director
+	// hears of the kill (SDK 2.2+), as CBasePlayer::TakeDamage's damage event. The original predates
+	// HLTV and sends none. Sent here, not after the log lines as halflife-updated does, since RC's
+	// return early on a listen server.
+	MESSAGE_BEGIN(MSG_SPEC, SVC_DIRECTOR);
+	WRITE_BYTE(9);							 // command length in bytes
+	WRITE_BYTE(DRC_CMD_EVENT);				 // player killed
+	WRITE_SHORT(ENTINDEX(pVictim->edict())); // index number of primary entity
+	if (pevInflictor)
+		WRITE_SHORT(ENTINDEX(ENT(pevInflictor))); // index number of secondary entity
+	else
+		WRITE_SHORT(ENTINDEX(ENT(pKiller))); // index number of secondary entity
+	WRITE_LONG(7 | DRC_FLAG_DRAMATIC);		 // eventflags (priority and flags)
 	MESSAGE_END();
 
 	// replace the code names with the 'real' names

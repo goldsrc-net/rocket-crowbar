@@ -1076,11 +1076,14 @@ void CHgun::ReloadAmmo()
 	while (m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] < PREFS_KeyLoopUpIntClamp("HORNETGUN", "MaxAmmo", 24, 0, 250))
 	{
 		if (!(m_flRechargeTime < gpGlobals->time))
-			return;
+			break;
 
 		m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]++;
 		m_flRechargeTime = PREFS_KeyLoopUpFloat("HORNETGUN", "AmmoRefillRate", 0.75) + m_flRechargeTime;
 	}
+
+	// halflife-updated's fix, kept (f347954, halflife#556): the HUD's ammo follows the recharge
+	m_pPlayer->TabulateAmmo();
 }
 
 // orig 0x1b4af0: toggle the zoom

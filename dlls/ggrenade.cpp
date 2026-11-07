@@ -47,8 +47,8 @@ void CGrenade::Explode(Vector vecSrc, Vector vecAim)
 }
 
 // UNDONE: temporary scorching for PreAlpha - find a less sleazy permenant solution.
-// Rocket Crowbar 1.9 (orig 0x19c7d0): kills beams on the grenade first, pulls out of the wall by
-// an amount that grows with the damage, scales the sprite and the scorch with it, credits the
+// Rocket Crowbar 1.9 (orig 0x19c7d0): kills beams on the grenade first, scales the sprite and the
+// scorch with the damage, credits the
 // grenade itself when its owner is gone, gives the owner back afterwards, and skips the sparks
 // under sv_lowlag.
 void CGrenade::Explode(TraceResult* pTrace, int bitsDamageType)
@@ -66,14 +66,12 @@ void CGrenade::Explode(TraceResult* pTrace, int bitsDamageType)
 	MESSAGE_END();
 
 	// Pull out of the wall a bit
+	// halflife-updated's fix, kept (Steven 2026-11-07: unclear goes to halflife-updated): 0.6 units
+	// off the surface (078e787, halflife#3244). The original pulled out by (dmg - 24) * 0.6 (SDK
+	// 2.x's), held to +-512, so a big blast sat far enough out to reach through a wall.
 	if (pTrace->flFraction != 1.0)
 	{
-		float flPull = (pev->dmg - 24) * 0.6;
-		if (flPull < -512)
-			flPull = -512;
-		if (flPull > 512)
-			flPull = 512;
-		pev->origin = pTrace->vecEndPos + (pTrace->vecPlaneNormal * flPull);
+		pev->origin = pTrace->vecEndPos + (pTrace->vecPlaneNormal * 0.6);
 	}
 
 	int iContents = UTIL_PointContents(pev->origin);

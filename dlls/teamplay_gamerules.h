@@ -52,7 +52,7 @@ public:
 	void SetFlagSpawns(int iFlags);
 
 private:
-	void RecountTeams();
+	void RecountTeams(bool bResendInfo = false);
 	const char* TeamWithFewestPlayers();
 
 	bool m_DisableDeathMessages;

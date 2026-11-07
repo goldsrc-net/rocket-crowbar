@@ -174,7 +174,9 @@ Not folded into the tables above yet: each wave-2 dossier's section 8 lists the 
 its files (`reference/dossiers/w2-*.md`). They get merged here when wave 2 is complete; the two
 crashes they had kept are guarded and already in the Crashes table. Some of those are no longer kept: where halflife-updated had fixed one (the weapon
 respawn time, FallThink on a held weapon, the grenade sequence timing, the osprey's NaN flight and
-smoke puffs, CWreckage's int time, the zombie's unused pitch), its fix is back; mod-rc2's
+smoke puffs, CWreckage's int time, the zombie's unused pitch, the grenade blast pulled out of the
+wall by (dmg - 24) * 0.6 and so through it, the empty click sent twice to a predicting shooter,
+a modelless body copied to the body queue), its fix is back; mod-rc2's
 `reference/audit/FIXES.md` (mod-rockcrowbar wave 2) lists each.
 
 ## Dead code

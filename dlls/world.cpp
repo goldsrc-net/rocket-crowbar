@@ -388,11 +388,13 @@ void InitBodyQue()
 //
 // GLOBALS ASSUMED SET:  g_eoBodyQueueHead
 //
-// orig 0x23ecd0. The original copies any drawn body (halflife-updated also skips modelless ones)
-// and always shows the copy at its last frame (halflife-updated keeps the body's frame).
+// orig 0x23ecd0. The original always shows the copy at its last frame (halflife-updated keeps the
+// body's frame).
 void CopyToBodyQue(entvars_t* pev)
 {
-	if ((pev->effects & EF_NODRAW) != 0)
+	// halflife-updated's fix, kept (Steven 2026-11-07): a body with no model isn't copied (ac6b664);
+	// the original copied any drawn one
+	if ((pev->effects & EF_NODRAW) != 0 || pev->modelindex == 0)
 		return;
 
 	entvars_t* pevHead = VARS(g_pBodyQueueHead);

@@ -238,14 +238,24 @@ const char* CHalfLifeTeamplay::SetDefaultPlayerTeam(CBasePlayer* pPlayer)
 //=========================================================
 // InitHUD
 //=========================================================
-// orig 0x220d90. The original sends no TeamNames message (halflife-updated does); Rocket
-// Crowbar names the team's flag colour in CTF and sends the CTF scores.
+// orig 0x220d90. Rocket Crowbar names the team's flag colour in CTF and sends the CTF scores.
 void CHalfLifeTeamplay::InitHUD(CBasePlayer* pPlayer)
 {
 	int i;
 
 	SetDefaultPlayerTeam(pPlayer);
 	CHalfLifeMultiplay::InitHUD(pPlayer);
+
+	// halflife-updated's, kept (Steven 2026-11-07: unclear goes to halflife-updated): the team names
+	// go down to the new player's scoreboard (SDK 2.2+); the original sends no TeamNames
+	// Send down the team names
+	MESSAGE_BEGIN(MSG_ONE, gmsgTeamNames, NULL, pPlayer->edict());
+	WRITE_BYTE(num_teams);
+	for (i = 0; i < num_teams; i++)
+	{
+		WRITE_STRING(team_names[i]);
+	}
+	MESSAGE_END();
 
 	RecountTeams();
 
@@ -290,7 +300,7 @@ void CHalfLifeTeamplay::InitHUD(CBasePlayer* pPlayer)
 }
 
 
-// orig 0x221020. The original sends no ScoreInfo here (halflife-updated does).
+// orig 0x221020
 void CHalfLifeTeamplay::ChangePlayerTeam(CBasePlayer* pPlayer, const char* pTeamName, bool bKill, bool bGib)
 {
 	int damageFlags = DMG_GENERIC;
@@ -327,6 +337,16 @@ void CHalfLifeTeamplay::ChangePlayerTeam(CBasePlayer* pPlayer, const char* pTeam
 	MESSAGE_BEGIN(MSG_ALL, gmsgTeamInfo);
 	WRITE_BYTE(clientIndex);
 	WRITE_STRING(pPlayer->m_szTeamName);
+	MESSAGE_END();
+
+	// halflife-updated's, kept (Steven 2026-11-07: unclear goes to halflife-updated): the scoreboard
+	// gets the player's new team index (SDK 2.2+); the original sends no ScoreInfo here
+	MESSAGE_BEGIN(MSG_ALL, gmsgScoreInfo);
+	WRITE_BYTE(clientIndex);
+	WRITE_SHORT(pPlayer->pev->frags);
+	WRITE_SHORT(pPlayer->m_iDeaths);
+	WRITE_SHORT(0);
+	WRITE_SHORT(g_pGameRules->GetTeamIndex(pPlayer->m_szTeamName) + 1);
 	MESSAGE_END();
 }
 
@@ -381,7 +401,9 @@ void CHalfLifeTeamplay::ClientUserInfoChanged(CBasePlayer* pPlayer, char* infobu
 
 	ChangePlayerTeam(pPlayer, mdls, true, true);
 	// recound stuff
-	RecountTeams();
+	// halflife-updated's, kept (Steven 2026-11-07: unclear goes to halflife-updated): every player's
+	// TeamInfo is sent again (SDK 2.2+)
+	RecountTeams(true);
 }
 
 //=========================================================
@@ -592,9 +614,8 @@ const char* CHalfLifeTeamplay::TeamWithFewestPlayers()
 //=========================================================
 //=========================================================
 // orig 0x221b70. Rocket Crowbar counts a flag for each listed team, and keeps the team scores
-// in CTF (where they are flag captures, not frags). The original has no bResendInfo (TeamInfo
-// re-send); halflife-updated's ClientUserInfoChanged asked for one.
-void CHalfLifeTeamplay::RecountTeams()
+// in CTF (where they are flag captures, not frags).
+void CHalfLifeTeamplay::RecountTeams(bool bResendInfo)
 {
 	char* pName;
 	char teamlist[TEAMPLAY_TEAMLISTLENGTH];
@@ -657,6 +678,19 @@ void CHalfLifeTeamplay::RecountTeams()
 			if (0 == m_blCTF && tm >= 0)
 			{
 				team_scores[tm] += plr->pev->frags;
+			}
+
+			// halflife-updated's, kept (Steven 2026-11-07: unclear goes to halflife-updated): the
+			// original has no bResendInfo
+			if (bResendInfo) //Someone's info changed, let's send the team info again.
+			{
+				if (plr && IsValidTeam(plr->TeamID()))
+				{
+					MESSAGE_BEGIN(MSG_ALL, gmsgTeamInfo, NULL);
+					WRITE_BYTE(plr->entindex());
+					WRITE_STRING(plr->TeamID());
+					MESSAGE_END();
+				}
 			}
 		}
 	}

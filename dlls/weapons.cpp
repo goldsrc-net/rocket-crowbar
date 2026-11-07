@@ -887,7 +887,11 @@ bool CBasePlayerWeapon::PlayEmptySound()
 {
 	if (m_iPlayEmptySound)
 	{
-		EMIT_SOUND_DYN(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/357_cock1.wav", 0.8, ATTN_NORM, 0, PITCH_NORM); // orig 0x23af00
+		// orig 0x23af00. halflife-updated's fix, kept (Steven 2026-11-07: unclear goes to
+		// halflife-updated): the predicting shooter's client plays its own, so he isn't sent it
+		// twice, and a shooter with cl_lw 0 still gets it (halflife #3231). The original sends it to
+		// everyone with EMIT_SOUND_DYN.
+		EMIT_SOUND_PREDICTED(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/357_cock1.wav", 0.8, ATTN_NORM, 0, PITCH_NORM);
 		m_iPlayEmptySound = false;
 		return false;
 	}

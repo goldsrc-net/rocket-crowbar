@@ -67,8 +67,9 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
   `mp_scikill` frag (the original writes its 5-byte form). `PlayerKilled`/`InitHUD` likewise.
 - **The voice manager stays, set so everyone hears everyone.** The original has none, which
   meant no voice restrictions; halflife-updated's limited teamplay voice to teammates.
-- **`UpdateClientData` sends `cd->fov = pev->fov`**, as the original does (always 0 in RC). Kept;
-  check a current client's field of view in the first engine run.
+- **`UpdateClientData` sends `cd->fov = m_iFOV`** (`dlls/client.cpp`), halflife-updated's (its
+  6f8aac9, halflife #3044), where the original sends `pev->fov`, which nothing in RC sets (always
+  0). RC's zooms set only `m_iFOV`. Steven, 2026-11-07.
 - **Scripted sentences only go to monsters** (`CScriptedSentence::AcceptableSpeaker`), as in the
   original; halflife-updated's non-monster speakers (HL25) are left out.
 - **`GetTeamNameForIndex` returns a static buffer.** The original copies into a read-only `""`
@@ -137,14 +138,16 @@ under "Crashes in the original":
     secondary ammo index is the weapon's own (SecondaryAmmoIndex), a weapon whose primary ammo
     was taken isn't left behind (ExtractAmmo), and an emptied weapon retires on a think 0.01 s on
     (RetireWeapon, DoRetireWeapon).
-  - Grenades (`dlls/ggrenade.cpp`): the blast source is 1 unit lower against RadiusDamage's + 1
-    (Explode, with RC's pull-out distance), and the bounce and tumble sequences get their timing
-    and frame reset (BounceTouch, ShootTimed).
+  - Grenades (`dlls/ggrenade.cpp`): the blast sits 0.6 units off the surface it hit, not
+    (dmg - 24) * 0.6, which put big blasts through thin walls (Explode; Steven 2026-11-07), its
+    source is 1 unit lower against RadiusDamage's + 1, and the bounce and tumble sequences get
+    their timing and frame reset (BounceTouch, ShootTimed).
   - Weapon animation and sound: the hand grenade forgets a primed throw when holstered
     (`dlls/handgrenade.cpp` Holster); the snark's and satchel's first idle waits 1.7 s and 2 s
     after a deploy, the RPG's fidget 6.1 s (`dlls/squeakgrenade.cpp`, `dlls/satchel.cpp` Deploy,
     `dlls/rpg.cpp` WeaponIdle); the shotgun pumps after its last shell and while the trigger is
-    held, from its own ItemPostFrame (`dlls/shotgun.cpp`).
+    held, from its own ItemPostFrame (`dlls/shotgun.cpp`). The hornet gun's ammo HUD follows its recharge
+    (`dlls/hornetgun.cpp` ReloadAmmo, f347954, halflife#556).
   - Monsters (`dlls/monsters.cpp`): a triggered monster isn't set to alert (MonsterUse),
     SetActivity sets the activity first (oldActivity is m_Activity), turns follow the time since
     the last turn (ChangeYaw; the ichthyosaur's pitch and roll and the flying monsters' roll too,
@@ -169,6 +172,9 @@ under "Crashes in the original":
   - A dead player takes no healthkit (`dlls/healthkit.cpp` MyTouch, rc.ini amount kept); a
     disconnecting player lets go of a func_tank (`dlls/client.cpp` ClientDisconnect); a % in a
     new name becomes a space (ClientUserInfoChanged, RC's message and log kept).
+  - A body without a model isn't copied to the body queue (`dlls/world.cpp` CopyToBodyQue; RC's
+    last-frame copy stays), and a frozen player's jump makes no sound on the server either
+    (`pm_shared/pm_shared.cpp` PM_Jump; still no bunny-hop cap there). Steven, 2026-11-07.
 
 - **Players keep the engine's `FL_PROXY` and `FL_FAKECLIENT` flags** (`dlls/player.cpp` Spawn). The
   original sets `pev->flags` to `FL_CLIENT`, so HLTV proxies and bots stay marked as such.
@@ -212,11 +218,23 @@ Decided by Steven, 2026-11-07 (`reference/audit/r7.md`):
   correction** (`dlls/func_tank.cpp` AdjustAnglesForBarrel). The original takes the square root of
   a negative there and aims with NaN angles. Kept as a guard.
 
-Kept as the original until Steven decides (FIXES.md, the wave 2 "Unclear, for Steven" list):
-`PlayEmptySound`'s unpredicted sound, `CBasePlayer::Killed` without the weapon holster and the
-model index reset, the scientist's sound mask without scents and its fixed model name,
-`DeathNotice` without the HLTV event, and teamplay without TeamNames, the team-change ScoreInfo
-and the TeamInfo resend.
+Decided by Steven, 2026-11-07: the wave 2 calls left unclear go to halflife-updated's (FIXES.md),
+each marked `// halflife-updated's fix, kept` or `// halflife-updated's, kept` in the code:
+
+- **The empty click is predicted** (`dlls/weapons.cpp` PlayEmptySound, `EMIT_SOUND_PREDICTED`):
+  a shooter whose client predicts weapons plays his own and isn't sent it. This server sends no
+  weapon data, so a client with `cl_lw 1` may hear none; not tested in an engine yet.
+- **A dying player holsters his weapon and gets the player model back** (`dlls/player.cpp`
+  Killed): the zooms, the egon's beam and the snark cam clean up at death, and a model index that
+  observing or driving changed is reset.
+- **Scientists notice carcass, meat and garbage scents** (`dlls/scientist.cpp` ISoundMask) **and
+  take their model from `_sv_override_scientist_mdl`** (Precache, Spawn, the dead and sitting
+  scientists). Nothing registers that cvar, so they use `models/scientist.mdl`, as the original.
+- **`DeathNotice` sends HLTV a director kill event** (`dlls/multiplay_gamerules.cpp`), before RC's
+  log lines, so a listen server sends it too. Only an HLTV proxy sees it.
+- **Teamplay sends a new player the team names, everyone a ScoreInfo with the new team on a team
+  change, and every player's TeamInfo again after a model change** (`dlls/teamplay_gamerules.cpp`
+  InitHUD, ChangePlayerTeam, `RecountTeams(true)` from ClientUserInfoChanged).
 
 ## Weapons
 

@@ -901,7 +901,11 @@ void CBasePlayer::Killed(entvars_t* pevAttacker, int iGib)
 {
 	CSound* pSound;
 
-	// halflife-updated holstered the active weapon here; the original doesn't.
+	// halflife-updated's fix, kept (Steven 2026-11-07: unclear goes to halflife-updated): the active
+	// weapon is holstered at once, to let it clean up (zoom, egon beam, snark cam). The original
+	// doesn't.
+	if (m_pActiveItem)
+		m_pActiveItem->Holster();
 
 	DispatchPlayerKilled(edict());
 	DestroyFreezeTimer(pev);
@@ -970,7 +974,9 @@ void CBasePlayer::Killed(entvars_t* pevAttacker, int iGib)
 	// each death (the original's m_iRespawnFrames was reset only by respawn())
 	m_flRespawnTimer = 0.0f;
 
-	// The original doesn't reset pev->modelindex to g_ulModelIndexPlayer here.
+	// halflife-updated's fix, kept (Steven 2026-11-07: unclear goes to halflife-updated): the body
+	// goes back to the player model ("don't use eyes"). The original doesn't reset it.
+	pev->modelindex = g_ulModelIndexPlayer;
 
 	pev->deadflag = DEAD_DYING;
 	pev->movetype = MOVETYPE_TOSS;

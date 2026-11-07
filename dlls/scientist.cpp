@@ -111,6 +111,8 @@ public:
 
 	void TalkInit();
 
+	char* GetScientistModel() const;
+
 	void Killed(entvars_t* pevAttacker, int iGib) override;
 
 	// Rocket Crowbar 1.9
@@ -145,6 +147,20 @@ TYPEDESCRIPTION CScientist::m_SaveData[] =
 };
 
 IMPLEMENT_SAVERESTORE(CScientist, CTalkMonster);
+
+// halflife-updated's, kept (Steven 2026-11-07: unclear goes to halflife-updated): the model comes
+// from _sv_override_scientist_mdl when it is set, which nothing in our build registers; the original
+// names models/scientist.mdl in each place
+char* CScientist::GetScientistModel() const
+{
+	char* pszOverride = (char*)CVAR_GET_STRING("_sv_override_scientist_mdl");
+	if (pszOverride && strlen(pszOverride) > 5) // at least requires ".mdl"
+	{
+		return pszOverride;
+	}
+
+	return (char*)"models/scientist.mdl";
+}
 
 //=========================================================
 // AI Schedules Specific to this monster
@@ -661,7 +677,7 @@ void CScientist::Spawn()
 {
 	Precache();
 
-	SET_MODEL(ENT(pev), "models/scientist.mdl");
+	SET_MODEL(ENT(pev), GetScientistModel());
 	UTIL_SetSize(pev, VEC_HUMAN_HULL_MIN, VEC_HUMAN_HULL_MAX);
 
 	pev->solid = SOLID_SLIDEBOX;
@@ -711,7 +727,7 @@ void CScientist::Spawn()
 //=========================================================
 void CScientist::Precache()
 {
-	PRECACHE_MODEL("models/scientist.mdl");
+	PRECACHE_MODEL(GetScientistModel());
 	PRECACHE_SOUND("scientist/sci_pain1.wav");
 	PRECACHE_SOUND("scientist/sci_pain2.wav");
 	PRECACHE_SOUND("scientist/sci_pain3.wav");
@@ -804,11 +820,15 @@ bool CScientist::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, flo
 // of sounds this monster regards. In the base class implementation,
 // monsters care about all sounds, but no scents.
 //=========================================================
-// orig 0x2076d0: no scents (halflife-updated added carcass, meat and garbage)
+// orig 0x2076d0. halflife-updated's, kept (Steven 2026-11-07: unclear goes to halflife-updated): the
+// scents carcass, meat and garbage (SDK 2.2+); the original's mask has none
 int CScientist::ISoundMask()
 {
 	return bits_SOUND_WORLD |
 		   bits_SOUND_COMBAT |
+		   bits_SOUND_CARCASS |
+		   bits_SOUND_MEAT |
+		   bits_SOUND_GARBAGE |
 		   bits_SOUND_DANGER |
 		   bits_SOUND_PLAYER;
 }
@@ -1173,8 +1193,22 @@ public:
 	bool KeyValue(KeyValueData* pkvd) override;
 	int m_iPose; // which sequence to display
 	static const char* m_szPoses[7];
+
+	char* GetScientistModel() const;
 };
 const char* CDeadScientist::m_szPoses[] = {"lying_on_back", "lying_on_stomach", "dead_sitting", "dead_hang", "dead_table1", "dead_table2", "dead_table3"};
+
+// halflife-updated's, kept: as CScientist's
+char* CDeadScientist::GetScientistModel() const
+{
+	char* pszOverride = (char*)CVAR_GET_STRING("_sv_override_scientist_mdl");
+	if (pszOverride && strlen(pszOverride) > 5) // at least requires ".mdl"
+	{
+		return pszOverride;
+	}
+
+	return (char*)"models/scientist.mdl";
+}
 
 bool CDeadScientist::KeyValue(KeyValueData* pkvd)
 {
@@ -1193,8 +1227,8 @@ LINK_ENTITY_TO_CLASS(monster_scientist_dead, CDeadScientist);
 //
 void CDeadScientist::Spawn()
 {
-	PRECACHE_MODEL("models/scientist.mdl");
-	SET_MODEL(ENT(pev), "models/scientist.mdl");
+	PRECACHE_MODEL(GetScientistModel());
+	SET_MODEL(ENT(pev), GetScientistModel());
 
 	pev->effects = 0;
 	pev->sequence = 0;
@@ -1275,8 +1309,8 @@ typedef enum
 //
 void CSittingScientist::Spawn()
 {
-	PRECACHE_MODEL("models/scientist.mdl");
-	SET_MODEL(ENT(pev), "models/scientist.mdl");
+	PRECACHE_MODEL(GetScientistModel());
+	SET_MODEL(ENT(pev), GetScientistModel());
 	Precache();
 	InitBoneControllers();
 

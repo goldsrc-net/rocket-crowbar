@@ -2977,6 +2977,7 @@ engine sets cd to 0 before calling.
 */
 // orig 0x1054e0. The original's: no spectator target view (iuser1/iuser2), no weapon prediction
 // data, fov from pev->fov (which nothing sets), and a noclipping player sent as not ducking.
+// Ours sends m_iFOV (halflife-updated's, below).
 void UpdateClientData(const edict_t* ent, int sendweapons, struct clientdata_s* cd)
 {
 	if (!ent || !ent->pvPrivateData)
@@ -3031,7 +3032,9 @@ void UpdateClientData(const edict_t* ent, int sendweapons, struct clientdata_s* 
 	strcpy(cd->physinfo, ENGINE_GETPHYSINFO(ent));
 
 	cd->maxspeed = pev->maxspeed;
-	cd->fov = pev->fov; // VERIFY: halflife-updated sends pl->m_iFOV; the original sends pev->fov
+	// halflife-updated's fix, kept (Steven 2026-11-07): the zoom is m_iFOV, which RC's zooms set
+	// (6f8aac9, halflife #3044); the original sent pev->fov, always 0
+	cd->fov = pl ? pl->m_iFOV : 0;
 	cd->weaponanim = pev->weaponanim;
 
 	cd->pushmsec = pev->pushmsec;
