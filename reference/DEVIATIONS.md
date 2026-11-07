@@ -30,8 +30,20 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
 - **Cvars the original does not have, kept from halflife-updated:** `allow_spectators`,
   `mp_chattime`, `mp_falldamage`, `mp_fragsleft`, `mp_timeleft`, `sk_plr_hornet_dmg1`-`3`,
   `sv_allowbunnyhopping`, `sv_alltalk`, `sv_busters`, `sv_pushable_fixed_tick_fudge`,
-  `voice_serverdebug`. They post-date RC's 2001 SDK. At their defaults they should match the
-  original's behavior; each gets checked against it when the code that reads it is reconstructed.
+  `voice_serverdebug`. They post-date RC's 2001 SDK. With the code that would read them
+  reconstructed, `allow_spectators`, `mp_chattime`, `mp_falldamage` and `sk_plr_hornet_dmg1`-`3`
+  have no effect, `sv_alltalk` changes nothing (see the voice manager below) and `sv_busters` is
+  off, so at their defaults these match the original. `sv_allowbunnyhopping` is below.
+  docs/SERVER.md lists each.
+
+## Commands and entities
+
+- **Commands the original does not have, kept from halflife-updated:** the client commands
+  `fullupdate` and `closemenus` (today's client sends them), the voice manager's `vban` and
+  `VModEnable`, and the server commands `sv_load_all_maps` and `sv_stop_loading_all_maps`. The
+  original answers the client ones with "Unknown command".
+- **`func_vehicle` and `func_vehiclecontrols` exist.** halflife-updated added them; the original
+  has neither, so a map using them gets nothing there on RC 1.9.
 
 ## Messages and prediction
 

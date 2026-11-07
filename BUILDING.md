@@ -27,8 +27,15 @@ tree is Half-Life Updated's and isn't part of the mod.
 
 ```sh
 python3 scripts/check_file.py <original source file>.cpp --missing   # every original function present
+scripts/prefs_keys.py --ini <RC 1.9's rc.ini>                       # regenerate docs/RC_INI.md; fails if the
+                                                                    # original reads a key ours doesn't
+scripts/check_docs.py                                               # every cvar and command is in docs/SERVER.md
 tools/rig/smoke.py rcours out.log                                   # boot, change maps, quit (tools/rig/README.md)
 ```
+
+A function being present doesn't mean RC's changes to it are: a stock SDK function RC edited
+can still have the stock body. `prefs_keys.py` catches that for anything reading rc.ini (it
+compares against the decompile in `recovered/decomp/`).
 
 `scripts/` also regenerates every table in `reference/` from the original library (see each script's
 header, and the parent goldsrc.net folder's `DECOMPILE.md` for the order).

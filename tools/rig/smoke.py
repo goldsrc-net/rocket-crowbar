@@ -51,6 +51,7 @@ def main():
     ap.add_argument("game", nargs="?")
     ap.add_argument("log", nargs="?")
     ap.add_argument("--map", default="crossfire")
+    ap.add_argument("--port", default="27041", help="UDP port (default 27041, clear of run.sh's 27031 and 27032)")
     ap.add_argument("--clean", metavar="LOG")
     a = ap.parse_args()
     if a.clean:
@@ -59,7 +60,7 @@ def main():
     if a.game == "rockcrowbar":
         env["LD_PRELOAD"] = SHIM
     cmd = ["./hlds_linux", "-nobreakpad", "-game", a.game, "+developer", "1", "+maxplayers", "8",
-           "+sv_lan", "1", "-port", "27031", "+map", a.map]
+           "+sv_lan", "1", "-port", a.port, "+map", a.map]
     log = open(a.log, "w")
     p = subprocess.Popen(cmd, cwd=RIG, env=env, stdin=subprocess.PIPE, stdout=log,
                          stderr=subprocess.STDOUT, text=True)

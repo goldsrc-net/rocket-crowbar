@@ -17,7 +17,10 @@ setup that runs the original and the rebuild side by side, and going back.
 
 ## Servers
 
-The rebuild reads RC 1.9's cvars, rc.ini and per-map `.lec` and `.cfg` files unchanged. Where it
+The rebuild reads RC 1.9's cvars, rc.ini and per-map `.lec` and `.cfg` files unchanged.
+[docs/SERVER.md](docs/SERVER.md) lists every cvar, command, impulse and file RC adds to Half-Life,
+[docs/GAMEPLAY.md](docs/GAMEPLAY.md) what RC changes in play, and [docs/RC_INI.md](docs/RC_INI.md)
+every rc.ini key with its default. Where it
 deliberately does something RC 1.9 does not, it is listed in
 [reference/DEVIATIONS.md](reference/DEVIATIONS.md); the bugs found in the original, and which ones it
 keeps, are in [reference/ORIGINAL_BUGS.md](reference/ORIGINAL_BUGS.md).
