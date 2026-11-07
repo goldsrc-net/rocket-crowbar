@@ -105,20 +105,22 @@ listed under "Crashes in the original":
   transition code, `dlls/player.cpp` Restore, UpdateClientData's restore block and CStripWeapons'
   local player).
 
-Kept until Steven decides (`reference/audit/r7.md`):
+Decided by Steven, 2026-11-07 (`reference/audit/r7.md`):
 
 - **env_sound's room type reaches the client from `CBasePlayer::UpdateClientData`**
   (`dlls/sound.cpp` CEnvSound::Think, `dlls/player.cpp`): resent on every spawn and full update,
   and reset to 0 at a new map. The original sends `SVC_ROOMTYPE` once, when an env_sound takes
-  over, so its room effect carries into the next map.
+  over, so its room effect carries into the next map. Kept: the carry-over is a bug, fixed in
+  both RC 1.9 and mod-rc2.
 - **`CBasePlayer::TakeDamage` sends HLTV an `SVC_DIRECTOR` damage event** (`dlls/player.cpp`), which
-  the original doesn't. Only an HLTV proxy's auto-director sees it.
+  the original doesn't. Only an HLTV proxy's auto-director sees it. Kept.
 - **A pickup's `AmmoPickup` follows its `WeapPickup`** (`dlls/player.cpp` AddPlayerItem runs
   ExtractAmmo after the weapon joins the list); the original gives the ammo inside AddToPlayer,
-  before.
+  before. Kept: halflife-updated moved it so a give of an exhaustible weapon's ammo also gives the
+  weapon (its 6951bf1, issues #153 and #157).
 - **A `func_tank` whose target is nearer than its barrel offset aims without the barrel
   correction** (`dlls/func_tank.cpp` AdjustAnglesForBarrel). The original takes the square root of
-  a negative there and aims with NaN angles.
+  a negative there and aims with NaN angles. Kept as a guard.
 
 ## Weapons
 
