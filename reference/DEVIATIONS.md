@@ -24,9 +24,11 @@ forced by the build, with its default and what it changes. Same convention as mo
 
 The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
 
-- **`servercfgfile` is not registered.** The original registers it (default `server.cfg`, no
-  flags), as Valve's SDK did. halflife-updated dropped it because the current engine defines it
-  itself; registering it again only logs a duplicate warning. Behavior is the same.
+- **`servercfgfile`, `lservercfgfile` and `mapcyclefile` are not registered.** The original
+  registers them (defaults `server.cfg`, `listenserver.cfg`, `mapcycle.txt`, no flags), as Valve's
+  SDK 2.x did. The current engine defines all three itself, and halflife-updated's seed (Valve's
+  2013 SDK) already left them out; registering them again only logs a duplicate warning. Behavior
+  is the same.
 - **Cvars the original does not have, kept from halflife-updated:** `allow_spectators`,
   `mp_chattime`, `mp_falldamage`, `mp_fragsleft`, `mp_timeleft`, `sk_plr_hornet_dmg1`-`3`,
   `sv_allowbunnyhopping`, `sv_alltalk`, `sv_busters`, `sv_pushable_fixed_tick_fudge`,

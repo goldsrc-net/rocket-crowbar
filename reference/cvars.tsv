@@ -308,7 +308,7 @@ sk_player_arm3	sk_player_arm3	1	0	yes
 sk_player_leg1	sk_player_leg1	1	0	yes
 sk_player_leg2	sk_player_leg2	1	0	yes
 sk_player_leg3	sk_player_leg3	1	0	yes
-lservercfgfile	lservercfgfile	listenserver.cfg	0	yes
-mapcyclefile	mapcyclefile	mapcycle.txt	0	yes
+lservercfgfile	lservercfgfile	listenserver.cfg	0	no
+mapcyclefile	mapcyclefile	mapcycle.txt	0	no
 servercfgfile	servercfgfile	server.cfg	0	no
 slSwimAgitated	T	F	0	yes
