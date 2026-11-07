@@ -417,8 +417,8 @@ addr	size	file	class	method	kind	signature	mangled
 000f4120	71	bmodels.cpp		__tf9CFuncWall	generated	__tf9CFuncWall	__tf9CFuncWall
 000f4170	754	bot_prefs.cpp		BP_GetConfArgLine	rc	BP_GetConfArgLine(_IO_FILE *, char *, int, sEllem *, int *)	BP_GetConfArgLine__FP8_IO_FILEPciP6sEllemPi
 000f4470	252	bot_prefs.cpp		BP_ReadGenLine	rc	BP_ReadGenLine(_IO_FILE *, char *, int)	BP_ReadGenLine__FP8_IO_FILEPci
-000f4570	37	bot_prefs.cpp		_GLOBAL_.D.BP_GetConfArgLine	rc	_GLOBAL_.D.BP_GetConfArgLine(_IO_FILE *, char *, int, sEllem *, int *)	_GLOBAL_.D.BP_GetConfArgLine__FP8_IO_FILEPciP6sEllemPi
-000f45a0	35	bot_prefs.cpp		_GLOBAL_.I.BP_GetConfArgLine	rc	_GLOBAL_.I.BP_GetConfArgLine(_IO_FILE *, char *, int, sEllem *, int *)	_GLOBAL_.I.BP_GetConfArgLine__FP8_IO_FILEPciP6sEllemPi
+000f4570	37	bot_prefs.cpp		_GLOBAL_.D.BP_GetConfArgLine	generated	_GLOBAL_.D.BP_GetConfArgLine(_IO_FILE *, char *, int, sEllem *, int *)	_GLOBAL_.D.BP_GetConfArgLine__FP8_IO_FILEPciP6sEllemPi
+000f45a0	35	bot_prefs.cpp		_GLOBAL_.I.BP_GetConfArgLine	generated	_GLOBAL_.I.BP_GetConfArgLine(_IO_FILE *, char *, int, sEllem *, int *)	_GLOBAL_.I.BP_GetConfArgLine__FP8_IO_FILEPciP6sEllemPi
 000f45d0	44	bullsquid.cpp		squidspit	stock	squidspit	squidspit
 000f4600	76	bullsquid.cpp	CSquidSpit	Save	stock	CSquidSpit::Save(CSave &)	Save__10CSquidSpitR5CSave
 000f4650	76	bullsquid.cpp	CSquidSpit	Restore	stock	CSquidSpit::Restore(CRestore &)	Restore__10CSquidSpitR8CRestore
@@ -2377,7 +2377,7 @@ addr	size	file	class	method	kind	signature	mangled
 00191610	68	func_tank.cpp	CFuncTankControls	Use	stock	CFuncTankControls::Use(CBaseEntity *, CBaseEntity *, USE_TYPE, float)	Use__17CFuncTankControlsP11CBaseEntityT18USE_TYPEf
 00191660	306	func_tank.cpp	CFuncTankControls	Think	stock	CFuncTankControls::Think()	Think__17CFuncTankControls
 001917a0	172	func_tank.cpp	CFuncTankControls	Spawn	stock	CFuncTankControls::Spawn()	Spawn__17CFuncTankControls
-00191850	125	func_tank.cpp		_GLOBAL_.I._9CFuncTank.m_SaveData	rc	_GLOBAL_.I._9CFuncTank.m_SaveData	_GLOBAL_.I._9CFuncTank.m_SaveData
+00191850	125	func_tank.cpp		_GLOBAL_.I._9CFuncTank.m_SaveData	generated	_GLOBAL_.I._9CFuncTank.m_SaveData	_GLOBAL_.I._9CFuncTank.m_SaveData
 001918d0	71	func_tank.cpp		__tf17CFuncTankControls	generated	__tf17CFuncTankControls	__tf17CFuncTankControls
 00191920	71	func_tank.cpp		__tf12CFuncTankGib	generated	__tf12CFuncTankGib	__tf12CFuncTankGib
 00191970	71	func_tank.cpp		__tf11CGibTankGib	generated	__tf11CGibTankGib	__tf11CGibTankGib
@@ -2536,7 +2536,7 @@ addr	size	file	class	method	kind	signature	mangled
 0019e160	304	ggrenade.cpp	CGrenade	UseSatchelCharges	stock	CGrenade::UseSatchelCharges(entvars_s *, CGrenade::SATCHELCODE)	UseSatchelCharges__8CGrenadeP9entvars_sQ28CGrenade11SATCHELCODE
 0019e290	12	ggrenade.cpp	CGrenade	BloodColor	stock	CGrenade::BloodColor()	BloodColor__8CGrenade
 0019e2a0	71	ggrenade.cpp		__tf8CGrenade	generated	__tf8CGrenade	__tf8CGrenade
-0019e2f0	49	globals.cpp		_GLOBAL_.I.g_vecZero	rc	_GLOBAL_.I.g_vecZero	_GLOBAL_.I.g_vecZero
+0019e2f0	49	globals.cpp		_GLOBAL_.I.g_vecZero	generated	_GLOBAL_.I.g_vecZero	_GLOBAL_.I.g_vecZero
 0019e330	44	glock.cpp		acidgib	rc	acidgib	acidgib
 0019e360	70	glock.cpp	CAcidGib	AcidGibCreate	rc	CAcidGib::AcidGibCreate()	AcidGibCreate__8CAcidGib
 0019e3b0	630	glock.cpp	CAcidGib	Spawn	rc	CAcidGib::Spawn()	Spawn__8CAcidGib
@@ -3547,7 +3547,7 @@ addr	size	file	class	method	kind	signature	mangled
 001df690	237	nodes.cpp	CNodeViewer	FindNodeConnections	stock	CNodeViewer::FindNodeConnections(int)	FindNodeConnections__11CNodeVieweri
 001df780	164	nodes.cpp	CNodeViewer	AddNode	stock	CNodeViewer::AddNode(int, int)	AddNode__11CNodeViewerii
 001df830	787	nodes.cpp	CNodeViewer	DrawThink	stock	CNodeViewer::DrawThink()	DrawThink__11CNodeViewer
-001dfb50	33	nodes.cpp		_GLOBAL_.I.info_node	rc	_GLOBAL_.I.info_node	_GLOBAL_.I.info_node
+001dfb50	33	nodes.cpp		_GLOBAL_.I.info_node	generated	_GLOBAL_.I.info_node	_GLOBAL_.I.info_node
 001dfb80	71	nodes.cpp		__tf11CNodeViewer	generated	__tf11CNodeViewer	__tf11CNodeViewer
 001dfbd0	9	nodes.cpp	CNodeEnt	ObjectCaps	stock	CNodeEnt::ObjectCaps()	ObjectCaps__8CNodeEnt
 001dfbe0	71	nodes.cpp		__tf8CNodeEnt	generated	__tf8CNodeEnt	__tf8CNodeEnt
@@ -5149,7 +5149,7 @@ addr	size	file	class	method	kind	signature	mangled
 0023f3f0	88	world.cpp	CWorld	Spawn	stock	CWorld::Spawn()	Spawn__6CWorld
 0023f450	3178	world.cpp	CWorld	Precache	stock	CWorld::Precache()	Precache__6CWorld
 002400c0	2248	world.cpp	CWorld	KeyValue	stock	CWorld::KeyValue(KeyValueData_s *)	KeyValue__6CWorldP14KeyValueData_s
-00240990	35	world.cpp		_GLOBAL_.I.gDecals	rc	_GLOBAL_.I.gDecals	_GLOBAL_.I.gDecals
+00240990	35	world.cpp		_GLOBAL_.I.gDecals	generated	_GLOBAL_.I.gDecals	_GLOBAL_.I.gDecals
 002409c0	12	world.cpp	CFaderCorpse	ObjectCaps	rc	CFaderCorpse::ObjectCaps()	ObjectCaps__12CFaderCorpse
 002409d0	71	world.cpp		__tf12CFaderCorpse	generated	__tf12CFaderCorpse	__tf12CFaderCorpse
 00240a20	71	world.cpp		__tf6CDecal	generated	__tf6CDecal	__tf6CDecal
@@ -5194,7 +5194,7 @@ addr	size	file	class	method	kind	signature	mangled
 00241f90	57	xen.cpp	CXenSpore	Precache	stock	CXenSpore::Precache()	Precache__9CXenSpore
 00241fd0	7	xen.cpp	CXenSpore	Touch	stock	CXenSpore::Touch(CBaseEntity *)	Touch__9CXenSporeP11CBaseEntity
 00241fe0	72	xen.cpp	CXenSpore	Think	stock	CXenSpore::Think()	Think__9CXenSpore
-00242030	159	xen.cpp		_GLOBAL_.I._13CActAnimating.m_SaveData	rc	_GLOBAL_.I._13CActAnimating.m_SaveData	_GLOBAL_.I._13CActAnimating.m_SaveData
+00242030	159	xen.cpp		_GLOBAL_.I._13CActAnimating.m_SaveData	generated	_GLOBAL_.I._13CActAnimating.m_SaveData	_GLOBAL_.I._13CActAnimating.m_SaveData
 002420d0	71	xen.cpp		__tf14CXenSporeLarge	generated	__tf14CXenSporeLarge	__tf14CXenSporeLarge
 00242120	71	xen.cpp		__tf12CXenSporeMed	generated	__tf12CXenSporeMed	__tf12CXenSporeMed
 00242170	71	xen.cpp		__tf14CXenSporeSmall	generated	__tf14CXenSporeSmall	__tf14CXenSporeSmall

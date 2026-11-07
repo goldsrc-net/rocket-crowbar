@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """inventory.py - the reconstruction work list for Rocket Crowbar 1.9.
 
-Reads the original reference/rc_i386.so (not stripped, gcc 2.95) and our i386 build of this
-repo, and writes:
+Reads the original reference/rc_i386.so (not stripped, gcc 2.95) and the pristine SDK's
+baseline (reference/sdk-stock-*.txt, from scripts/sdk_baseline.sh), and writes:
 
   reference/funcfile.tsv     every defined function in the original: address, size, source file,
-                             class, method, demangled signature, and whether our build has a
-                             method of that name (stock = in our build, rc = not)
+                             class, method, demangled signature, and whether the pristine SDK
+                             has a method of that name (stock = it does, rc = not)
   reference/RECONSTRUCTION.md  the work list: RC's own source files, RC-only classes, methods RC
                              added to SDK classes, entities, and SDK classes RC does not have
 
@@ -14,7 +14,7 @@ Source files come from the symbol table: gcc 2.x emits a local `gcc2_compiled.` 
 start of every object file's .text, right after that file's FILE symbol, so each function
 belongs to the file whose start is the nearest one below it.
 
-Usage: scripts/inventory.py [--ours build-i386/dlls/hl.so]
+Usage: scripts/inventory.py
 Needs readelf/nm (binutils) and scripts/gnv2demangle.py next to this file.
 """
 import argparse, bisect, collections, os, re, subprocess, sys
@@ -27,7 +27,7 @@ ORIG = os.path.join(ROOT, "reference", "rc_i386.so")
 TEXT_NDX = "17"   # .text's section index in rc_i386.so
 RUNTIME = {"crtstuff.c", "initfini.c", "libgcc2.c", "frame.c", "exception.cc",
            "new.cc", "new1.cc", "new2.cc", "tinfo.cc", "tinfo2.cc"}
-GENERATED = re.compile(r"^(__tf|__ti|_GLOBAL_\$|__thunk_|__\w+__F|_init$|_fini$|GetClassPtr__H)")
+GENERATED = re.compile(r"^(__tf|__ti|_GLOBAL_[.$]|__thunk_|__\w+__F|_init$|_fini$|GetClassPtr__H)")
 RUNTIME_SYM = re.compile(r"^(_init|_fini|__do_global_\w+|__libc_csu\w*|frame_dummy|call_\w+)$")
 
 
@@ -68,17 +68,11 @@ def split_sig(sig):
     return "", head
 
 
-def our_methods(so):
-    """Class -> set(method) and the set of free functions, from our (Itanium) build."""
-    out = run("nm", "-C", "--defined-only", so)
+def stock_methods():
+    """Class -> set(method) the pristine SDK defines (reference/sdk-stock-methods.txt, written by
+    scripts/sdk_baseline.sh from an i386 build of the fork point)."""
     methods = collections.defaultdict(set)
-    for line in out.splitlines():
-        p = line.split(" ", 2)
-        if len(p) < 3 or p[1] not in "TtWw":
-            continue
-        name = p[2]
-        if name.startswith(("non-virtual thunk", "virtual thunk")):
-            continue
+    for name in open(os.path.join(ROOT, "reference", "sdk-stock-methods.txt")).read().splitlines():
         cls, meth = split_sig(name)
         methods[cls].add(meth)
     return methods
@@ -100,21 +94,16 @@ def stem(f):
 
 
 def sdk_source_files():
-    """Stems of the SDK's source files (halflife-updated renamed pm_shared's .c files to .cpp).
-    globals.cpp is Valve's; halflife-updated folded it into other files."""
+    """Stems of the pristine SDK's source files (reference/sdk-stock-files.txt; halflife-updated
+    renamed pm_shared's .c files to .cpp). globals.cpp is Valve's; halflife-updated folded it in."""
     stems = {"globals"}
-    for d in ("dlls", "pm_shared", "game_shared", "common", "engine"):
-        for dp, _, fs in os.walk(os.path.join(ROOT, d)):
-            stems.update(stem(f) for f in fs if f.endswith((".cpp", ".c")))
+    stems.update(open(os.path.join(ROOT, "reference", "sdk-stock-files.txt")).read().split())
     return stems
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--ours", default=os.path.join(ROOT, "build-i386", "dlls", "hl.so"))
     args = ap.parse_args()
-    if not os.path.exists(args.ours):
-        sys.exit(f"missing {args.ours}: run scripts/build.sh i386 first")
 
     # --- original: file starts + functions ---
     # A file starts at its gcc2_compiled. label. The statically linked C++ runtime objects
@@ -136,7 +125,7 @@ def main():
     start_addrs = [s[0] for s in starts]
     funcs = sorted(set(funcs))
 
-    ours = our_methods(args.ours)
+    ours = stock_methods()
     sdk_files = sdk_source_files()
 
     rows = []
@@ -186,7 +175,8 @@ def main():
     missing_classes = sorted(c for c in our_classes
                              if c not in orig_classes and c.startswith("C") and "::" not in c)
 
-    ent_orig, ent_ours = dyn_entities(ORIG), dyn_entities(args.ours)
+    ent_orig = dyn_entities(ORIG)
+    ent_ours = set(open(os.path.join(ROOT, "reference", "sdk-stock-entities.txt")).read().split())
 
     def fmt_bytes(rs):
         return sum(r["size"] for r in rs)
