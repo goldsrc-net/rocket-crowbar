@@ -39,6 +39,8 @@ public:
 	} SATCHELCODE;
 
 	static CGrenade* ShootTimed(entvars_t* pevOwner, Vector vecStart, Vector vecVelocity, float time);
+
+	static CGrenade* ShootDETimed(entvars_t* pevOwner, entvars_t* pevDriver, Vector vecStart, Vector vecVelocity, float time); // Rocket Crowbar 1.9
 	static CGrenade* ShootContact(entvars_t* pevOwner, Vector vecStart, Vector vecVelocity);
 	static CGrenade* ShootSatchelCharge(entvars_t* pevOwner, Vector vecStart, Vector vecVelocity);
 	static void UseSatchelCharges(entvars_t* pevOwner, SATCHELCODE code);

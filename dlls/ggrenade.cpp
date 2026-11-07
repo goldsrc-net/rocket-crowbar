@@ -504,3 +504,12 @@ void CGrenade::UseSatchelCharges(entvars_t* pevOwner, SATCHELCODE code)
 }
 
 //======================end grenade
+
+// Rocket Crowbar 1.9. Original @ 0x19de20: a timed grenade whose damage is credited to the
+// driver of the drive monster that fired it.
+CGrenade* CGrenade::ShootDETimed(entvars_t* pevOwner, entvars_t* pevDriver, Vector vecStart, Vector vecVelocity, float time)
+{
+	CGrenade* pGrenade = ShootTimed(pevOwner, vecStart, vecVelocity, time);
+	pGrenade->pev->dmg_inflictor = ENT(pevDriver);
+	return pGrenade;
+}
