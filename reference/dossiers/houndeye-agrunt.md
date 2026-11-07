@@ -313,7 +313,7 @@ Original quirks kept without a VERIFY, read off the disassembly: CDriveHE::DoYaw
   view), jump (bouncing big gun, 5 bounces, through monsters), duck (hyper: red glow, faster,
   regenerates health, drains armor; hangover damage when empty).
 - Pickups at `info_drive_*_spawn` fade in, give one monster per player, kill it after
-  HoundMaxDriveTime / AGMaxDriveTime (600 s), respawn 5 s after it dies.
+  HoundMaxDriveTime / AGruntMaxDriveTime (600 s), respawn 5 s after it dies.
 - Driver HUD: health as a percentage, the grunt's hyper charge as armor; `cl_de_alpha`
   translucency of the camera; eject (sv_allowglobaleject or AllowEject in rc.ini).
 - Compare all of these against the original with an rc.ini that has none of the keys (the stubs

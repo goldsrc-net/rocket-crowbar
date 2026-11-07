@@ -29,6 +29,7 @@
 #include "items.h"
 #include "gamerules.h"
 #include "UserMessages.h"
+#include "Preff.h"
 
 class CWorldItem : public CBaseEntity
 {
@@ -212,21 +213,19 @@ class CItemBattery : public CItem
 		PRECACHE_MODEL("models/w_battery.mdl");
 		PRECACHE_SOUND("items/gunpickup2.wav");
 	}
+	// orig 0x25f040. Rocket Crowbar: the charge is [ITEMS] BatteryGive (sk_battery's value by
+	// default) and the cap [PLAYER] MaxArmor, both from rc.ini. No dead-player test, as in the
+	// original (halflife-updated added one).
 	bool MyTouch(CBasePlayer* pPlayer) override
 	{
-		if (pPlayer->pev->deadflag != DEAD_NO)
-		{
-			return false;
-		}
-
-		if ((pPlayer->pev->armorvalue < MAX_NORMAL_BATTERY) &&
+		if (pPlayer->pev->armorvalue < PREFS_KeyLoopUpIntClamp("PLAYER", "MaxArmor", 100, 0, 999) &&
 			pPlayer->HasSuit())
 		{
 			int pct;
 			char szcharge[64];
 
-			pPlayer->pev->armorvalue += gSkillData.batteryCapacity;
-			pPlayer->pev->armorvalue = V_min(pPlayer->pev->armorvalue, MAX_NORMAL_BATTERY);
+			pPlayer->pev->armorvalue += PREFS_KeyLoopUpFloat("ITEMS", "BatteryGive", gSkillData.batteryCapacity);
+			pPlayer->pev->armorvalue = V_min(pPlayer->pev->armorvalue, (float)PREFS_KeyLoopUpIntClamp("PLAYER", "MaxArmor", 100, 0, 999));
 
 			EMIT_SOUND(pPlayer->edict(), CHAN_ITEM, "items/gunpickup2.wav", 1, ATTN_NORM);
 
@@ -234,17 +233,16 @@ class CItemBattery : public CItem
 			WRITE_STRING(STRING(pev->classname));
 			MESSAGE_END();
 
-
-			// Suit reports new power level
-			// For some reason this wasn't working in release build -- round it.
-			pct = (int)((float)(pPlayer->pev->armorvalue * 100.0) * (1.0 / MAX_NORMAL_BATTERY) + 0.5);
+			// Suit reports new power level. The original scales by MaxArmor where the SDK has 100,
+			// so the percentage is the armor value itself.
+			const int iMax = PREFS_KeyLoopUpIntClamp("PLAYER", "MaxArmor", 100, 0, 999);
+			pct = (int)((float)iMax * (1.0f / (float)PREFS_KeyLoopUpIntClamp("PLAYER", "MaxArmor", 100, 0, 999)) * pPlayer->pev->armorvalue + 0.5);
 			pct = (pct / 5);
 			if (pct > 0)
 				pct--;
 
 			sprintf(szcharge, "!HEV_%1dP", pct);
 
-			//EMIT_SOUND_SUIT(ENT(pev), szcharge);
 			pPlayer->SetSuitUpdate(szcharge, false, SUIT_NEXT_IN_30SEC);
 			return true;
 		}

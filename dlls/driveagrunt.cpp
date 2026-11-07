@@ -1989,7 +1989,7 @@ void CDriveAGruntPickup::Use(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_
 	pev->solid = SOLID_NOT;
 	SetThink(&CDriveAGruntPickup::PAnimThink);
 	pev->nextthink = gpGlobals->time + 0.1;
-	pev->dmgtime = PREFS_KeyLoopUpFloat("DRIVEAGRUNT", "AGMaxDriveTime", 600) + gpGlobals->time;
+	pev->dmgtime = PREFS_KeyLoopUpFloat("DRIVEAGRUNT", "AGruntMaxDriveTime", 600) + gpGlobals->time;
 }
 
 // orig 0x123430
@@ -2012,7 +2012,7 @@ void CDriveAGruntPickup::DeathNotice(entvars_t* pevChild)
 	if (m_bTakeable)
 		return;
 
-	pev->nextthink = PREFS_KeyLoopUpFloat("DRIVEAGRUNT", "AGRespawnDelayAfterDeath", 5) + gpGlobals->time;
+	pev->nextthink = PREFS_KeyLoopUpFloat("DRIVEAGRUNT", "AGruntRespawnDelayAfterDeath", 5) + gpGlobals->time;
 	SetThink(&CDriveAGruntPickup::DoRespawn);
 }
 
