@@ -775,7 +775,10 @@ void CTargetCDAudio::Use(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE
 void CTargetCDAudio::Think()
 {
 	// manually find the single player.
-	CBaseEntity* pClient = UTIL_GetLocalPlayer();
+	// RC 1.9's (as SDK 2.1): client 1's edict, which always exists, so the radius check keeps
+	// running on an empty server; halflife-updated's UTIL_GetLocalPlayer returned with no player
+	// in slot 1 and stopped thinking for good
+	edict_t* pClient = g_engfuncs.pfnPEntityOfEntIndex(1);
 
 	// Can't play if the client is not connected!
 	if (!pClient)
@@ -783,7 +786,7 @@ void CTargetCDAudio::Think()
 
 	pev->nextthink = gpGlobals->time + 0.5;
 
-	if ((pClient->pev->origin - pev->origin).Length() <= pev->scale)
+	if ((pClient->v.origin - pev->origin).Length() <= pev->scale)
 		Play();
 }
 
@@ -1000,20 +1003,10 @@ void CBaseTrigger::HurtTouch(CBaseEntity* pOther)
 	}
 #endif
 
+	// RC 1.9's (as SDK 2.1); halflife-updated skipped healing a player who isn't DEAD_NO in
+	// multiplayer
 	if (fldmg < 0)
-	{
-		bool bApplyHeal = true;
-
-		if (g_pGameRules->IsMultiplayer() && pOther->IsPlayer())
-		{
-			bApplyHeal = pOther->pev->deadflag == DEAD_NO;
-		}
-
-		if (bApplyHeal)
-		{
-			pOther->TakeHealth(-fldmg, m_bitsDamageInflict);
-		}
-	}
+		pOther->TakeHealth(-fldmg, m_bitsDamageInflict);
 	else
 		pOther->TakeDamage(pev, pev, fldmg, m_bitsDamageInflict);
 
@@ -1031,7 +1024,8 @@ void CBaseTrigger::HurtTouch(CBaseEntity* pOther)
 		if ((pev->spawnflags & SF_TRIGGER_HURT_CLIENTONLYFIRE) != 0)
 		{
 			// if the toucher isn't a client, don't fire the target!
-			if (!pOther->IsPlayer())
+			// RC 1.9's own: a driven monster counts as a client here too
+			if (!pOther->IsPlayer() && !pOther->IsDriveent())
 			{
 				return;
 			}
@@ -1430,10 +1424,7 @@ void CChangeLevel::Spawn()
 	if (FStrEq(m_szLandmarkName, ""))
 		ALERT(at_console, "trigger_changelevel to %s doesn't have a landmark", m_szMapName);
 
-	if (0 == stricmp(m_szMapName, STRING(gpGlobals->mapname)))
-	{
-		ALERT(at_error, "trigger_changelevel points to the current map (%s), which does not work\n", STRING(gpGlobals->mapname));
-	}
+	// RC 1.9's (as SDK 2.1); halflife-updated printed an error for a changelevel to the current map
 
 	if (!FStringNull(pev->targetname))
 	{
@@ -1504,15 +1495,25 @@ void CChangeLevel::ChangeLevelNow(CBaseEntity* pActivator)
 
 	ASSERT(!FStrEq(m_szMapName, ""));
 
-	// Don't work in deathmatch
-	if (g_pGameRules->IsDeathmatch())
-		return;
+	// orig 0x2276e0. RC 1.9's own: the once-a-frame test comes first and holds the next 0.2 s
+	// later, and in deathmatch a player can take the server to the trigger's map when sv_chglevel
+	// is 1 (SDK 2.1 does nothing in deathmatch).
+	// VERIFY: the test still compares for equality, so with dmgtime 0.2 s ahead it never matches
+	// and a second call in the same frame goes through (the original's)
 
 	// Some people are firing these multiple times in a frame, disable
 	if (gpGlobals->time == pev->dmgtime)
 		return;
 
-	pev->dmgtime = gpGlobals->time;
+	pev->dmgtime = gpGlobals->time + 0.2;
+
+	// Don't work in deathmatch
+	if (g_pGameRules->IsDeathmatch())
+	{
+		if (pActivator && pActivator->IsPlayer() && (int)CVAR_GET_FLOAT("sv_chglevel") == 1 && 0 != IS_MAP_VALID(m_szMapName))
+			CHANGE_LEVEL(m_szMapName, NULL);
+		return;
+	}
 
 
 	CBaseEntity* pPlayer = UTIL_GetLocalPlayer();
@@ -2267,21 +2268,26 @@ void CTriggerCamera::Use(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE
 	if (!ShouldToggle(useType, m_state))
 		return;
 
+	// orig 0x229400. RC 1.9's own: the activator (client 1's entity, as SDK 2.1, when it isn't a
+	// player) has to be a live entity, tested before the state toggles, so a camera fired with
+	// nobody to show it to stays as it was, on or off. halflife-updated toggled first and took
+	// UTIL_GetLocalPlayer.
+	if (!pActivator || !pActivator->IsPlayer())
+		pActivator = CBaseEntity::Instance(INDEXENT(1));
+
+	if (!pActivator || FNullEnt(pActivator->pev))
+		return;
+
+	edict_t* pentActivator = pActivator->pev->pContainingEntity;
+	if (!pentActivator || !pentActivator->pvPrivateData || 0 != pentActivator->free)
+		return;
+
 	// Toggle state
 	m_state = !m_state;
 	if (!m_state)
 	{
 		m_flReturnTime = gpGlobals->time;
 		return;
-	}
-	if (!pActivator || !pActivator->IsPlayer())
-	{
-		pActivator = UTIL_GetLocalPlayer();
-
-		if (!pActivator)
-		{
-			return;
-		}
 	}
 
 	auto player = static_cast<CBasePlayer*>(pActivator);
@@ -2406,8 +2412,9 @@ void CTriggerCamera::FollowTarget()
 	if (dy > 180)
 		dy = dy - 360;
 
-	pev->avelocity.x = dx * 40 * 0.01;
-	pev->avelocity.y = dy * 40 * 0.01;
+	// RC 1.9's (as SDK 2.1); halflife-updated used a fixed 0.01 for the frame time
+	pev->avelocity.x = dx * 40 * gpGlobals->frametime;
+	pev->avelocity.y = dy * 40 * gpGlobals->frametime;
 
 
 	if (!(FBitSet(pev->spawnflags, SF_CAMERA_PLAYER_TAKECONTROL)))
