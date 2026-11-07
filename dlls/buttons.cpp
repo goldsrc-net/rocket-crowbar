@@ -666,9 +666,10 @@ void DoSpark(entvars_t* pev, const Vector& location)
 void CBaseButton::ButtonSpark()
 {
 	SetThink(&CBaseButton::ButtonSpark);
-	pev->nextthink = pev->ltime + (0.1 + RANDOM_FLOAT(0, 1.5)); // spark again at random interval
+	// RC 1.9's (as SDK 2.1); halflife-updated used pev->ltime and pev->absmin
+	pev->nextthink = gpGlobals->time + (0.1 + RANDOM_FLOAT(0, 1.5)); // spark again at random interval
 
-	DoSpark(pev, pev->absmin);
+	DoSpark(pev, pev->mins);
 }
 
 
@@ -886,11 +887,12 @@ void CBaseButton::ButtonBackHome()
 		SetTouch(&CBaseButton::ButtonTouch);
 
 	// reset think for a sparking button
-	//func_rot_button's X Axis spawnflag overlaps with this one so don't use it here.
-	if (!FClassnameIs(pev, "func_rot_button") && FBitSet(pev->spawnflags, SF_BUTTON_SPARK_IF_OFF))
+	// RC 1.9's (as SDK 2.1); halflife-updated skipped func_rot_button (its X axis flag is the same
+	// bit) and used pev->ltime
+	if (FBitSet(pev->spawnflags, SF_BUTTON_SPARK_IF_OFF))
 	{
 		SetThink(&CBaseButton::ButtonSpark);
-		pev->nextthink = pev->ltime + 0.5; // no hurry.
+		pev->nextthink = gpGlobals->time + 0.5; // no hurry.
 	}
 }
 
@@ -1086,11 +1088,8 @@ void CMomentaryRotButton::Use(CBaseEntity* pActivator, CBaseEntity* pCaller, USE
 	pev->ideal_yaw = CBaseToggle::AxisDelta(pev->spawnflags, pev->angles, m_start) / m_flMoveDistance;
 
 	UpdateAllButtons(pev->ideal_yaw, true);
-
-	// Calculate destination angle and use it to predict value, this prevents sending target in wrong direction on retriggering
-	Vector dest = pev->angles + pev->avelocity * (pev->nextthink - pev->ltime);
-	float value1 = CBaseToggle::AxisDelta(pev->spawnflags, dest, m_start) / m_flMoveDistance;
-	UpdateTarget(value1);
+	// RC 1.9's (as SDK 2.1); halflife-updated sent the predicted destination's value instead
+	UpdateTarget(pev->ideal_yaw);
 }
 
 void CMomentaryRotButton::UpdateAllButtons(float value, bool start)
