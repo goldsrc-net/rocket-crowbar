@@ -16,6 +16,10 @@ class CBasePlayer;
 class CBaseDriveEnt : public CBaseMonster
 {
 public:
+	// Every drive class has its driver first (orig +0x27c, saved by each class's own table), and
+	// other drive files read it through any drive monster, so it lives here.
+	CBasePlayer* m_pOwner = nullptr;
+
 	bool IsDriveent() override { return true; }
 
 	virtual void DEClientPreThink() {}

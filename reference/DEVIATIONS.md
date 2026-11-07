@@ -42,3 +42,16 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
   for that bot, which can't load against our layout anyway. Kept so the interface is complete.
 - **`BotWeaponFrame` drops two discarded calls.** The original calls `pEnemy->GetBotShootOrg()`
   twice and throws both results away; the base version has no side effects.
+
+## Crashes in the original
+
+- **`CDriveIcky::TakeDamage` checks for a driver.** The original writes through its driver
+  pointer even when nobody is driving, which crashes a server whose driverless ichthyosaur takes
+  damage. Ours skips that write when there is no driver (`dlls/driveicky.cpp`, marked VERIFY).
+
+## Layout
+
+- **`m_pOwner` lives in `CBaseDriveEnt`.** Each original drive class declares its own driver
+  member at +0x27c, and the chumtoad/headcrab code reads it through any drive monster at that
+  offset. One base member gives the same behavior without depending on layout. Each class's save
+  table still lists it, as the original's do.

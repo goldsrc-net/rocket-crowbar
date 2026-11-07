@@ -388,6 +388,7 @@ public:
 	int m_iGibExtra;			   // 0x684, saved as FIELD_POINTER in the original
 
 	bool m_blIsObserver; // 0x600, unsaved: set by InitObserver, cleared by ObserverFrame. VERIFY name
+	float m_fDrvEntAlpha; // 0x674, unsaved: the client's cl_de_alpha (0-1), how see-through the driven monster is drawn for its driver. VERIFY name
 
 	virtual bool IsActingAsCam() { return m_blIsObserver || m_bInDriveEnt; }
 
