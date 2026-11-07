@@ -26,6 +26,14 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
   `voice_serverdebug`. They post-date RC's 2001 SDK. At their defaults they should match the
   original's behavior; each gets checked against it when the code that reads it is reconstructed.
 
+## Prefs
+
+- **`rc.ini` may use CRLF line ends** (decided 2026-11-07). The original Linux build keeps the
+  `\r`, so the CRLF `rc.ini` RC shipped matched no heading and loaded nothing: Linux servers ran
+  on built-in defaults. Windows servers' text-mode reads drop the `\r` and did load it, which is
+  what players got. `PREFS_LoadFile` now turns a `\r\n` line end into `\n`. Checked against the
+  shipped v19 `rc.ini` (633 CRLF lines): 30 headings, same values as its LF copy.
+
 ## Save data
 
 - **`CBasePlayer::m_iGibExtra` is saved as `FIELD_INTEGER`.** The original declares it

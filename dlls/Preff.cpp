@@ -260,7 +260,7 @@ int PREFS_AddKey(const char* szKey, const char* szValue, int iHeading)
 
 // orig 0xe1e60. Frees the whole table, then reads szFile. A heading line is "[NAME]" with the
 // ']' just before the line's last character (its newline); key lines before the first heading
-// are dropped, as are lines with no value ("Key=" or "Key"). A '\r' stays in the value.
+// are dropped, as are lines with no value ("Key=" or "Key"). CRLF line ends are accepted.
 bool PREFS_LoadFile(const char* szFile)
 {
 	FILE* pFile = fopen(szFile, "r");
@@ -300,6 +300,18 @@ bool PREFS_LoadFile(const char* szFile)
 		if (!fgets(szLine, 1024, pFile))
 			continue;
 		szLine[1023] = '\0';
+
+		// Deviation (DEVIATIONS.md): accept CRLF. The original Linux build keeps the '\r', so the
+		// CRLF rc.ini RC shipped never matched a heading and loaded nothing; Windows servers, whose
+		// text-mode reads drop it, did load it.
+		size_t iLen = strlen(szLine);
+		if (iLen >= 2 && szLine[iLen - 2] == '\r' && szLine[iLen - 1] == '\n')
+		{
+			szLine[iLen - 2] = '\n';
+			szLine[iLen - 1] = '\0';
+		}
+		else if (iLen >= 1 && szLine[iLen - 1] == '\r')
+			szLine[iLen - 1] = '\0';
 
 		if (strlen(szLine) <= 1)
 			continue;

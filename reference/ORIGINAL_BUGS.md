@@ -34,8 +34,8 @@ bot_prefs.h CVEC::~CVEC, Resize         scalar delete on new[] memory: heap corr
 
 ```
 Where                                   What                                                  Ours
-Preff.cpp (Linux build)                 doesn't strip \r: the shipped CRLF rc.ini loads no    kept
-                                        headings, so Linux servers ran on built-in defaults   (open question)
+Preff.cpp (Linux build)                 doesn't strip \r: the shipped CRLF rc.ini loads no    changed
+                                        headings, so Linux servers ran on built-in defaults   (accepts CRLF)
 vote_map.cpp VM_InitVote (0x237e85)     tests the kick vote, reports "Vote map in progress"   kept
 vote_map.cpp VM_InitVote                allowedmaps.txt scan stops at a name whose first      kept
                                         char is <= 12; its 64-byte buffer overflows by one
