@@ -966,8 +966,9 @@ void CBasePlayer::Killed(entvars_t* pevAttacker, int iGib)
 	ClearBits(pev->flags, FL_FROZEN);
 	SetAnimation(PLAYER_DIE);
 
-	// RC 1.9's (as SDK 2.1); halflife-updated zeroed the death-animation frame count here
-	// (m_flRespawnTimer, the original's m_iRespawnFrames), which only respawn() resets
+	// halflife-updated's fix, kept (Steven, 2026-11-07): the death-animation count starts from 0 at
+	// each death (the original's m_iRespawnFrames was reset only by respawn())
+	m_flRespawnTimer = 0.0f;
 
 	// The original doesn't reset pev->modelindex to g_ulModelIndexPlayer here.
 
@@ -5703,8 +5704,9 @@ void CBasePlayer::DropPlayerItem(char* pszItemName)
 		// item we want to drop and hit a BREAK;  pWeapon is the item.
 		if (pWeapon)
 		{
-			// RC 1.9's (as SDK 2.1): drops it whatever GetNextBestWeapon says; halflife-updated kept
-			// a weapon it couldn't switch away from
+			// RC 1.9's (as SDK 2.1): drops it whatever GetNextBestWeapon says; the refusal (Valve's 2013
+			// SDK, halflife-updated's seed) is a design change, what a player may drop (RemovePlayerItem
+			// holsters it, so nothing keeps running)
 			g_pGameRules->GetNextBestWeapon(this, pWeapon);
 
 			UTIL_MakeVectors(pev->angles);
