@@ -49,6 +49,10 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
   pointer even when nobody is driving, which crashes a server whose driverless ichthyosaur takes
   damage. Ours skips that write when there is no driver (`dlls/driveicky.cpp`, marked VERIFY).
 
+- **`GetFlagTeamColor` doesn't write into a string literal.** For a team outside 1-6 the original
+  copies an error message into a read-only `""`, which crashes. Ours returns `""` without the write
+  (`dlls/flag.cpp`, marked VERIFY).
+
 ## Layout
 
 - **`m_pOwner` lives in `CBaseDriveEnt`.** Each original drive class declares its own driver
