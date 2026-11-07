@@ -1,0 +1,15 @@
+dlls/barnacle.cpp
+dlls/flyingmonster.cpp
+dlls/func_break.cpp
+dlls/hgrunt.cpp
+dlls/hornetgun.cpp
+dlls/leech.cpp
+dlls/pathcorner.cpp
+dlls/plats.cpp
+dlls/scientist.cpp
+dlls/soundent.cpp
+dlls/squeakgrenade.cpp
+dlls/talkmonster.cpp
+dlls/teamplay_gamerules.cpp
+dlls/triggers.cpp
+dlls/tripmine.cpp

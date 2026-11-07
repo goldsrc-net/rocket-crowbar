@@ -1,0 +1,15 @@
+dlls/bigmomma.cpp
+dlls/bullsquid.cpp
+dlls/gargantua.cpp
+dlls/h_cine.cpp
+dlls/h_cycler.cpp
+dlls/islave.cpp
+dlls/monsters.cpp
+dlls/scripted.cpp
+dlls/sound.cpp
+dlls/spectator.cpp
+dlls/squadmonster.cpp
+dlls/subs.cpp
+dlls/util.cpp
+dlls/xen.cpp
+dlls/zombie.cpp

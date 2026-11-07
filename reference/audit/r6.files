@@ -1,0 +1,15 @@
+dlls/bmodels.cpp
+dlls/buttons.cpp
+dlls/cbase.cpp
+dlls/effects.cpp
+dlls/func_tank.cpp
+dlls/h_battery.cpp
+dlls/hornet.cpp
+dlls/monstermaker.cpp
+dlls/multiplay_gamerules.cpp
+dlls/nihilanth.cpp
+dlls/osprey.cpp
+dlls/python.cpp
+dlls/shotgun.cpp
+dlls/singleplay_gamerules.cpp
+dlls/tentacle.cpp

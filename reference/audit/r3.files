@@ -1,0 +1,15 @@
+dlls/animating.cpp
+dlls/bloater.cpp
+dlls/combat.cpp
+dlls/controller.cpp
+dlls/crossbow.cpp
+dlls/crowbar.cpp
+dlls/doors.cpp
+dlls/explode.cpp
+dlls/gauss.cpp
+dlls/genericmonster.cpp
+dlls/lights.cpp
+dlls/roach.cpp
+dlls/schedule.cpp
+dlls/turret.cpp
+dlls/weapons.cpp
