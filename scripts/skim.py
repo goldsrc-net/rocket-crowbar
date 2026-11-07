@@ -4,7 +4,7 @@ called names don't appear in our body of the same function. A lead list for spot
 in stock functions; noisy by design."""
 import csv, re, sys, os
 WT = sys.argv[1]
-D = "/home/stevenlafl/Projects/goldsrc.net/mod-rockcrowbar/recovered/decomp/"
+D = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "recovered", "decomp") + "/"
 cache = {}
 def decomp(cls, addr):
     f = D + (cls if cls else "_free") + ".c"

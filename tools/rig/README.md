@@ -49,8 +49,10 @@ latest `hl.so` every time and creates the rest only if missing.
 
 ## Undo
 
-```sh
-mv ~/Containers/hlds/hlds-linux32-test/rockcrowbar /media/Data3/_attic/-home-stevenlafl-Containers-hlds-hlds-linux32-test/rockcrowbar
-mv ~/Containers/hlds/hlds-linux32-rcours /media/Data3/_attic/-home-stevenlafl-Containers-hlds/hlds-linux32-rcours
-mv ~/.local/share/Steam/steamapps/common/Half-Life/rockcrowbar /media/Data3/_attic/-home-stevenlafl-.local-share-Steam-steamapps-common-Half-Life/rockcrowbar
+Move these three away (nothing else is touched):
+
+```
+~/Containers/hlds/hlds-linux32-test/rockcrowbar
+~/Containers/hlds/hlds-linux32-rcours
+~/.local/share/Steam/steamapps/common/Half-Life/rockcrowbar
 ```

@@ -3,7 +3,7 @@
 # and the client folder to join them with. Idempotent: re-running refreshes our hl.so and
 # leaves everything else alone. Undo: tools/rig/README.md.
 #
-#   tools/rig/setup.sh            needs ~/Downloads/rockcrowbarv19.zip, build-i386/dlls/hl.so
+#   tools/rig/setup.sh            needs the RC 1.9 zip (RC_ZIP, default ~/Downloads/rockcrowbarv19.zip), build-i386/dlls/hl.so
 #                                 (scripts/build.sh i386), and the 32-bit rig below
 #
 # Rig: ~/Containers/hlds/hlds-linux32-test, a 32-bit ReHLDS install with valve/ content.

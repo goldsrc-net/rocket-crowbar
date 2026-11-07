@@ -1,48 +1,34 @@
-# Building this SDK
+# Building
 
-## Requirements
+The server library builds on Linux in the [goldsrc-net/buildchain](https://github.com/goldsrc-net/buildchain)
+Docker image (Debian 10, glibc 2.28), so the result runs on any Linux with glibc 2.28 or newer. Build the
+image once from a buildchain checkout:
 
-### Windows
-
-* Windows 7 or newer
-* Visual Studio 2019 or newer
-
-### Linux
-
-* GCC 9 or newer (C++17 support or newer required)
-* Packages:
-    * `g++-multilib`
-    * `libgl1-mesa-dev` (or an equivalent package that provides the OpenGL headers)
-
-## Building
-
-The TWHL tutorial on setting up the Half-Life SDK for C++ mod development explains how to set up the source code and how to configure the mod installation: https://twhl.info/wiki/page/Half-Life_Programming_-_Getting_Started
-
-## Packaging mod files
-
-To package a mod for distribution as an archive, use the `CreatePackage` script:
-
-```
-cd path/to/Half-Life
-dotnet script halflife_updated/scripts/packager/CreatePackage.csx --package-name <name of archive file excluding file extension>
+```sh
+( cd ../hlds64-buildchain && make image )      # -> hlds64-buildchain:debian10
 ```
 
-## Building with CMake
+Then, from this repository:
 
-**Note:** if you are a beginner and/or have no experience with CMake, please use Visual Studio projects/solution on Windows and Linux Makefiles instead.
+```sh
+scripts/build.sh i386      # -> build-i386/dlls/hl.so, for a 32-bit HLDS (and the original's engine)
+scripts/build.sh amd64     # -> build-amd64/dlls/hl.so, for a 64-bit HLDS
+BUILDTYPE=Debug scripts/build.sh i386   # -O0 with debug info
+```
 
-Start by creating a `build` folder at the root of this repository. This folder is already git ignored so you don't have to update `.gitignore` yourself.
+`scripts/build.sh` only consumes the image; this repository isn't a buildchain submodule. CMake is the
+build system (`dlls/CMakeLists.txt`). The server is built without `CLIENT_WEAPONS`, as RC 1.9's was
+([reference/DEVIATIONS.md](reference/DEVIATIONS.md)).
 
-On Windows, make sure you specify the "Win32" architecture when invoking CMake.
+Rocket Crowbar has no client library of its own, so there is nothing client-side to build; the `cl_dll`
+tree is Half-Life Updated's and isn't part of the mod.
 
-On Linux, make sure you select the `cmake/LinuxToolchain.cmake` toolchain file when invoking CMake.
+## Checking a build
 
-Specify the path to your Half-Life mod (typically `C:\Program Files (x86)\Steam\steamapps\common\Half-Life\mymod` on Windows) as CMake's install prefix (`CMAKE_INSTALL_PREFIX`). When invoking CMake's `INSTALL` target, this will install the build binaries and the required `delta.lst` changes for you.
+```sh
+python3 scripts/check_file.py <original source file>.cpp --missing   # every original function present
+tools/rig/smoke.py rcours out.log                                   # boot, change maps, quit (tools/rig/README.md)
+```
 
-If you are working on a multiplayer mod and want to test your binaries on a dedicated server installation (HLDS), you might want to do the same with the `HalfLife_HLDS_DIRECTORY` variable.
-
-`HalfLife_LTO` is a toggle that defines if you want to enable "interprocedural optimization (IPO) / link-time optimization (LTO)" when building the binaries. If you're not sure, leave this disabled (if you want details, check [CMake's documentation](https://cmake.org/cmake/help/v3.23/module/CheckIPOSupported.html)).
-
-Optional but highly recommended, set the others `HalfLife` variables, these are used as settings for your debugger thus providing you with more comfort.
-
-Once these are configured, you can generate the `build` directory, open the project and build right away.
+`scripts/` also regenerates every table in `reference/` from the original library (see each script's
+header, and the parent goldsrc.net folder's `DECOMPILE.md` for the order).

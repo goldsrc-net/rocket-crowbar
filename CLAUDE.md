@@ -44,10 +44,10 @@ typed decompile lives in `recovered/decomp/` (gitignored); rebuild it with
 
 ## Sources outside the repo
 
-- Original content: the v19 zip (`~/Downloads/rockcrowbarv19.zip`) and Steven's 2002 install at
-  `/media/Data3/Projects/mods/rockcrowbar/` (136 maps, configs, demos).
+- Original content: the RC 1.9 release zip (`rockcrowbarv19.zip`), which `tools/rig/setup.sh`
+  takes as `RC_ZIP`.
 - FWGS hlsdk-portable branch `RockCrowbar19`: RC's cvar list with defaults, stub files only.
-- `~/Packages/rcbotold`: RCBot 1's Rocket Crowbar support.
+- RCBot 1 (`goldsrc-net/rcbotold`): its Rocket Crowbar support.
 - `../mod-rc2`: Rocket Crowbar 2, scaffolded, not started. RC2 is a near-total rewrite; the two
   share one custom class (`CCrowbarRocket`).
 

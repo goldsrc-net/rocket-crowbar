@@ -367,5 +367,5 @@ Literal readings worth knowing, not uncertain:
 - Deathballs with mp_deathballs: spawn rings and fade-in, rolling sound volume, crush damage and
   kill credit to the last pusher or shooter, BouncyDeathball.
 - CTF: pick up, drop (mp_flag_return_time), return, capture messages and log lines, carrier glow.
-- A map's .lec (e.g. /media/Data3/Projects/mods/rockcrowbar/maps/Dam.lec): create, respawncreate
+- A map's .lec (e.g. a 2002 install's maps/Dam.lec): create, respawncreate
   (respawn 1 s after death), removeall with a `*` prefix, move, useent.

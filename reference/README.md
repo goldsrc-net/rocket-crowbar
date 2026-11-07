@@ -17,8 +17,7 @@ copied from mod-ts; 4,481 of 5,498 parse), `classes.txt`.
 ## Provenance
 
 Both libraries are byte-identical in the v19 release (`rockcrowbarv19.zip`,
-2,754,360 bytes, `RockCrowbar/dlls/`) and in Steven's 2002 install at
-`/media/Data3/Projects/mods/rockcrowbar/dlls/`.
+2,754,360 bytes, `RockCrowbar/dlls/`) and in a server install from 2002.
 
 ```
 ccae2ebf8182be7c94cc2f2fcc85c9e4  rc.dll
@@ -34,6 +33,6 @@ archived 2003-12-21); 7z can't open its format, so it hasn't been compared.
 
 - FWGS hlsdk-portable has a `RockCrowbar19` branch (started 2025-07-07): RC's cvars
   with their defaults and empty stubs for the 30 RC source files, no game code.
-- `~/Packages/rcbotold` (RCBot 1) has Rocket Crowbar support in `dlls/bot.cpp` and
+- RCBot 1 (`goldsrc-net/rcbotold`) has Rocket Crowbar support in `dlls/bot.cpp` and
   `dlls/games.h`; RCBot started as the RC bot.
 - Third-party mod content: reconstruction work assumes proper rights.
