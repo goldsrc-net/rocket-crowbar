@@ -348,7 +348,7 @@ void CGameRules::RefreshSkillData()
 	gSkillData.monDmgHornet = GetSkillCvar("sk_hornet_dmg");
 
 	// PLAYER HORNET
-	gSkillData.plrDmgHornet = GetSkillCvar("sk_plr_hornet_dmg");
+	gSkillData.plrDmgHornet = 7; // Rocket Crowbar 1.9 (CGameRules::RefreshSkillData, orig 0x193a40): fixed, no sk_plr_hornet_dmg
 
 
 	// HEALTH/CHARGE

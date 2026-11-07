@@ -718,22 +718,23 @@ void CWorld::Precache()
 
 	// The original runs game.cfg and the server config here, once, in deathmatch (halflife-updated
 	// runs game.cfg from InstallGameRules and the listen server config from CHalfLifeMultiplay,
-	// every map). On a dedicated server the original also runs servercfgfile here; the current
-	// engine runs server.cfg itself, so ours leaves that out. VERIFY at run time.
+	// every map).
 	if (!g_bHaveExecedGamecfg && gpGlobals->deathmatch != 0)
 	{
 		SERVER_COMMAND("exec game.cfg\n");
 		g_bHaveExecedGamecfg = true;
-		if (!IS_DEDICATED_SERVER())
+		// orig 0x23f450: the listen or dedicated server config runs here, during map spawn, before
+		// changelevel.cfg and <map>.cfg. The engine also runs server.cfg after the map loads; the
+		// original runs it in both places too (seen running the original: its early run decides
+		// e.g. "6 player server started" from RC's server.cfg).
+		const bool bDedicated = IS_DEDICATED_SERVER();
+		const char* szCfg = CVAR_GET_STRING(bDedicated ? "servercfgfile" : "lservercfgfile");
+		if (szCfg && '\0' != szCfg[0])
 		{
-			const char* lservercfgfile = CVAR_GET_STRING("lservercfgfile");
-			if (lservercfgfile && '\0' != lservercfgfile[0])
-			{
-				char szCommand[256];
-				ALERT(at_console, "Executing listen server config file\n");
-				snprintf(szCommand, sizeof(szCommand), "exec %s\n", lservercfgfile);
-				SERVER_COMMAND(szCommand);
-			}
+			char szCommand[256];
+			ALERT(at_console, bDedicated ? "Executing dedicated server config file\n" : "Executing listen server config file\n");
+			snprintf(szCommand, sizeof(szCommand), "exec %s\n", szCfg);
+			SERVER_COMMAND(szCommand);
 		}
 	}
 
