@@ -412,3 +412,17 @@ CGameRules* InstallGameRules()
 		}
 	}
 }
+
+// Rocket Crowbar 1.9. Original @ 0x193970 (gamerules.cpp): with mp_teamannoy 1 anyone may annoy
+// anyone; otherwise only someone who could also damage the victim.
+bool CGameRules::CanPlayerAnnoy(entvars_t* pevAnnoyer, entvars_t* pevVictim)
+{
+	if (CVAR_GET_FLOAT("mp_teamannoy") == 1)
+		return true;
+
+	CBaseEntity* pAnnoyer = CBaseEntity::Instance(pevAnnoyer);
+	CBaseEntity* pVictim = CBaseEntity::Instance(pevVictim);
+	if (!pAnnoyer || !pVictim)
+		return true;
+	return FPlayerCanTakeDamage(static_cast<CBasePlayer*>(pVictim), pAnnoyer);
+}

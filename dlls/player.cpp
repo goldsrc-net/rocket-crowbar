@@ -120,6 +120,33 @@ TYPEDESCRIPTION CBasePlayer::m_playerSaveData[] =
 
 		DEFINE_FIELD(CBasePlayer, m_flStartCharge, FIELD_TIME),
 
+		// Rocket Crowbar 1.9, in the original's order
+		DEFINE_FIELD(CBasePlayer, m_flIDTime, FIELD_TIME),
+		DEFINE_FIELD(CBasePlayer, m_blInVote, FIELD_BOOLEAN),
+		DEFINE_FIELD(CBasePlayer, m_pCam, FIELD_CLASSPTR),
+		DEFINE_FIELD(CBasePlayer, m_blSetView, FIELD_BOOLEAN),
+		DEFINE_FIELD(CBasePlayer, m_blCamInited, FIELD_BOOLEAN),
+		DEFINE_FIELD(CBasePlayer, m_flNVNUpdateTime, FIELD_TIME),
+		DEFINE_FIELD(CBasePlayer, m_blInButStomp, FIELD_BOOLEAN),
+		DEFINE_FIELD(CBasePlayer, m_flMinStompTime, FIELD_TIME),
+		DEFINE_FIELD(CBasePlayer, m_blOnTractor, FIELD_BOOLEAN),
+		DEFINE_FIELD(CBasePlayer, m_vecDeathAng, FIELD_VECTOR),
+		DEFINE_FIELD(CBasePlayer, m_fCurseMSGTime, FIELD_TIME),
+		DEFINE_FIELD(CBasePlayer, m_fCurseRefireScale, FIELD_FLOAT),
+		DEFINE_FIELD(CBasePlayer, m_fCurseDmgMirror, FIELD_FLOAT),
+		DEFINE_FIELD(CBasePlayer, m_fCurseDmgScale, FIELD_FLOAT),
+		DEFINE_FIELD(CBasePlayer, m_fHealthRegenTime, FIELD_TIME),
+		DEFINE_FIELD(CBasePlayer, m_fArmorRegenTime, FIELD_TIME),
+		DEFINE_FIELD(CBasePlayer, m_fShotgunRiftTime, FIELD_TIME),
+		DEFINE_FIELD(CBasePlayer, m_fIsoBombTime, FIELD_TIME),
+		DEFINE_FIELD(CBasePlayer, m_fNukeTime, FIELD_TIME),
+		DEFINE_FIELD(CBasePlayer, m_pCurDriveEnt, FIELD_CLASSPTR),
+		DEFINE_FIELD(CBasePlayer, m_bInDriveEnt, FIELD_BOOLEAN),
+		DEFINE_FIELD(CBasePlayer, m_fDrvEntEjectTime, FIELD_TIME),
+		DEFINE_FIELD(CBasePlayer, m_fDrcEntTransTime, FIELD_TIME),
+		DEFINE_FIELD(CBasePlayer, m_flBloodScale, FIELD_FLOAT),
+		DEFINE_FIELD(CBasePlayer, m_iGibExtra, FIELD_INTEGER),
+
 		//DEFINE_FIELD( CBasePlayer, m_fDeadTime, FIELD_FLOAT ), // only used in multiplayer games
 		//DEFINE_FIELD( CBasePlayer, m_fGameHUDInitialized, FIELD_INTEGER ), // only used in multiplayer games
 		//DEFINE_FIELD( CBasePlayer, m_flStopExtraSoundTime, FIELD_TIME ),

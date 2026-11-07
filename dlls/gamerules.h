@@ -160,6 +160,9 @@ public:
 	// Immediately end a multiplayer game
 	virtual void EndMultiplayerGame() {}
 
+	// Rocket Crowbar 1.9: whether one player may "annoy" (push, curse, ...) another
+	virtual bool CanPlayerAnnoy(entvars_t* pevAnnoyer, entvars_t* pevVictim);
+
 protected:
 	CBasePlayerItem* FindNextBestWeapon(CBasePlayer* pPlayer, CBasePlayerItem* pCurrentWeapon);
 };

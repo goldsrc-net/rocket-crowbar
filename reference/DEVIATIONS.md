@@ -25,3 +25,20 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
   `sv_allowbunnyhopping`, `sv_alltalk`, `sv_busters`, `sv_pushable_fixed_tick_fudge`,
   `voice_serverdebug`. They post-date RC's 2001 SDK. At their defaults they should match the
   original's behavior; each gets checked against it when the code that reads it is reconstructed.
+
+## Save data
+
+- **`CBasePlayer::m_iGibExtra` is saved as `FIELD_INTEGER`.** The original declares it
+  `FIELD_POINTER` (4 bytes on i386). It's an int, and on 64-bit a pointer field would read 8 bytes
+  into it. Save files aren't compatible with the original's anyway (different layout).
+
+## Bot interface
+
+- **The `Bot*` virtuals have no caller in this build.** RC 1.9 gave `CBasePlayerWeapon`,
+  `CBasePlayerItem`, `CBasePlayerAmmo` and `CBaseEntity` an interface its bot drives (the bot
+  shipped as a separate library, `rcbot.dll`; the public RCBot 1 source doesn't use it). The bot
+  object `CBot` is never defined in the game library; `BotWeaponFrame` reads the original i386
+  bot's object at its offsets (its entvars at +0, a float at +0x698), so it is only meaningful
+  for that bot, which can't load against our layout anyway. Kept so the interface is complete.
+- **`BotWeaponFrame` drops two discarded calls.** The original calls `pEnemy->GetBotShootOrg()`
+  twice and throws both results away; the base version has no side effects.

@@ -19,6 +19,9 @@
 #include "weaponinfo.h"
 
 class CBasePlayer;
+// Rocket Crowbar 1.9's bot. It lives in the bot library RC shipped (rcbot.dll), not in the game
+// library, and calls the Bot* virtuals below; the game library never defines it.
+class CBot;
 class CBasePlayerWeapon;
 
 void DeactivateSatchels(CBasePlayer* pOwner);
@@ -269,6 +272,10 @@ public:
 
 	virtual int iItemSlot() { return 0; } // return 0 to MAX_ITEMS_SLOTS, used in hud
 
+	// Rocket Crowbar 1.9
+	virtual bool IsHornetGun() { return false; }
+	virtual int GetBotWeight(CBot* pBot, CBaseEntity* pEnemy) { return 5; }
+
 	int iItemPosition() { return ItemInfoArray[m_iId].iPosition; }
 	const char* pszAmmo1() { return ItemInfoArray[m_iId].pszAmmo1; }
 	int iMaxAmmo1() { return ItemInfoArray[m_iId].iMaxAmmo1; }
@@ -342,6 +349,15 @@ public:
 	void Holster() override;
 	virtual bool UseDecrement() { return false; }
 
+	// Rocket Crowbar 1.9: the interface its bot drives weapons through (reference/DEVIATIONS.md)
+	virtual bool BotReloadWeapon() { return true; }
+	virtual bool BotCanHaveItem(CBaseEntity* pBot);
+	virtual bool BotUseWeapon(CBot* pBot, CBaseEntity* pEnemy) { return true; }
+	virtual void BotWeaponFrame(CBot* pBot, CBaseEntity* pEnemy);
+	virtual bool BotFirePrimary(CBot* pBot, CBaseEntity* pEnemy) { return true; }
+	virtual bool BotFireSecondary(CBot* pBot, CBaseEntity* pEnemy) { return false; }
+	virtual int BotFireButton(CBot* pBot, CBaseEntity* pEnemy) { return -1; } // -1: decide by Primary/Secondary
+
 	int PrimaryAmmoIndex() override;
 	int SecondaryAmmoIndex() override;
 
@@ -376,6 +392,9 @@ public:
 	void Spawn() override;
 	void EXPORT DefaultTouch(CBaseEntity* pOther); // default weapon touch
 	virtual bool AddAmmo(CBaseEntity* pOther) { return true; }
+
+	// Rocket Crowbar 1.9
+	virtual int GetBotWeight(CBot* pBot, CBaseEntity* pEnemy) { return 5; }
 
 	CBaseEntity* Respawn() override;
 	void EXPORT Materialize();

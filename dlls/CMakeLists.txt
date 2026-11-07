@@ -35,6 +35,7 @@ target_sources(hl PRIVATE
 	crowbar.cpp
 	defaultai.cpp
 	doors.cpp
+	driveent.cpp
 	effects.cpp
 	egon.cpp
 	explode.cpp
@@ -136,6 +137,7 @@ target_sources(hl PRIVATE
 	decals.h
 	defaultai.h
 	doors.h
+	driveent.h
 	effects.h
 	enginecallback.h
 	explode.h

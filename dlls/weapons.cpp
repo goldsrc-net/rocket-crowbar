@@ -1459,3 +1459,39 @@ TYPEDESCRIPTION CSatchel::m_SaveData[] =
 		DEFINE_FIELD(CSatchel, m_chargeReady, FIELD_INTEGER),
 };
 IMPLEMENT_SAVERESTORE(CSatchel, CBasePlayerWeapon);
+
+// Rocket Crowbar 1.9: the bot interface (original @ 0x23b3d0-0x23c070, weapons.cpp).
+
+bool CBasePlayerWeapon::BotCanHaveItem(CBaseEntity* pBot)
+{
+	return g_pGameRules->CanHavePlayerItem(static_cast<CBasePlayer*>(pBot), this);
+}
+
+// RC's bot object: what the original game library reads of it. Its first member is the bot's
+// entvars; the float at +0x698 (name unknown) gates firing. These are the original i386 bot's
+// offsets in a class this library never defines, so they hold only for that bot binary.
+static entvars_t* RCBotPev(CBot* pBot) { return *reinterpret_cast<entvars_t**>(pBot); }
+static float RCBotFireGate(CBot* pBot) { return *reinterpret_cast<float*>(reinterpret_cast<byte*>(pBot) + 0x698); } // VERIFY name
+
+// Press the bot's buttons for this weapon: reload when the clip is empty, otherwise fire.
+// The original also calls pEnemy->GetBotShootOrg() twice and discards both results; the base
+// version has no side effects, so those calls are left out.
+void CBasePlayerWeapon::BotWeaponFrame(CBot* pBot, CBaseEntity* pEnemy)
+{
+	entvars_t* pevBot = RCBotPev(pBot);
+	if (ItemInfoArray[m_iId].iMaxClip != WEAPON_NOCLIP && m_iClip <= 0)
+	{
+		pevBot->button |= IN_RELOAD;
+		return;
+	}
+	if (RCBotFireGate(pBot) / 3.0 < 999.0)
+		return;
+
+	int buttons = BotFireButton(pBot, pEnemy);
+	if (buttons != -1)
+		pevBot->button |= buttons;
+	else if (BotFirePrimary(pBot, pEnemy))
+		pevBot->button |= IN_ATTACK;
+	else if (BotFireSecondary(pBot, pEnemy))
+		pevBot->button |= IN_ATTACK2;
+}

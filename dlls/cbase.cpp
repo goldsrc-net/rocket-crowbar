@@ -813,3 +813,173 @@ CBaseEntity* CBaseEntity::Create(const char* szName, const Vector& vecOrigin, co
 	DispatchSpawn(pEntity->edict());
 	return pEntity;
 }
+
+// Rocket Crowbar 1.9: the classname precache list (original @ 0xfbe50-0xfc000, cbase.cpp).
+// A classname is "precached" once something spawned it; the never/always lists override that.
+static const char* g_szNeverCreate[] = {
+	"monster_generic", "ambient_generic", "weapon_cycler", "monster_cycler", "monstermaker",
+	"cycler_weapon", "cycler_sprite", "cycler_prdroid", "cycler"};
+static const char* g_szAlwaysCreate[] = {
+	"info_player_deathmatch", "info_player_start", "info_player_coop", "info_deathball_spawn",
+	"info_drive_apache_spawn", "info_drive_garg_spawn", "info_drive_assassin_spawn",
+	"info_drive_turret_spawn", "info_drive_icky_spawn", "info_drive_houndeye_spawn",
+	"info_drive_aslave_spawn", "info_drive_panther_spawn"};
+static char g_pPrecachedStuff[256][128];
+static int g_iCntPrecached = 0;
+static int g_iRecurLevel = 0;
+
+// True when the engine can create an entity of this classname (it is test-spawned and removed).
+bool IsValidEnitityClassname(char* pszClassname)
+{
+	edict_t* pent = CREATE_NAMED_ENTITY(MAKE_STRING(pszClassname));
+	if (!pent || pent->free || !pent->pvPrivateData)
+		return false;
+	REMOVE_ENTITY(pent);
+	return true;
+}
+
+bool IsClassnamePrecached(char* pszClassname)
+{
+	for (const char* psz : g_szNeverCreate)
+	{
+		if (!stricmp(psz, pszClassname))
+			return false;
+	}
+	for (const char* psz : g_szAlwaysCreate)
+	{
+		if (!stricmp(psz, pszClassname))
+			return true;
+	}
+	return IsClassnamePrecachedNoInvalid(pszClassname);
+}
+
+bool IsClassnamePrecachedNoInvalid(const char* pszClassname)
+{
+	for (int i = 0; i < g_iCntPrecached; i++)
+	{
+		if (!stricmp(g_pPrecachedStuff[i], pszClassname))
+			return true;
+	}
+	return false;
+}
+
+void AddToPrecachedList(const char* pszClassname)
+{
+	if (IsClassnamePrecachedNoInvalid(pszClassname))
+		return;
+	// the original overwrites the last slot once full
+	strcpy(g_pPrecachedStuff[std::min(g_iCntPrecached, 255)], pszClassname);
+	g_iCntPrecached = std::min(g_iCntPrecached + 1, 256);
+}
+
+// Compiled out in the original (an empty body, @ 0xfc390).
+void DispatchRemoveEnt(edict_t* pEdict)
+{
+}
+
+// Original @ 0xfc3b0: tell every entity a player is leaving.
+void DispatchDissconnect(edict_t* pPlayer)
+{
+	edict_t* pEdict = INDEXENT(1);
+	if (!pEdict || g_iRecurLevel > 32)
+		return;
+
+	g_iRecurLevel++;
+	for (int i = 1; i < gpGlobals->maxEntities; i++, pEdict++)
+	{
+		if (pEdict->free || !UTIL_IsValidEntity(pEdict) || pEdict == pPlayer)
+			continue;
+		CBaseEntity* pEntity = CBaseEntity::Instance(pEdict);
+		if (pEntity)
+			pEntity->PlayerIsDissconecting(pPlayer);
+	}
+	g_iRecurLevel--;
+}
+
+// Compiled out in the original (an empty body, @ 0xfc480).
+void DispatchPlayerKilled(edict_t* pPlayer)
+{
+}
+
+// Original @ 0xfc4a0: how many entities of a classname this entity owns (GetRealOwner).
+int CountEntsClaimedByEnt(edict_t* pOwner, const char* pszClassname)
+{
+	edict_t* pEdict = INDEXENT(1);
+	if (!pEdict)
+		return 0;
+
+	int count = 0;
+	for (int i = 1; i < gpGlobals->maxEntities; i++, pEdict++)
+	{
+		if (pEdict->free || !UTIL_IsValidEntity(pEdict) || pEdict == pOwner)
+			continue;
+		CBaseEntity* pEntity = CBaseEntity::Instance(pEdict);
+		if (pEntity && !strcmp(STRING(pEntity->pev->classname), pszClassname) && pEntity->GetRealOwner() == pOwner)
+			count++;
+	}
+	return count;
+}
+
+// Original @ 0xfc5b0: the point everything pulling on this entity pulls it toward, each pull
+// origin weighted by its force.
+Vector GetPullCenter(edict_t* pPulled)
+{
+	edict_t* pEdict = INDEXENT(1);
+	if (!pEdict)
+		return g_vecZero;
+
+	Vector vecSum = g_vecZero;
+	float flTotal = 0;
+	for (int i = 1; i < gpGlobals->maxEntities; i++, pEdict++)
+	{
+		if (pEdict->free || !UTIL_IsValidEntity(pEdict) || pEdict == pPulled)
+			continue;
+		CBaseEntity* pEntity = CBaseEntity::Instance(pEdict);
+		if (!pEntity)
+			continue;
+		Vector vecOrigin = g_vecZero;
+		float flForce = 0;
+		if (pEntity->GetPullOrg(pPulled, vecOrigin, flForce) && flForce > 0 && vecOrigin != g_vecZero)
+		{
+			vecSum = vecSum + vecOrigin * flForce;
+			flTotal += flForce;
+		}
+	}
+	if (flTotal > 0)
+		return vecSum / flTotal;
+	return g_vecZero;
+}
+
+// Rocket Crowbar 1.9. Original @ 0xfc240 (cbase.cpp): a touch that makes the entity vanish at
+// once, killing any beams attached to it.
+void CBaseEntity::RemoveTouch(CBaseEntity* pOther)
+{
+	if (!pev || !pev->pContainingEntity || !UTIL_IsValidEntity(pev->pContainingEntity))
+		return;
+
+	pev->movetype = MOVETYPE_NONE;
+	pev->solid = SOLID_NOT;
+	pev->rendermode = kRenderTransColor;
+	pev->renderamt = 0;
+	pev->effects |= EF_NODRAW;
+	SetTouch(NULL);
+	SetThink(NULL);
+	SetUse(NULL);
+	DispatchRemoveEnt(pev->pContainingEntity);
+
+	MESSAGE_BEGIN(MSG_BROADCAST, SVC_TEMPENTITY);
+	WRITE_BYTE(TE_KILLBEAM);
+	WRITE_SHORT(ENTINDEX(pev->pContainingEntity));
+	MESSAGE_END();
+
+	REMOVE_ENTITY(pev->pContainingEntity);
+}
+
+// Rocket Crowbar 1.9. Original @ 0xfc850: forget an entity that is going away.
+void CBaseEntity::EntIsBeingRemoved(edict_t* pEdict)
+{
+	if (pev->owner && pev->owner == pEdict)
+		pev->owner = NULL;
+	if (pev->dmg_inflictor && pev->dmg_inflictor == pEdict)
+		pev->dmg_inflictor = NULL;
+}

@@ -79,6 +79,17 @@ extern void SaveGlobalState(SAVERESTOREDATA* pSaveData);
 extern void RestoreGlobalState(SAVERESTOREDATA* pSaveData);
 extern void ResetGlobalState();
 
+// Rocket Crowbar 1.9 (cbase.cpp)
+extern void DispatchRemoveEnt(edict_t* pEdict);
+extern void DispatchDissconnect(edict_t* pPlayer);
+extern void DispatchPlayerKilled(edict_t* pPlayer);
+extern int CountEntsClaimedByEnt(edict_t* pOwner, const char* pszClassname);
+extern Vector GetPullCenter(edict_t* pPulled);
+extern bool IsValidEnitityClassname(char* pszClassname);
+extern bool IsClassnamePrecached(char* pszClassname);
+extern bool IsClassnamePrecachedNoInvalid(const char* pszClassname);
+extern void AddToPrecachedList(const char* pszClassname);
+
 typedef enum
 {
 	USE_OFF = 0,
@@ -366,6 +377,37 @@ public:
 
 	virtual bool FVisible(CBaseEntity* pEntity);
 	virtual bool FVisible(const Vector& vecOrigin);
+
+	// Rocket Crowbar 1.9: the virtuals RC added to CBaseEntity, in the original's order (its
+	// vtable slots 57-79, reference/vtables.tsv). Bodies are the original's defaults.
+	virtual void AskQuest() {}	  // talking monsters (CBarneyBomb, CScientistBomb) play a question
+	virtual void AnswerQuest() {} // ... and an answer
+	virtual int AddMemeber(edict_t* pMember) { return 0; } // CConversation: 1 when the member was added
+	virtual int GetGuassHull() { return head_hull; }	   // hull the gauss beam traces against this
+	virtual int GetGuassDistOut() { return 56; }
+	virtual bool IsDriveent() { return false; } // true for CBaseDriveEnt (a monster a player drives)
+	virtual Vector GetBotShootOrg() { return Center() - Vector(0, 0, 16); }
+	virtual int GetBotTargetWeight(CBaseEntity* pBot) { return 0; }
+	virtual bool BotTargetRealseable(CBaseEntity* pBot) { return true; }
+	virtual void ProMagApplyForce(CBaseEntity* pMagnet, Vector vecForce) {}
+	virtual void DeflectApply(CBaseEntity* pDeflector, Vector vecDir) {}
+	virtual float ExtreemeDamageFract() { return 1; }
+	virtual float VeryHeavyDamageFract() { return 1; }
+	virtual void RemoveTouch(CBaseEntity* pOther);
+	virtual const char* GetControllerName() { return NULL; } // drive monsters: the driving player's name
+	virtual edict_t* GetRealOwner() { return pev->owner; }
+	virtual CBaseEntity* GetEffectedEnt() { return NULL; } // VERIFY type: returns 0, nothing overrides it
+	virtual bool GetPullOrg(edict_t* pPulled, Vector& vecOrigin, float& flForce)
+	{
+		vecOrigin = g_vecZero;
+		flForce = 0;
+		return false;
+	}
+	virtual void EntIsBeingRemoved(edict_t* pEdict);
+	virtual void PlayerIsDissconecting(edict_t* pPlayer) { EntIsBeingRemoved(pPlayer); }
+	virtual void PlayerWasKilled(edict_t* pPlayer) {}
+	virtual int GetRCCaps() { return 0; }
+	virtual int HasRCCap(const int& iCap) { return GetRCCaps() & iCap; }
 
 	//We use this variables to store each ammo count.
 	int ammo_9mm;

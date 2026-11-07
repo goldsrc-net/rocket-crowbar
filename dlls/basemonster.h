@@ -337,6 +337,10 @@ public:
 
 	virtual void StopFollowing(bool clearSchedule) {}
 
+	// Rocket Crowbar 1.9
+	virtual bool IsBot() { return false; }
+	virtual bool IsEntEnemy(CBaseEntity* pEntity) { return pEntity && m_hEnemy != NULL && pEntity->pev == m_hEnemy->pev; }
+
 	inline void Remember(int iMemory) { m_afMemory |= iMemory; }
 	inline void Forget(int iMemory) { m_afMemory &= ~iMemory; }
 	inline bool HasMemory(int iMemory)

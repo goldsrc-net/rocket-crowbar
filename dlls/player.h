@@ -17,6 +17,8 @@
 
 #include "pm_materials.h"
 
+class CBaseDriveEnt;
+
 
 #define PLAYER_FATAL_FALL_SPEED 1024															  // approx 60 feet
 #define PLAYER_MAX_SAFE_FALL_SPEED 580															  // approx 20 feet
@@ -356,6 +358,38 @@ public:
 
 	//True if the player is currently spawning.
 	bool m_bIsSpawning = false;
+
+	// Rocket Crowbar 1.9. Saved members, names from the original's m_playerSaveData (its offsets
+	// in comments, reference/savefields.tsv), then members found in its code but not saved.
+	float m_flIDTime;			   // 0x618
+	bool m_blInVote;			   // 0x61c
+	CBaseEntity* m_pCam;		   // 0x624
+	bool m_blSetView;			   // 0x628
+	bool m_blCamInited;			   // 0x629
+	float m_flNVNUpdateTime;	   // 0x62c
+	bool m_blInButStomp;		   // 0x630
+	float m_flMinStompTime;		   // 0x634
+	bool m_blOnTractor;			   // 0x638
+	Vector m_vecDeathAng;		   // 0x63c
+	float m_fCurseMSGTime;		   // 0x648
+	float m_fCurseRefireScale;	   // 0x64c
+	float m_fCurseDmgMirror;	   // 0x650
+	float m_fCurseDmgScale;		   // 0x654
+	float m_fHealthRegenTime;	   // 0x658
+	float m_fArmorRegenTime;	   // 0x65c
+	float m_fShotgunRiftTime;	   // 0x660
+	float m_fIsoBombTime;		   // 0x664
+	float m_fNukeTime;			   // 0x668
+	CBaseDriveEnt* m_pCurDriveEnt; // 0x66c, the monster this player drives
+	bool m_bInDriveEnt;			   // 0x670
+	float m_fDrvEntEjectTime;	   // 0x678
+	float m_fDrcEntTransTime;	   // 0x67c
+	float m_flBloodScale;		   // 0x680
+	int m_iGibExtra;			   // 0x684, saved as FIELD_POINTER in the original
+
+	bool m_blIsObserver; // 0x600, unsaved: set by InitObserver, cleared by ObserverFrame. VERIFY name
+
+	virtual bool IsActingAsCam() { return m_blIsObserver || m_bInDriveEnt; }
 };
 
 inline void CBasePlayer::SetWeaponBit(int id)
