@@ -88,7 +88,8 @@ sv_noexit             1        in deathmatch, a trigger_changelevel gibs whoever
 cvar                  default  what it does
 sv_monspawn           0        1: each monster the map places leaves a deathmatch spawn point
                                where it stands (out of water, where a player fits)
-sv_ignoreplayer       0        not 0: monsters don't notice players
+sv_ignoreplayer       0        not 0: monsters don't notice players, and players make no sound
+                               for them
 sv_loyalnpcs          0        1: shooting scientists and Barneys doesn't turn them against you
 sv_pcall              0        1: precache 15 monster types at map start, for .lec files and
                                commands that make them mid-game
@@ -116,7 +117,9 @@ sv_mapcfg             1        not 0: run changelevel.cfg and <map>.cfg at each 
                                deathmatch, and the next map's .cfg before each map change
 sv_lowlag             0        1: drop blood drips, fake gibs, texture sounds and some weapon
                                effects to save bandwidth
-sv_chglevel           0        registered, read by nothing (the original too)
+sv_chglevel           0        1: in deathmatch with sv_noexit not 1, a player touching or firing
+                               a trigger_changelevel takes the server to its map (if the map
+                               exists); otherwise exits do nothing there
 Rocket_Crowbar_Version 19      the version, for server browsers; read by nothing
 ```
 
@@ -128,6 +131,7 @@ mp_falldamage         no effect: there is no fall damage in multiplayer
 mp_chattime           no effect: the intermission is 6 s (halflife-updated's cvar, not RC's)
 allow_spectators      no effect: RC's own observer mode is used (sv_ingameobservers)
 sk_plr_hornet_dmg1-3  no effect: the hivehand's damage is fixed at 7
+sv_allow_autoaim      1        the engine's; no effect: autoaim follows sv_aim alone, as in RC 1.9
 sv_cheats             also set by the fcheats command; gates the give commands for non-admins,
                                the fov command and the cheat impulses
 ```
@@ -149,7 +153,7 @@ mp_fragsleft, mp_timeleft     -        read-only, for server browsers
 sv_alltalk                    0        no effect: the voice manager lets everyone hear everyone
 voice_serverdebug             0        voice manager debug output
 sv_busters                    0        Half-Life's "busters" mode, off
-sv_pushable_fixed_tick_fudge  15       halflife-updated's pushable speed fix
+sv_pushable_fixed_tick_fudge  15       no effect: func_pushable moves as in RC 1.9
 ```
 
 ## Commands
@@ -267,8 +271,8 @@ impulse  what it does
 112      the throwables: hand grenade, tripmine, satchel, snark
 ```
 
-33-44 also need `sv_allowtransform 1` in multiplayer. Stock impulses kept: 100 (flashlight),
-201 (spray).
+33-44 also need `sv_allowtransform 1` in multiplayer. Stock impulses kept: 99 (logo), 100
+(flashlight), 201 (spray), 204 (resend the HUD, as `fullupdate`).
 
 ## Client userinfo keys
 
