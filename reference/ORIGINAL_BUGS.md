@@ -24,6 +24,11 @@ driveapache.cpp FlyTouch, DEClientEject dereference m_pOwner unchecked          
 DyingThink / Killed (Apache, assassin,  CBaseEntity::Instance(pev->owner)->DeathNotice with   kept
   BM, garg)                             no null check
 drivehoundeye.cpp CDHEEyeSprite::ESThink dereferences its owner unchecked                      kept
+drivecontroll.cpp CDriveController::    writes through a null owner                           guarded
+  TakeDamage
+driveaslave.cpp CASLRechargeBall::      calls through a null target                           guarded
+  FlyToOwner
+driveaslave.cpp CASLEngBall::EBThink    reads an unfilled trace (unused: DoBallAttack empty)  guarded
 flag.cpp GetFlagTeamColor               team outside 1-6: sprintf into the read-only ""       guarded
                                         literal it returns (.rodata 0x265d66)
 bot_prefs.h CVEC::~CVEC, Resize         scalar delete on new[] memory: heap corruption at     changed
@@ -65,6 +70,8 @@ driveapache.cpp DoJump                  uses whatever v_forward/v_right the last
 driveapache.cpp DoControl               reuses ApacheForDecel/BackDecel keys for vertical     kept
                                         decel with other defaults (200/150)
 driveassassin.cpp DEClientEject         ejecting gibs the assassin (GIB_ALWAYS)               kept
+drivecontroll.cpp thrown ball           the second fork deals dmg*0.5, not its pref           kept
+driveaslave.cpp water physics           gravity pushes the slave up in water                  kept
 pickups' Use (all drive monsters)       test pCaller, not pActivator, and call IsPlayer()     kept (houndeye,
                                         before the NULL test                                  agrunt: NULL first)
 curses.cpp curse_spawner                never creates drunkcurse                              kept
@@ -84,4 +91,4 @@ drivebm.cpp DestoryFlames               keeps dangling beam pointers (never read
 
 `VK_IsValidIp`, `BP_GetConfArgLine` (stores every token as ""), `ClientConnecting` (reads an
 unregistered `sv_reserved`), `LC_ReadLine`, the chumtoad's `DoJump`/`RunJumpPhysics`,
-`m_bCanEyeAttack` (houndeye) and `m_bMoving` (grunt) written but never read.
+`CDriveASlave::DoBallAttack` (empty, so `CASLEngBall` and `CreateEB` never run), `m_bCanEyeAttack` (houndeye) and `m_bMoving` (grunt) written but never read.

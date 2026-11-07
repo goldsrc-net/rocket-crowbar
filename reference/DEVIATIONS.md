@@ -57,6 +57,11 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
   pointer even when nobody is driving, which crashes a server whose driverless ichthyosaur takes
   damage. Ours skips that write when there is no driver (`dlls/driveicky.cpp`, marked VERIFY).
 
+- **Three more guards in the controller and aslave** (`dlls/drivecontroll.cpp`,
+  `dlls/driveaslave.cpp`, each marked VERIFY): `CDriveController::TakeDamage` writes through a null
+  owner, `CASLRechargeBall::FlyToOwner` calls through a null target, and `CASLEngBall::EBThink`
+  reads a trace it never filled (ours zeroes it first; `CASLEngBall` is unused anyway, since
+  `CDriveASlave::DoBallAttack` is empty in the original).
 - **`GetFlagTeamColor` doesn't write into a string literal.** For a team outside 1-6 the original
   copies an error message into a read-only `""`, which crashes. Ours returns `""` without the write
   (`dlls/flag.cpp`, marked VERIFY).
