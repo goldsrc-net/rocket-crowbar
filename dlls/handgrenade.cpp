@@ -1164,7 +1164,8 @@ void CHandGrenade::WeaponIdle()
 		m_pPlayer->SetAnimation(PLAYER_ATTACK1);
 
 		m_flStartThrow = 0;
-		m_flNextPrimaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("GRENADES", "RefireRate", 0.5) * m_pPlayer->m_fCurseRefireScale;
+		// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+		m_flNextPrimaryAttack = GetNextAttackDelay(PREFS_KeyLoopUpFloat("GRENADES", "RefireRate", 0.5) * m_pPlayer->m_fCurseRefireScale);
 		m_flNextSecondaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("GRENADES", "RefireRate", 0.5) * m_pPlayer->m_fCurseRefireScale;
 		m_flTimeWeaponIdle = gpGlobals->time + 0.5;
 
@@ -1175,7 +1176,8 @@ void CHandGrenade::WeaponIdle()
 			// just threw last grenade
 			// set attack times in the future, and weapon idle in the future so we can see the whole throw
 			// animation, weapon idle will automatically retire the weapon for us.
-			m_flTimeWeaponIdle = m_flNextSecondaryAttack = m_flNextPrimaryAttack = gpGlobals->time + 0.5; // ensure that the animation can finish playing
+			// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+			m_flTimeWeaponIdle = m_flNextSecondaryAttack = m_flNextPrimaryAttack = GetNextAttackDelay(0.5); // ensure that the animation can finish playing
 		}
 		return;
 	}

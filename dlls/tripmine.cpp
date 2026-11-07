@@ -953,7 +953,8 @@ void CTripmine::PrimaryAttack()
 		SendWeaponAnim(TRIPMINE_DRAW);
 	}
 
-	m_flNextPrimaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("TRIPMINES", "PrimaryRefire", 0.3) * m_pPlayer->m_fCurseRefireScale;
+	// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+	m_flNextPrimaryAttack = GetNextAttackDelay(PREFS_KeyLoopUpFloat("TRIPMINES", "PrimaryRefire", 0.3) * m_pPlayer->m_fCurseRefireScale);
 	m_flNextSecondaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("TRIPMINES", "PrimaryRefire", 0.3) * m_pPlayer->m_fCurseRefireScale;
 	m_flTimeWeaponIdle = gpGlobals->time + RANDOM_FLOAT(10, 15);
 }

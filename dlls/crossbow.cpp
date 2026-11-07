@@ -933,7 +933,8 @@ void CCrossbow::PaintDecal(edict_t* pEdict, Vector vecOrigin, Vector vecAngles)
 // orig 0x110a50
 void CCrossbow::FireSniperBolt()
 {
-	m_flNextPrimaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("CROSSBOW", "CrossbowRefire", 0.9) * m_pPlayer->m_fCurseRefireScale;
+	// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+	m_flNextPrimaryAttack = GetNextAttackDelay(PREFS_KeyLoopUpFloat("CROSSBOW", "CrossbowRefire", 0.9) * m_pPlayer->m_fCurseRefireScale);
 
 	if (m_iClip == 0)
 	{
@@ -1110,7 +1111,8 @@ void CCrossbow::FireBolt()
 		// HEV suit - indicate out of ammo condition
 		m_pPlayer->SetSuitUpdate("!HEV_AMO0", false, 0);
 
-	m_flNextPrimaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("CROSSBOW", "ImpailerRefire", 0.9) * m_pPlayer->m_fCurseRefireScale;
+	// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+	m_flNextPrimaryAttack = GetNextAttackDelay(PREFS_KeyLoopUpFloat("CROSSBOW", "ImpailerRefire", 0.9) * m_pPlayer->m_fCurseRefireScale);
 	m_flNextSecondaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("CROSSBOW", "ImpailerRefireNextZoom", 0.9) * m_pPlayer->m_fCurseRefireScale;
 
 	if (m_iClip == 0)

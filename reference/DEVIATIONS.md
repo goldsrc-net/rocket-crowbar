@@ -238,6 +238,15 @@ each marked `// halflife-updated's fix, kept` or `// halflife-updated's, kept` i
 
 ## Weapons
 
+- **Fire rates go through halflife-updated's `GetNextAttackDelay`** (`dlls/weapons.cpp`), at RC's
+  rc.ini refires and curse scale, in the crossbow, crowbar swing, gauss, glock, hand grenade, mp5,
+  RPG, satchel, shotgun, snark and tripmine, where halflife-updated's weapons call it (FIXES.md,
+  its GetNextAttackDelay section; not RC's charge hornet gun, the python, egon, or RC's own attacks
+  such as the crowbar's shove and rocket). A held weapon keeps its cycle however late the frame
+  catches each shot; the original sets `gpGlobals->time + refire`. Its reset test is adapted to
+  this server's absolute timers (a timer a second or more past due, which is what halflife-updated's
+  `== -1` means for a relative one), and ItemPostFrame clears `m_flLastFireTime` on a released
+  trigger. A fix by Steven, 2026-11-07.
 - **The scientist and Barney bombs speak** (`dlls/rpg.cpp`). The original builds their sentence
   names with `"%!SC_HELLO%d"`: Windows' printf drops the unknown `%!` and gives `!SC_HELLO3`, a
   real sentence, while glibc keeps `%!`, so the original Linux server played none of their lines.

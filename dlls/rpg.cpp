@@ -1307,7 +1307,8 @@ void CRpg::Reload()
 		return;
 	}
 
-	m_flNextPrimaryAttack = gpGlobals->time + 0.5;
+	// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+	m_flNextPrimaryAttack = GetNextAttackDelay(0.5);
 
 	// VERIFY: the original leaves iResult uninitialized (as Valve's SDK did) when the clip is not
 	// empty, so with ClipSize above 1 a part-full clip could reset the idle time. Ours is false.
@@ -1462,7 +1463,8 @@ void CRpg::PrimaryAttack()
 
 		m_iClip--;
 
-		m_flNextPrimaryAttack = m_flNextSecondaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("RPG", "SciMineRefire", 1.5) * m_pPlayer->m_fCurseRefireScale;
+		// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+		m_flNextPrimaryAttack = m_flNextSecondaryAttack = GetNextAttackDelay(PREFS_KeyLoopUpFloat("RPG", "SciMineRefire", 1.5) * m_pPlayer->m_fCurseRefireScale);
 		m_flTimeWeaponIdle = gpGlobals->time + 1.5;
 
 		m_pPlayer->pev->punchangle.x -= PREFS_KeyLoopUpInt("RPG", "SciAngleKick", 5);

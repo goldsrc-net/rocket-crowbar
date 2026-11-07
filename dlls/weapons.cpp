@@ -1075,9 +1075,15 @@ void CBasePlayerWeapon::DoRetireWeapon()
 //=========================================================================
 // GetNextAttackDelay - An accurate way of calcualting the next attack time.
 //=========================================================================
+// halflife-updated's fix, kept (Steven 2026-11-07): the 2013 SDK's fire-rate compensation, which
+// keeps a held weapon firing on its cycle however late each frame catches the shot. Its reset test
+// was m_flNextPrimaryAttack == -1: a CLIENT_WEAPONS timer is relative and bottoms out at -1 a second
+// after it ran out (CBasePlayer::PostThink). This server's timers are absolute (gpGlobals->time), so
+// the same test is the timer lying a second or more in the past; against UTIL_WeaponTimeBase() it
+// reads the same for both time bases.
 float CBasePlayerWeapon::GetNextAttackDelay(float delay)
 {
-	if (m_flLastFireTime == 0 || m_flNextPrimaryAttack == -1)
+	if (m_flLastFireTime == 0 || m_flNextPrimaryAttack <= UTIL_WeaponTimeBase() - 1.0f)
 	{
 		// At this point, we are assuming that the client has stopped firing
 		// and we are going to reset our book keeping variables.
@@ -1093,10 +1099,10 @@ float CBasePlayerWeapon::GetNextAttackDelay(float delay)
 	// save the last fire time
 	m_flLastFireTime = gpGlobals->time;
 
-	float flNextAttack = gpGlobals->time + delay - flCreep;
+	float flNextAttack = UTIL_WeaponTimeBase() + delay - flCreep;
 	// we need to remember what the m_flNextPrimaryAttack time is set to for each shot,
 	// store it as m_flPrevPrimaryAttack.
-	m_flPrevPrimaryAttack = flNextAttack - gpGlobals->time;
+	m_flPrevPrimaryAttack = flNextAttack - UTIL_WeaponTimeBase();
 	// 	char szMsg[256];
 	// 	snprintf( szMsg, sizeof(szMsg), "next attack time: %0.4f\n", gpGlobals->time + flNextAttack );
 	// 	OutputDebugString( szMsg );

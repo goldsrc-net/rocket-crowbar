@@ -1053,7 +1053,8 @@ void CSqueak::PrimaryAttack()
 
 		m_fJustThrown = true;
 
-		m_flNextPrimaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("SNARKS", "PrimaryRefire", 0.3);
+		// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+		m_flNextPrimaryAttack = GetNextAttackDelay(PREFS_KeyLoopUpFloat("SNARKS", "PrimaryRefire", 0.3));
 		m_flNextSecondaryAttack = gpGlobals->time + 0.4;
 		m_flTimeWeaponIdle = gpGlobals->time + 1.0;
 	}

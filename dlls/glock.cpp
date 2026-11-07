@@ -359,7 +359,8 @@ void CGlock::GlockFire(float flSpread, float flCycleTime, bool fUseAutoAim)
 		if (m_fFireOnEmpty)
 		{
 			PlayEmptySound();
-			m_flNextPrimaryAttack = gpGlobals->time + 0.2;
+			// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+			m_flNextPrimaryAttack = GetNextAttackDelay(0.2);
 		}
 
 		return;
@@ -429,7 +430,8 @@ void CGlock::GlockFire(float flSpread, float flCycleTime, bool fUseAutoAim)
 	pGib->pev->owner = m_pPlayer->edict();
 	pGib->pev->enemy = pGib->pev->owner;
 
-	m_flNextPrimaryAttack = m_flNextSecondaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("GLOCK", "PrimaryRefire", flCycleTime) * m_pPlayer->m_fCurseRefireScale;
+	// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+	m_flNextPrimaryAttack = m_flNextSecondaryAttack = GetNextAttackDelay(PREFS_KeyLoopUpFloat("GLOCK", "PrimaryRefire", flCycleTime) * m_pPlayer->m_fCurseRefireScale);
 
 	if (0 == m_iClip && m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0)
 		// HEV suit - indicate out of ammo condition

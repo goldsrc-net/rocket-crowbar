@@ -1045,7 +1045,8 @@ void CShotgun::PrimaryAttack()
 	if (m_pPlayer->pev->waterlevel == 3)
 	{
 		PlayEmptySound();
-		m_flNextPrimaryAttack = gpGlobals->time + 0.15;
+		// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+		m_flNextPrimaryAttack = GetNextAttackDelay(0.15);
 		m_flNextSecondaryAttack = gpGlobals->time + 0.15;
 		return;
 	}
@@ -1102,7 +1103,8 @@ void CShotgun::PrimaryAttack()
 	//if (m_iClip != 0)
 	m_flPumpTime = gpGlobals->time + 0.5;
 
-	m_flNextPrimaryAttack = PREFS_KeyLoopUpFloat("SHOTGUN", "PrimaryRefire", 0.75) * m_pPlayer->m_fCurseRefireScale + gpGlobals->time;
+	// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+	m_flNextPrimaryAttack = GetNextAttackDelay(PREFS_KeyLoopUpFloat("SHOTGUN", "PrimaryRefire", 0.75) * m_pPlayer->m_fCurseRefireScale);
 	m_flNextSecondaryAttack = PREFS_KeyLoopUpFloat("SHOTGUN", "PrimaryRefire", 0.75) * m_pPlayer->m_fCurseRefireScale + gpGlobals->time;
 	if (m_iClip != 0)
 		m_flTimeWeaponIdle = gpGlobals->time + 5.0;
@@ -1122,7 +1124,8 @@ void CShotgun::SecondaryAttack()
 	if (m_pPlayer->pev->waterlevel == 3)
 	{
 		PlayEmptySound();
-		m_flNextPrimaryAttack = gpGlobals->time + 0.15;
+		// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+		m_flNextPrimaryAttack = GetNextAttackDelay(0.15);
 		m_flNextSecondaryAttack = gpGlobals->time + 0.15;
 		return;
 	}
@@ -1156,7 +1159,8 @@ void CShotgun::SecondaryAttack()
 	// player "shoot" animation
 	m_pPlayer->SetAnimation(PLAYER_ATTACK1);
 
-	m_flNextPrimaryAttack = PREFS_KeyLoopUpFloat("SHOTGUN", "SecondaryRefire", 0.9) * m_pPlayer->m_fCurseRefireScale + gpGlobals->time;
+	// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+	m_flNextPrimaryAttack = GetNextAttackDelay(PREFS_KeyLoopUpFloat("SHOTGUN", "SecondaryRefire", 0.9) * m_pPlayer->m_fCurseRefireScale);
 	m_flNextSecondaryAttack = PREFS_KeyLoopUpFloat("SHOTGUN", "SecondaryRefire", 0.9) * m_pPlayer->m_fCurseRefireScale + gpGlobals->time;
 
 	UTIL_MakeVectors(m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle);
@@ -1334,7 +1338,8 @@ void CShotgun::Reload()
 		m_fInSpecialReload = 1;
 		m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.6; // relative in halflife-updated (the player decrements it)
 		m_flTimeWeaponIdle = gpGlobals->time + 0.6;
-		m_flNextPrimaryAttack = gpGlobals->time + 1.0;
+		// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+		m_flNextPrimaryAttack = GetNextAttackDelay(1.0);
 		m_flNextSecondaryAttack = gpGlobals->time + 1.0;
 		return;
 	}

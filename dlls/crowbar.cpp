@@ -514,7 +514,8 @@ bool CCrowbar::Swing(bool fFirst)
 				SendWeaponAnim(CROWBAR_ATTACK3MISS);
 				break;
 			}
-			m_flNextPrimaryAttack = PREFS_KeyLoopUpFloat("CROWBAR", "PrimaryNoHitRefire", 0.5) * m_pPlayer->m_fCurseRefireScale + gpGlobals->time;
+			// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+			m_flNextPrimaryAttack = GetNextAttackDelay(PREFS_KeyLoopUpFloat("CROWBAR", "PrimaryNoHitRefire", 0.5) * m_pPlayer->m_fCurseRefireScale);
 
 			// play wiff or swish sound
 			EMIT_SOUND_DYN(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/cbar_miss1.wav", 1, ATTN_NORM, 0, 94 + RANDOM_LONG(0, 0xF));
@@ -549,7 +550,8 @@ bool CCrowbar::Swing(bool fFirst)
 		pEntity->TraceAttack(m_pPlayer->pev, PREFS_KeyLoopUpFloat("CROWBAR", "PrimaryHitDamage", 35.0), gpGlobals->v_forward, &tr, DMG_CLUB);
 		ApplyMultiDamage(m_pPlayer->pev, m_pPlayer->pev);
 
-		m_flNextPrimaryAttack = PREFS_KeyLoopUpFloat("CROWBAR", "PrimaryHitRefire", 0.2) * m_pPlayer->m_fCurseRefireScale + gpGlobals->time;
+		// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+		m_flNextPrimaryAttack = GetNextAttackDelay(PREFS_KeyLoopUpFloat("CROWBAR", "PrimaryHitRefire", 0.2) * m_pPlayer->m_fCurseRefireScale);
 
 		// play thwack, smack, or dong sound
 		float flVol = 1.0;

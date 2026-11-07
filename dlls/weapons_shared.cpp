@@ -118,8 +118,8 @@ bool CanAttack(float attack_time, float curtime, bool isPredicted)
 }
 
 // orig 0x23a250 (weapons.cpp), the original's whole: absolute times (gpGlobals->time), the hornet
-// gun's reload key, and sv_ceasefire. halflife-updated's TabulateAmmo calls, m_flLastFireTime
-// bookkeeping and predicted-time comparisons are not in it.
+// gun's reload key, and sv_ceasefire. halflife-updated's TabulateAmmo calls and predicted-time
+// comparisons are not in it; its m_flLastFireTime reset is (GetNextAttackDelay's bookkeeping).
 void CBasePlayerWeapon::ItemPostFrame()
 {
 	if ((m_fInReload) && (m_pPlayer->m_flNextAttack <= gpGlobals->time))
@@ -132,6 +132,13 @@ void CBasePlayerWeapon::ItemPostFrame()
 		m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] -= j;
 
 		m_fInReload = false;
+	}
+
+	// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay's bookkeeping, a released
+	// trigger starts the next shot's compensation afresh
+	if ((m_pPlayer->pev->button & IN_ATTACK) == 0)
+	{
+		m_flLastFireTime = 0.0f;
 	}
 
 	// Rocket Crowbar 1.9: the hornet gun (IsHornetGun: the crowbar, egon, gauss, hornet gun)

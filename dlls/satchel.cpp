@@ -679,7 +679,8 @@ void CSatchel::PrimaryAttack()
 		}
 
 		m_chargeReady = 2;
-		m_flNextPrimaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("SATCHEL", "PrimaryDetRefire", 0.5) * m_pPlayer->m_fCurseRefireScale;
+		// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+		m_flNextPrimaryAttack = GetNextAttackDelay(PREFS_KeyLoopUpFloat("SATCHEL", "PrimaryDetRefire", 0.5) * m_pPlayer->m_fCurseRefireScale);
 		m_flNextSecondaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("SATCHEL", "PrimaryDetRefire", 0.5) * m_pPlayer->m_fCurseRefireScale;
 		m_flTimeWeaponIdle = gpGlobals->time + 0.5;
 		break;
@@ -729,7 +730,8 @@ void CSatchel::Throw()
 
 		m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]--;
 
-		m_flNextPrimaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("SATCHEL", "ThrowPrimaryRefire", 1.0) * m_pPlayer->m_fCurseRefireScale;
+		// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+		m_flNextPrimaryAttack = GetNextAttackDelay(PREFS_KeyLoopUpFloat("SATCHEL", "ThrowPrimaryRefire", 1.0) * m_pPlayer->m_fCurseRefireScale);
 		m_flNextSecondaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("SATCHEL", "ThrowSecondaryRefire", 0.5) * m_pPlayer->m_fCurseRefireScale;
 	}
 }
@@ -769,7 +771,8 @@ void CSatchel::WeaponIdle()
 		// use tripmine animations
 		strcpy(m_pPlayer->m_szAnimExtention, "trip");
 
-		m_flNextPrimaryAttack = gpGlobals->time + 0.5;
+		// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+		m_flNextPrimaryAttack = GetNextAttackDelay(0.5);
 		m_flNextSecondaryAttack = gpGlobals->time + 0.5;
 		m_chargeReady = 0;
 		break;

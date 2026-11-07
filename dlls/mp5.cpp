@@ -330,7 +330,8 @@ void CMP5::PrimaryAttack()
 		// HEV suit - indicate out of ammo condition
 		m_pPlayer->SetSuitUpdate("!HEV_AMO0", false, 0);
 
-	m_flNextPrimaryAttack = gpGlobals->time + 0.1 * m_pPlayer->m_fCurseRefireScale;
+	// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+	m_flNextPrimaryAttack = GetNextAttackDelay(0.1 * m_pPlayer->m_fCurseRefireScale);
 	m_flNextSecondaryAttack = gpGlobals->time + (float)PREFS_KeyLoopUpInt("MP5", "PrimaryFartRefire", 0) * m_pPlayer->m_fCurseRefireScale;
 	m_flTimeWeaponIdle = gpGlobals->time + 0.1;
 
@@ -365,7 +366,8 @@ void CMP5::SecondaryAttack()
 	}
 	UTIL_MakeVectors(vecAngles);
 
-	m_flNextPrimaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("MP5", "FartRefire", 1.0) * m_pPlayer->m_fCurseRefireScale;
+	// halflife-updated's fix, kept (Steven 2026-11-07): GetNextAttackDelay evens out the fire-rate creep
+	m_flNextPrimaryAttack = GetNextAttackDelay(PREFS_KeyLoopUpFloat("MP5", "FartRefire", 1.0) * m_pPlayer->m_fCurseRefireScale);
 	m_flNextSecondaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("MP5", "FartRefire", 1.0) * m_pPlayer->m_fCurseRefireScale;
 	m_flTimeWeaponIdle = gpGlobals->time + 5;
 
