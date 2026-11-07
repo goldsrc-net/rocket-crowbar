@@ -1369,8 +1369,8 @@ bool CRpg::GetItemInfo(ItemInfo* p)
 	return true;
 }
 
-// orig 0x2006a0. The original also sends WeapPickup here; halflife-updated's
-// CBasePlayer::AddPlayerItem sends it for every weapon, so it is not sent twice. VERIFY
+// orig 0x2006a0. The original sends WeapPickup when the base AddToPlayer succeeds, which it
+// always does there.
 void CRpg::AddToPlayer(CBasePlayer* pPlayer)
 {
 	CBasePlayerWeapon::AddToPlayer(pPlayer);

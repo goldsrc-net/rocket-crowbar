@@ -1005,8 +1005,8 @@ bool CEgon::Deploy()
 	return DefaultDeploy("models/v_egon.mdl", "models/p_egon.mdl", EGON_DRAW, "egon");
 }
 
-// orig 0x1863c0. The original sends WeapPickup here; CBasePlayer::AddPlayerItem sends it in
-// halflife-updated, so the base call is the same behavior.
+// orig 0x1863c0. The original sends WeapPickup when the base AddToPlayer succeeds, which it
+// always does there.
 void CEgon::AddToPlayer(CBasePlayer* pPlayer)
 {
 	CBasePlayerWeapon::AddToPlayer(pPlayer);
