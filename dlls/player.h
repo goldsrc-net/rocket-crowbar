@@ -391,6 +391,7 @@ public:
 	float m_fDrvEntAlpha; // 0x674, unsaved: the client's cl_de_alpha (0-1), how see-through the driven monster is drawn for its driver. VERIFY name
 
 	virtual bool IsActingAsCam() { return m_blIsObserver || m_bInDriveEnt; }
+	void PlayerDoID(); // orig 0x1ee750
 
 	// prefs-votes needs: unsaved members of the observer (pregame.cpp) and the votes.
 	bool m_blWasObserver = false;			  // 0x601, set on entering observer mode, cleared nowhere in pregame.cpp. VERIFY name

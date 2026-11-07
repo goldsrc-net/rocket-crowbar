@@ -117,6 +117,7 @@ public:
 	}
 
 	void EXPORT TriggerTouch(CBaseEntity* pOther);
+	void EXPORT FadeThink(); // Rocket Crowbar 1.9
 
 	// These functions are here to show the way beams are encoded as entities.
 	// Encoding beams as entities simplifies their management in the client/server architecture

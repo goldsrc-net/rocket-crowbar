@@ -5163,3 +5163,9 @@ void CInfoIntermission::Think()
 }
 
 LINK_ENTITY_TO_CLASS(info_intermission, CInfoIntermission);
+
+// TEMP STUB (merge of panth-squid-turret): Rocket Crowbar's player ID display (orig 0x1ee750,
+// 2107 bytes) is reconstructed with the rest of player.cpp's RC additions.
+void CBasePlayer::PlayerDoID()
+{
+}

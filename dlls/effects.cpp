@@ -2265,3 +2265,40 @@ void CItemSoda::CanTouch(CBaseEntity* pOther)
 	SetThink(&CItemSoda::SUB_Remove);
 	pev->nextthink = gpGlobals->time;
 }
+
+// Rocket Crowbar 1.9. Original @ 0x17a540 (effects.cpp): a two-phase fade. Each think moves
+// renderamt by armorvalue per second (nextthink every armortype seconds). At full or zero, the
+// first phase (team set) switches to the second rate, max_health; the second phase stops at
+// full, or at zero hides the beam and removes it.
+void CBeam::FadeThink()
+{
+	pev->nextthink = gpGlobals->time + pev->armortype;
+	const float flElapsed = gpGlobals->time - pev->teleport_time;
+	pev->teleport_time = gpGlobals->time;
+	pev->renderamt += flElapsed * pev->armorvalue;
+
+	if (pev->renderamt >= 255)
+	{
+		pev->renderamt = 255;
+		if (pev->team == 0)
+		{
+			SetThink(NULL);
+			return;
+		}
+	}
+	else
+	{
+		if (pev->renderamt > 0)
+			return;
+		pev->renderamt = 0;
+		if (pev->team == 0)
+		{
+			SetThink(&CBeam::SUB_Remove);
+			pev->effects |= EF_NODRAW;
+			pev->nextthink = gpGlobals->time + 0.1;
+			return;
+		}
+	}
+	pev->team = 0;
+	pev->armorvalue = pev->max_health;
+}
