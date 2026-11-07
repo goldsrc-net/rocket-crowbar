@@ -82,6 +82,8 @@ call per revert is in mod-rc2's `reference/audit/FIXES.md`, made the same way in
 What halflife-updated changed there and we keep, besides restyling and the crash guards listed
 under "Crashes in the original":
 
+- **The roach is 2 units tall** (`dlls/roach.cpp` Spawn), halflife-updated's; the original's is 1.
+  Kept by Steven, 2026-11-07.
 - **Flying monsters are smoothed on the client, and living things sound like flesh**
   (`dlls/client.cpp` AddToFullPack; the tentacle, nihilanth and osprey Spawn). halflife-updated's
   fixes (halflife#3228 and its flesh impact sounds): EFLAG_SLERP from FL_FLY, in place of SDK 2.x's

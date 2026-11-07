@@ -124,8 +124,9 @@ void CRoach::Spawn()
 	Precache();
 
 	SET_MODEL(ENT(pev), "models/roach.mdl");
-	// RC 1.9's (as SDK 2.1, orig 0x1fb430); halflife-updated made the roach 2 units tall
-	UTIL_SetSize(pev, Vector(-1, -1, 0), Vector(1, 1, 1));
+	// halflife-updated's fix, kept (Steven, 2026-11-07): 2 units tall; the original's and SDK 2.1's 1 (orig
+	// 0x1fb430)
+	UTIL_SetSize(pev, Vector(-1, -1, 0), Vector(1, 1, 2));
 
 	pev->solid = SOLID_SLIDEBOX;
 	pev->movetype = MOVETYPE_STEP;
