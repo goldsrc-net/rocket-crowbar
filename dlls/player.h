@@ -390,6 +390,16 @@ public:
 	bool m_blIsObserver; // 0x600, unsaved: set by InitObserver, cleared by ObserverFrame. VERIFY name
 
 	virtual bool IsActingAsCam() { return m_blIsObserver || m_bInDriveEnt; }
+
+	// prefs-votes needs: unsaved members of the observer (pregame.cpp) and the votes.
+	bool m_blWasObserver = false;			  // 0x601, set on entering observer mode, cleared nowhere in pregame.cpp. VERIFY name
+	bool m_blObserverRespawn = false;		  // 0x602, PreThink calls Spawn() once this is set and the player is out of observer mode. VERIFY name
+	int m_iObserverMode = 0;				  // 0x604, 0 free roam, 1 chase with free look, 2 chase with the target's view. VERIFY name
+	int m_iObserverDrawMode = 0;			  // 0x608, 0-8, cycled by reload: how the target is drawn (pev->iuser3, fuser1-3, vuser1). VERIFY name
+	CBaseEntity* m_pObserverTarget = nullptr; // 0x60c, the chased entity. VERIFY name
+	float m_flObserverMsgTime = 0;			  // 0x610, when the help and mode HUD messages are next shown. VERIFY name
+	float m_flObserverChaseDist = 0;		  // 0x614, chase camera distance. VERIFY name
+	float m_flNextVoteTime = 0;				  // 0x620, may start another vote from this time (sv_votefreq). VERIFY name
 };
 
 inline void CBasePlayer::SetWeaponBit(int id)
