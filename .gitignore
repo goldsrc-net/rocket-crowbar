@@ -19,3 +19,4 @@ scratchpad/
 # python bytecode
 __pycache__/
 *.pyc
+tools/rig/*.so
