@@ -5720,6 +5720,7 @@ bool CBasePlayer::HasPlayerItem(CBasePlayerItem* pCheckItem)
 //=========================================================
 // HasNamedPlayerItem Does the player already have this item?
 //=========================================================
+// orig 0x1f5f10. RC 1.9's own: skips an item whose entity is gone or invalid
 bool CBasePlayer::HasNamedPlayerItem(const char* pszItemName)
 {
 	CBasePlayerItem* pItem;
@@ -5731,7 +5732,7 @@ bool CBasePlayer::HasNamedPlayerItem(const char* pszItemName)
 
 		while (pItem)
 		{
-			if (0 == strcmp(pszItemName, STRING(pItem->pev->classname)))
+			if (pItem->pev && !FNullEnt(pItem->pev) && UTIL_IsValidEntity(pItem->edict()) && 0 == strcmp(pszItemName, STRING(pItem->pev->classname)))
 			{
 				return true;
 			}

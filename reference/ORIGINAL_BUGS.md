@@ -130,6 +130,8 @@ wog.cpp WOGCommand                      strikes the looked-at spot when CMD_ARGC
 wog.cpp CWOGSpawner                     never removed after it fires                          kept
 levelcustom.cpp FindOtherSameSpawner    can return the calling respawner itself              kept
 drivebm.cpp DestoryFlames               keeps dangling beam pointers (never read)             kept
+items.cpp CItem::Spawn (0x1bb750)       an item placed in a wall or outside the map is kept,  kept
+                                        floating (no "fell out of level" removal)
 ---- stock-function audit, 2026-11-07
 monsterstate.cpp CBaseMonster::RunAI    tests SF_MONSTER_GAG (2) against pev->flags, which    kept
   (0x1cacf0)                            is FL_SWIM: a gagged monster still idles aloud, a
