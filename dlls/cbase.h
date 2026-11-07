@@ -84,6 +84,7 @@ extern void DispatchRemoveEnt(edict_t* pEdict);
 extern void DispatchDissconnect(edict_t* pPlayer);
 extern void DispatchPlayerKilled(edict_t* pPlayer);
 extern int CountEntsClaimedByEnt(edict_t* pOwner, const char* pszClassname);
+extern int CountEntsInWorld(const char* pszClassname); // combat.cpp
 extern Vector GetPullCenter(edict_t* pPulled);
 extern bool IsValidEnitityClassname(char* pszClassname);
 extern bool IsClassnamePrecached(char* pszClassname);

@@ -1703,3 +1703,19 @@ void CBaseMonster::MakeDamageBloodDecal(int cCount, float flNoise, TraceResult* 
 		}
 	}
 }
+
+// Rocket Crowbar 1.9. Original @ 0x1058e0 (combat.cpp): how many entities of a classname exist
+// that aren't marked FL_KILLME.
+int CountEntsInWorld(const char* pszClassname)
+{
+	int iCount = 0;
+	CBaseEntity* pEntity = NULL;
+	while ((pEntity = UTIL_FindEntityByClassname(pEntity, pszClassname)) != NULL)
+	{
+		if (FNullEnt(pEntity->pev))
+			continue;
+		if ((pEntity->pev->flags & FL_KILLME) == 0)
+			iCount++;
+	}
+	return iCount;
+}
