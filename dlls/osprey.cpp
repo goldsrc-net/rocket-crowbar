@@ -419,16 +419,24 @@ void COsprey::FlyThink()
 void COsprey::Flight()
 {
 	float t = (gpGlobals->time - m_startTime);
-	float scale = 1.0 / m_dTime;
 
-	float f = UTIL_SplineFraction(t * scale, 1.0);
+	// halflife-updated's fix, kept: no move while m_dTime is 0 (no target), where the original, as
+	// SDK 2.1, divided by it and sent the osprey to a NaN origin (halflife #3260)
+	//Only update if delta time is non-zero. It's zero if we're not moving at all (usually because we have no target).
+	if (m_dTime != 0)
+	{
+		float scale = 1.0 / m_dTime;
 
-	Vector pos = (m_pos1 + m_vel1 * t) * (1.0 - f) + (m_pos2 - m_vel2 * (m_dTime - t)) * f;
-	Vector ang = (m_ang1) * (1.0 - f) + (m_ang2)*f;
-	m_velocity = m_vel1 * (1.0 - f) + m_vel2 * f;
+		float f = UTIL_SplineFraction(t * scale, 1.0);
 
-	UTIL_SetOrigin(pev, pos);
-	pev->angles = ang;
+		Vector pos = (m_pos1 + m_vel1 * t) * (1.0 - f) + (m_pos2 - m_vel2 * (m_dTime - t)) * f;
+		Vector ang = (m_ang1) * (1.0 - f) + (m_ang2)*f;
+		m_velocity = m_vel1 * (1.0 - f) + m_vel2 * f;
+
+		UTIL_SetOrigin(pev, pos);
+		pev->angles = ang;
+	}
+
 	UTIL_MakeAimVectors(pev->angles);
 	float flSpeed = DotProduct(gpGlobals->v_forward, m_velocity);
 
@@ -781,7 +789,9 @@ void COsprey::TraceAttack(entvars_t* pevAttacker, float flDamage, Vector vecDir,
 			return;
 		else
 			m_flRightHealth -= flDamage;
-		m_iDoLeftSmokePuff = 3 + (flDamage / 5.0);
+		// halflife-updated's fix, kept: the engine that was hit smokes; the original, as SDK 2.1,
+		// puffed the other one (halflife #3263)
+		m_iDoRightSmokePuff = 3 + (flDamage / 5.0);
 	}
 
 	if (ptr->iHitgroup == 2)
@@ -790,7 +800,7 @@ void COsprey::TraceAttack(entvars_t* pevAttacker, float flDamage, Vector vecDir,
 			return;
 		else
 			m_flLeftHealth -= flDamage;
-		m_iDoRightSmokePuff = 3 + (flDamage / 5.0);
+		m_iDoLeftSmokePuff = 3 + (flDamage / 5.0); // halflife-updated's fix, kept: as above
 	}
 
 	// hit hard, hits cockpit, hits engines

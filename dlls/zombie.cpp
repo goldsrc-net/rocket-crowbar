@@ -172,21 +172,26 @@ void CZombie::AlertSound()
 	EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, RANDOM_SOUND_ARRAY(pAlertSounds), 1.0, ATTN_NORM, 0, pitch);
 }
 
-// orig 0x242750: the SDK's pitch, 100 +/- 5; the unused 95-104 roll is the original's too
-// (halflife-updated uses that roll as the pitch)
+// orig 0x242750
 void CZombie::IdleSound()
 {
-	[[maybe_unused]] int pitch = 95 + RANDOM_LONG(0, 9);
+	int pitch = 95 + RANDOM_LONG(0, 9);
 
 	// Play a random idle sound
-	EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, RANDOM_SOUND_ARRAY(pIdleSounds), 1.0, ATTN_NORM, 0, 100 + RANDOM_LONG(-5, 5));
+	// halflife-updated's fix, kept: plays at the pitch worked out above, which the original (as
+	// SDK 2.1) left unused for a second 100 +/- 5 roll
+	EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, RANDOM_SOUND_ARRAY(pIdleSounds), 1.0, ATTN_NORM, 0, pitch);
 }
 
-// orig 0x2427e0: pitch 100 +/- 5, as the SDK had it
+// orig 0x2427e0
 void CZombie::AttackSound()
 {
+	// halflife-updated's fix, kept: the same pitch range as the alert and idle sounds (the
+	// original's is 100 +/- 5)
+	int pitch = 95 + RANDOM_LONG(0, 9);
+
 	// Play a random attack sound
-	EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, RANDOM_SOUND_ARRAY(pAttackSounds), 1.0, ATTN_NORM, 0, 100 + RANDOM_LONG(-5, 5));
+	EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, RANDOM_SOUND_ARRAY(pAttackSounds), 1.0, ATTN_NORM, 0, pitch);
 }
 
 

@@ -479,22 +479,19 @@ void CTalkMonster::RunTask(Task_t* pTask)
 	case TASK_TLK_CLIENT_STARE:
 	case TASK_TLK_LOOK_AT_CLIENT:
 	{
-		// orig 0x21e5e0: the original's edict 1 lookup, inside the test (halflife-updated moved it
-		// out and fails the task when there's no player)
-		edict_t* pPlayer = NULL;
+		// orig 0x21e5e0. halflife-updated's fix, kept: the player is looked up once, before the test
+		// (its local player helper skips a free slot 1), and with none the task fails, so the stare
+		// never reads a missing player (halflife #3177). The original reads edict 1 inside the test
+		// and its stare used it unchecked.
+		CBaseEntity* pPlayer = UTIL_GetLocalPlayer();
 
 		// track head to the client for a while.
-		if (m_MonsterState == MONSTERSTATE_IDLE &&
+		if (pPlayer &&
+			m_MonsterState == MONSTERSTATE_IDLE &&
 			!IsMoving() &&
 			!IsTalking())
 		{
-			// Get edict for one player
-			pPlayer = g_engfuncs.pfnPEntityOfEntIndex(1);
-
-			if (pPlayer)
-			{
-				IdleHeadTurn(pPlayer->v.origin);
-			}
+			IdleHeadTurn(pPlayer->pev->origin);
 		}
 		else
 		{
@@ -503,18 +500,17 @@ void CTalkMonster::RunTask(Task_t* pTask)
 			return;
 		}
 
-		// VERIFY: guard, the original crashes here (STARE with no edict 1 reads a NULL player)
-		if (pTask->iTask == TASK_TLK_CLIENT_STARE && pPlayer)
+		if (pTask->iTask == TASK_TLK_CLIENT_STARE)
 		{
 			// fail out if the player looks away or moves away.
-			if ((pPlayer->v.origin - pev->origin).Length2D() > TLK_STARE_DIST)
+			if ((pPlayer->pev->origin - pev->origin).Length2D() > TLK_STARE_DIST)
 			{
 				// player moved away.
 				TaskFail();
 			}
 
-			UTIL_MakeVectors(pPlayer->v.angles);
-			if (UTIL_DotPoints(pPlayer->v.origin, pev->origin, gpGlobals->v_forward) < m_flFieldOfView)
+			UTIL_MakeVectors(pPlayer->pev->angles);
+			if (UTIL_DotPoints(pPlayer->pev->origin, pev->origin, gpGlobals->v_forward) < m_flFieldOfView)
 			{
 				// player looked away
 				TaskFail();
@@ -530,14 +526,15 @@ void CTalkMonster::RunTask(Task_t* pTask)
 
 	case TASK_FACE_PLAYER:
 	{
-		// Get edict for one player
-		edict_t* pPlayer = g_engfuncs.pfnPEntityOfEntIndex(1);
+		// halflife-updated's fix, kept: its local player helper skips a free slot 1, whose stale
+		// origin the original's edict 1 lookup faced
+		CBaseEntity* pPlayer = UTIL_GetLocalPlayer();
 
 		if (pPlayer)
 		{
-			MakeIdealYaw(pPlayer->v.origin);
+			MakeIdealYaw(pPlayer->pev->origin);
 			ChangeYaw(pev->yaw_speed);
-			IdleHeadTurn(pPlayer->v.origin);
+			IdleHeadTurn(pPlayer->pev->origin);
 			if (gpGlobals->time > m_flWaitFinished && FlYawDiff() < 10)
 			{
 				TaskComplete();
@@ -876,9 +873,15 @@ void CTalkMonster::Touch(CBaseEntity* pOther)
 		float speed = fabs(pOther->pev->velocity.x) + fabs(pOther->pev->velocity.y);
 		if (speed > 50)
 		{
-			// orig 0x21f190: no interrupt-mask test (halflife-updated's scripted sequence facing fix)
-			SetConditions(bits_COND_CLIENT_PUSH);
-			MakeIdealYaw(pOther->pev->origin);
+			// orig 0x21f190. halflife-updated's fix, kept: only when the schedule can be interrupted by
+			// a push, so a push doesn't turn a talker away from the facing a scripted sequence set; the
+			// original has no test
+			// From https://github.com/FreeSlave/halflife-updated/wiki/Fix-potential-incorrect-facing-in-scripted-sequence
+			if (m_pSchedule != NULL && (m_pSchedule->iInterruptMask & bits_COND_CLIENT_PUSH) != 0)
+			{
+				SetConditions(bits_COND_CLIENT_PUSH);
+				MakeIdealYaw(pOther->pev->origin);
+			}
 		}
 	}
 }
@@ -1136,10 +1139,11 @@ void CTalkMonster::PlayScriptedSentence(const char* pszSentence, float duration,
 	m_hTalkTarget = pListener;
 }
 
-// orig 0x21fae0: no IsAlive() test, a dying talker still speaks
+// orig 0x21fae0. halflife-updated's fix, kept: a dying talker doesn't speak (IsAllowedToSpeak,
+// its #171, #180); the original has no test
 void CTalkMonster::PlaySentence(const char* pszSentence, float duration, float volume, float attenuation)
 {
-	if (!pszSentence)
+	if (!pszSentence || !IsAllowedToSpeak())
 		return;
 
 	Talk(duration);
@@ -1188,7 +1192,9 @@ bool CTalkMonster::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, f
 		{
 			CBaseEntity* pFriend = FindNearestFriend(false);
 
-			if (pFriend && pFriend->IsAlive())
+			// halflife-updated's fix, kept: a friend whose deadflag isn't DEAD_NO is skipped, so a
+			// dying friend's death schedule isn't reset (the original tests IsAlive() alone)
+			if (pFriend && pFriend->IsAlive() && pFriend->pev->deadflag == DEAD_NO)
 			{
 				// only if not dead or dying!
 				CTalkMonster* pTalkMonster = (CTalkMonster*)pFriend;
@@ -1257,14 +1263,16 @@ Schedule_t* CTalkMonster::GetScheduleOfType(int Type)
 
 		if (!IsTalking() && HasConditions(bits_COND_SEE_CLIENT) && RANDOM_LONG(0, 6) == 0)
 		{
-			edict_t* pPlayer = g_engfuncs.pfnPEntityOfEntIndex(1);
+			// halflife-updated's fix, kept: its local player helper skips a free slot 1, whose stale
+			// origin the original's edict 1 lookup watched
+			CBaseEntity* pPlayer = UTIL_GetLocalPlayer();
 
 			if (pPlayer)
 			{
 				// watch the client.
-				UTIL_MakeVectors(pPlayer->v.angles);
-				if ((pPlayer->v.origin - pev->origin).Length2D() < TLK_STARE_DIST &&
-					UTIL_DotPoints(pPlayer->v.origin, pev->origin, gpGlobals->v_forward) >= m_flFieldOfView)
+				UTIL_MakeVectors(pPlayer->pev->angles);
+				if ((pPlayer->pev->origin - pev->origin).Length2D() < TLK_STARE_DIST &&
+					UTIL_DotPoints(pPlayer->pev->origin, pev->origin, gpGlobals->v_forward) >= m_flFieldOfView)
 				{
 					// go into the special STARE schedule if the player is close, and looking at me too.
 					return &slTlkIdleWatchClient[1];
@@ -1389,8 +1397,10 @@ void CTalkMonster::StartFollowing(CBaseEntity* pLeader)
 
 bool CTalkMonster::CanFollow()
 {
-	// orig 0x2203f0: the SDK's test (halflife-updated also checks the ideal state)
-	if (m_MonsterState == MONSTERSTATE_SCRIPT)
+	// orig 0x2203f0. halflife-updated's fix, kept: a monster about to start a script can't be made to
+	// follow either, so +use doesn't break a scripted_sequence (halflife-updated #200); the original
+	// tests m_MonsterState alone
+	if (m_MonsterState == MONSTERSTATE_SCRIPT || m_IdealMonsterState == MONSTERSTATE_SCRIPT)
 	{
 		// VERIFY: guard, the original crashes here (m_pCine is NULL just after a script ends)
 		if (!m_pCine || !m_pCine->CanInterrupt())

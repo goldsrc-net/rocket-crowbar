@@ -77,6 +77,7 @@ public:
 
 	float ChangeYaw(int yawSpeed) override;
 	Activity GetStoppedActivity() override;
+	void SetActivity(Activity NewActivity) override; // halflife-updated's fix, kept (its #152, see below)
 
 	void Move(float flInterval) override;
 	void MoveExecute(CBaseEntity* pTargetEnt, const Vector& vecDir, float flInterval) override;
@@ -104,6 +105,11 @@ public:
 	CBeam* m_pBeam;
 
 	float m_flNextAlert;
+
+	// halflife-updated's fix, kept (halflife #2458): ChangePitch and ChangeYaw step by the time since
+	// their last call
+	float m_flLastPitchTime; // Last frame time pitch was changed
+	float m_flLastZYawTime;	 // Last frame time Z was changed when yaw was changed
 
 	float m_flDeathTime; // orig +0x2c0, Rocket Crowbar 1.9: when TASK_DIE finished. Not saved. VERIFY name
 
@@ -300,7 +306,6 @@ Task_t tlTwitchDie[] =
 		{TASK_STOP_MOVING, 0},
 		{TASK_SOUND_DIE, (float)0},
 		{TASK_DIE, (float)0},
-		{TASK_ICHTHYOSAUR_FLOAT, (float)0}, // the original floats here (halflife-updated split it into slFloat)
 };
 
 Schedule_t slTwitchDie[] =
@@ -312,11 +317,29 @@ Schedule_t slTwitchDie[] =
 			"Die"},
 };
 
+// halflife-updated's fix, kept (its #152): the float is a schedule of its own, which a dead
+// ichthyosaur goes to directly, so a save game load doesn't restart its death. The original floats
+// at the end of tlTwitchDie.
+Task_t tlFloat[] =
+	{
+		{TASK_ICHTHYOSAUR_FLOAT, (float)0},
+};
+
+Schedule_t slFloat[] =
+	{
+		{tlFloat,
+			ARRAYSIZE(tlFloat),
+			0,
+			0,
+			"Float"},
+};
+
 DEFINE_CUSTOM_SCHEDULES(CIchthyosaur){
 	slSwimAround,
 	slSwimAgitated,
 	slCircleEnemy,
 	slTwitchDie,
+	slFloat,
 };
 IMPLEMENT_CUSTOM_SCHEDULES(CIchthyosaur, CFlyingMonster);
 
@@ -574,6 +597,14 @@ Schedule_t* CIchthyosaur::GetScheduleOfType(int Type)
 	case SCHED_FAIL:
 		return slSwimAgitated;
 	case SCHED_DIE:
+		// halflife-updated's fix, kept: an ichthyosaur that is already dead floats instead of
+		// starting its death sequence again (halflife-updated #152)
+		if (pev->deadflag == DEAD_DEAD)
+		{
+			//Already dead, immediately switch to float.
+			return slFloat;
+		}
+
 		return slTwitchDie;
 	case SCHED_CHASE_ENEMY:
 		AttackSound();
@@ -611,9 +642,18 @@ void CIchthyosaur::StartTask(Task_t* pTask)
 		break;
 
 	case TASK_ICHTHYOSAUR_FLOAT:
-		pev->skin = EYE_BASE;
-		SetSequenceByName("bellyup");
+	{
+		// halflife-updated's fix, kept (its #152): the belly-up sequence isn't restarted on restore
+		const int sequenceIndex = LookupSequence("bellyup");
+
+		//Don't restart the animation if we're restoring.
+		if (pev->sequence != sequenceIndex)
+		{
+			pev->skin = EYE_BASE;
+			SetSequenceByName("bellyup");
+		}
 		break;
+	}
 
 	default:
 		CFlyingMonster::StartTask(pTask);
@@ -800,6 +840,13 @@ float CIchthyosaur::ChangePitch(int pitchSpeed)
 		float diff = FlPitchDiff();
 		float target = 0;
 
+		// halflife-updated's fix, kept: the step comes from the time since the last call, not a fixed
+		// 0.1 s whatever the call rate (halflife #2458); the original steps 220 * 0.1
+		if (m_flLastPitchTime == 0.0f)
+		{
+			m_flLastPitchTime = gpGlobals->time - gpGlobals->frametime;
+		}
+
 		if (m_IdealActivity != GetStoppedActivity())
 		{
 			if (diff < -20)
@@ -808,8 +855,15 @@ float CIchthyosaur::ChangePitch(int pitchSpeed)
 				target = -45;
 		}
 
-		// the original's fixed step (halflife-updated scales by the time since the last change)
-		pev->angles.x = UTIL_Approach(target, pev->angles.x, 220.0 * 0.1);
+		float delta = gpGlobals->time - m_flLastPitchTime;
+		m_flLastPitchTime = gpGlobals->time;
+
+		// Clamp delta like the engine does with frametime
+		if (delta > 0.25f)
+			delta = 0.25f;
+
+		float speed = 220.0f * delta;
+		pev->angles.x = UTIL_Approach(target, pev->angles.x, speed);
 	}
 	return 0;
 }
@@ -821,6 +875,12 @@ float CIchthyosaur::ChangeYaw(int yawSpeed)
 		float diff = FlYawDiff();
 		float target = 0;
 
+		// halflife-updated's fix, kept: as ChangePitch, for the roll
+		if (m_flLastZYawTime == 0.0f)
+		{
+			m_flLastZYawTime = gpGlobals->time - gpGlobals->frametime;
+		}
+
 		if (m_IdealActivity != GetStoppedActivity())
 		{
 			if (diff < -20)
@@ -829,8 +889,15 @@ float CIchthyosaur::ChangeYaw(int yawSpeed)
 				target = -20;
 		}
 
-		// the original's fixed step (halflife-updated scales by the time since the last change)
-		pev->angles.z = UTIL_Approach(target, pev->angles.z, 220.0 * 0.1);
+		float delta = gpGlobals->time - m_flLastZYawTime;
+		m_flLastZYawTime = gpGlobals->time;
+
+		// Clamp delta like the engine does with frametime
+		if (delta > 0.25f)
+			delta = 0.25f;
+
+		float speed = 220.f * delta;
+		pev->angles.z = UTIL_Approach(target, pev->angles.z, speed);
 	}
 	return CFlyingMonster::ChangeYaw(yawSpeed);
 }
@@ -841,6 +908,22 @@ Activity CIchthyosaur::GetStoppedActivity()
 	if (pev->movetype != MOVETYPE_FLY) // UNDONE: Ground idle here, IDLE may be something else
 		return ACT_IDLE;
 	return ACT_WALK;
+}
+
+// halflife-updated's fix, kept (its #152): a dead ichthyosaur stays belly up when its activity
+// changes (a save game load); the original has no override
+void CIchthyosaur::SetActivity(Activity NewActivity)
+{
+	const float frame = pev->frame;
+
+	CFlyingMonster::SetActivity(NewActivity);
+
+	//Restore belly up state.
+	if (pev->deadflag == DEAD_DEAD)
+	{
+		SetSequenceByName("bellyup");
+		pev->frame = frame;
+	}
 }
 
 void CIchthyosaur::MoveExecute(CBaseEntity* pTargetEnt, const Vector& vecDir, float flInterval)

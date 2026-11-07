@@ -966,7 +966,16 @@ bool CSqueak::Deploy()
 
 	m_pPlayer->m_iWeaponVolume = QUIET_GUN_VOLUME;
 
-	return DefaultDeploy("models/v_squeak.mdl", "models/p_squeak.mdl", SQUEAK_UP, "squeak");
+	// halflife-updated's fix, kept: the first idle waits 1.7 s, so it doesn't cut the deploy
+	// animation short (halflife #2495); the original keeps DefaultDeploy's 1 s
+	const bool result = DefaultDeploy("models/v_squeak.mdl", "models/p_squeak.mdl", SQUEAK_UP, "squeak");
+
+	if (result)
+	{
+		m_flTimeWeaponIdle = gpGlobals->time + 1.7;
+	}
+
+	return result;
 }
 
 // orig 0x21b330: also takes the player out of a cam.

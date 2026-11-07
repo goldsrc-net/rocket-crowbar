@@ -853,27 +853,31 @@ void CHGrunt::HandleAnimEvent(MonsterEvent_t* pEvent)
 	{
 	case HGRUNT_AE_DROP_GUN:
 	{
-		// orig 0x1ad4b0: no GetBodygroup test (halflife-updated's save/load fix)
-		Vector vecGunPos;
-		Vector vecGunAngles;
-
-		GetAttachment(0, vecGunPos, vecGunAngles);
-
-		// switch to body group with no gun.
-		SetBodygroup(GUN_GROUP, GUN_NONE);
-
-		// now spawn a gun.
-		if (FBitSet(pev->weapons, HGRUNT_SHOTGUN))
+		// orig 0x1ad4b0. halflife-updated's fix, kept: only while the grunt still holds a gun, so a
+		// save and load during the death doesn't drop it again; the original has no test
+		if (GetBodygroup(GUN_GROUP) != GUN_NONE)
 		{
-			DropItem("weapon_shotgun", vecGunPos, vecGunAngles);
-		}
-		else
-		{
-			DropItem("weapon_9mmAR", vecGunPos, vecGunAngles);
-		}
-		if (FBitSet(pev->weapons, HGRUNT_GRENADELAUNCHER))
-		{
-			DropItem("ammo_ARgrenades", BodyTarget(pev->origin), vecGunAngles);
+			Vector vecGunPos;
+			Vector vecGunAngles;
+
+			GetAttachment(0, vecGunPos, vecGunAngles);
+
+			// switch to body group with no gun.
+			SetBodygroup(GUN_GROUP, GUN_NONE);
+
+			// now spawn a gun.
+			if (FBitSet(pev->weapons, HGRUNT_SHOTGUN))
+			{
+				DropItem("weapon_shotgun", vecGunPos, vecGunAngles);
+			}
+			else
+			{
+				DropItem("weapon_9mmAR", vecGunPos, vecGunAngles);
+			}
+			if (FBitSet(pev->weapons, HGRUNT_GRENADELAUNCHER))
+			{
+				DropItem("ammo_ARgrenades", BodyTarget(pev->origin), vecGunAngles);
+			}
 		}
 	}
 	break;
@@ -1276,7 +1280,10 @@ Schedule_t slGruntCombatFail[] =
 Task_t tlGruntVictoryDance[] =
 	{
 		{TASK_STOP_MOVING, (float)0},
-		{TASK_FACE_ENEMY, (float)0}, // the original has no TASK_SET_ACTIVITY ACT_IDLE before this
+		// halflife-updated's fix, kept: the grunt goes idle first, so it doesn't keep firing for a few
+		// seconds after its last enemy died; the original has no TASK_SET_ACTIVITY here
+		{TASK_SET_ACTIVITY, (float)ACT_IDLE},
+		{TASK_FACE_ENEMY, (float)0},
 		{TASK_WAIT, (float)1.5},
 		{TASK_GET_PATH_TO_ENEMY_CORPSE, (float)0},
 		{TASK_WALK_PATH, (float)0},

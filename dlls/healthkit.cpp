@@ -70,10 +70,16 @@ void CHealthKit::Precache()
 	PRECACHE_SOUND("items/smallmedkit1.wav");
 }
 
-// orig 0x1ab180. RC: the amount comes from rc.ini. The original has no dead-player check
-// (halflife-updated added one), so a dead player can still take a kit.
+// orig 0x1ab180. RC: the amount comes from rc.ini.
 bool CHealthKit::MyTouch(CBasePlayer* pPlayer)
 {
+	// halflife-updated's fix, kept: a dead player doesn't take a kit; the original, as SDK 2.1, has
+	// no check
+	if (pPlayer->pev->deadflag != DEAD_NO)
+	{
+		return false;
+	}
+
 	if (pPlayer->TakeHealth(PREFS_KeyLoopUpFloat("ITEMS", "HealthkitGive", gSkillData.healthkitCapacity), DMG_GENERIC))
 	{
 		MESSAGE_BEGIN(MSG_ONE, gmsgItemPickup, NULL, pPlayer->pev);

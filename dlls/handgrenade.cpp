@@ -1053,11 +1053,15 @@ bool CHandGrenade::CanHolster()
 	return (m_flStartThrow == 0);
 }
 
-// orig 0x1a7810. Does not clear m_flStartThrow (halflife-updated does), so a grenade primed when
-// the weapon is put away is thrown on the next deploy's idle, as in the original.
+// orig 0x1a7810
 void CHandGrenade::Holster()
 {
 	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
+
+	// halflife-updated's fix, kept: a throw in progress stops, so a grenade primed when the weapon
+	// is put away isn't thrown on the next deploy's idle (halflife #3251); the original keeps it
+	//Stop any throw that was in process so players don't blow themselves or somebody else up when the weapon is deployed again.
+	m_flStartThrow = 0;
 
 	if (0 != m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType])
 	{

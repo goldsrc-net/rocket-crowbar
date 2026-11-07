@@ -172,6 +172,19 @@ void ClientDisconnect(edict_t* pEntity)
 	pEntity->v.solid = SOLID_NOT;	   // nonsolid
 	UTIL_SetOrigin(&pEntity->v, pEntity->v.origin);
 
+	// halflife-updated's fix, kept: a func_tank the player was using is let go, so it isn't left
+	// controlled by a client that is gone (halflife #2594); the original doesn't
+	auto pTankUser = reinterpret_cast<CBasePlayer*>(GET_PRIVATE(pEntity));
+
+	if (pTankUser)
+	{
+		if (pTankUser->m_pTank != NULL)
+		{
+			pTankUser->m_pTank->Use(pTankUser, pTankUser, USE_OFF, 0);
+			pTankUser->m_pTank = NULL;
+		}
+	}
+
 	g_pGameRules->ClientDisconnected(pEntity);
 }
 
@@ -1715,6 +1728,24 @@ void ClientUserInfoChanged(edict_t* pEntity, char* infobuffer)
 	// msg everyone if someone changes their name,  and it isn't the first time (changing no name to current name)
 	if (!FStringNull(pEntity->v.netname) && STRING(pEntity->v.netname)[0] != 0 && !FStrEq(STRING(pEntity->v.netname), g_engfuncs.pfnInfoKeyValue(infobuffer, "name")))
 	{
+		// halflife-updated's fix, kept: a % in the new name becomes a space, so the name can't act
+		// as a format string where clients print it; the original, as SDK 2.1, passes it through
+		char sName[256];
+		char* pName = g_engfuncs.pfnInfoKeyValue(infobuffer, "name");
+		strncpy(sName, pName, sizeof(sName) - 1);
+		sName[sizeof(sName) - 1] = '\0';
+
+		// First parse the name and remove any %'s
+		for (char* pApersand = sName; pApersand != NULL && *pApersand != 0; pApersand++)
+		{
+			// Replace it with a space
+			if (*pApersand == '%')
+				*pApersand = ' ';
+		}
+
+		// Set the name
+		g_engfuncs.pfnSetClientKeyValue(ENTINDEX(pEntity), infobuffer, "name", sName);
+
 		char text[256];
 		snprintf(text, sizeof(text), "* %s changed name to %s\n", STRING(pEntity->v.netname), g_engfuncs.pfnInfoKeyValue(infobuffer, "name"));
 		MESSAGE_BEGIN(MSG_ALL, gmsgSayText, NULL);

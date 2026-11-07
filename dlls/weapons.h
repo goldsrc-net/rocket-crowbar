@@ -797,12 +797,13 @@ public:
 	bool Deploy() override;
 	void Reload() override;
 	void WeaponIdle() override;
+	void ItemPostFrame() override; // halflife-updated's fix, kept: the pump sound (the original's is in WeaponIdle)
 	int m_fInReload; //TODO: not used, remove
 	float m_flNextReload; // orig +0x90
 	int m_iShell;		  // orig +0x94
 
 	// Rocket Crowbar 1.9 (shotgun.cpp): primary throws a CFlyinScientist, secondary opens and
-	// grows a CSpaceRift. The original has no ItemPostFrame here (the pump sound is in WeaponIdle).
+	// grows a CSpaceRift.
 	void AddToPlayer(CBasePlayer* pPlayer) override;
 	void BotWeaponFrame(CBot* pBot, CBaseEntity* pEnemy) override;
 	bool BotFirePrimary(CBot* pBot, CBaseEntity* pEnemy) override;

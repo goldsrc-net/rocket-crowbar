@@ -81,12 +81,26 @@ public:
 	void Think() override;
 	static CStomp* StompCreate(const Vector& origin, const Vector& end, float speed);
 
+	// halflife-updated's, with its Think fix (the original has no save table)
+	bool Save(CSave& save) override;
+	bool Restore(CRestore& restore) override;
+	static TYPEDESCRIPTION m_SaveData[];
+
+	float m_flLastThinkTime;
+
 private:
 	// UNDONE: re-use this sprite list instead of creating new ones all the time
 	//	CSprite		*m_pSprites[ STOMP_SPRITE_COUNT ];
 };
 
 LINK_ENTITY_TO_CLASS(garg_stomp, CStomp);
+
+TYPEDESCRIPTION CStomp::m_SaveData[] =
+	{
+		DEFINE_FIELD(CStomp, m_flLastThinkTime, FIELD_TIME),
+};
+
+IMPLEMENT_SAVERESTORE(CStomp, CBaseEntity);
 
 CStomp* CStomp::StompCreate(const Vector& origin, const Vector& end, float speed)
 {
@@ -118,11 +132,20 @@ void CStomp::Spawn()
 
 #define STOMP_INTERVAL 0.025
 
-// orig 0x1947b0: steps by gpGlobals->frametime, as the SDK did (halflife-updated measures the time
-// between thinks to make it framerate independent)
+// orig 0x1947b0. halflife-updated's fix, kept: steps by the time between thinks, so the stomp's
+// reach and damage don't follow the server's frame rate (halflife #2876); the original, as SDK 2.1,
+// steps by gpGlobals->frametime
 void CStomp::Think()
 {
-	const float deltaTime = gpGlobals->frametime;
+	if (m_flLastThinkTime == 0)
+	{
+		m_flLastThinkTime = gpGlobals->time - gpGlobals->frametime;
+	}
+
+	//Use 1/4th the delta time to match the original behavior more closely
+	const float deltaTime = (gpGlobals->time - m_flLastThinkTime) / 4;
+
+	m_flLastThinkTime = gpGlobals->time;
 
 	TraceResult tr;
 

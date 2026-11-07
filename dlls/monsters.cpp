@@ -580,9 +580,10 @@ void CBaseMonster::MonsterThink()
 //=========================================================
 void CBaseMonster::MonsterUse(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE useType, float value)
 {
-	// orig 0x1c4e00: the original sets this (halflife-updated comments it out because it can
-	// resurrect a dying monster)
-	m_IdealMonsterState = MONSTERSTATE_ALERT;
+	// orig 0x1c4e00. halflife-updated's fix, kept: a triggered monster isn't set to alert, which
+	// resurrected one that was dying (halflife #3061); the original sets it
+	//Don't do this because it can resurrect dying monsters
+	//m_IdealMonsterState = MONSTERSTATE_ALERT;
 }
 
 //=========================================================
@@ -1229,9 +1230,20 @@ bool CBaseMonster::PopEnemy()
 //=========================================================
 // SetActivity
 //=========================================================
-// orig 0x1c6080: the original's order (halflife-updated sets m_Activity before SetYawSpeed)
+// orig 0x1c6080
 void CBaseMonster::SetActivity(Activity NewActivity)
 {
+	// halflife-updated's fix, kept (Steven, 2026-11-07; its #176): m_Activity is set before the
+	// sequence, so SetYawSpeed sees the new activity. Its own version saved oldActivity from
+	// NewActivity, a typo that made the walk/run test compare the new activity with itself; the
+	// old one is m_Activity, saved before it changes. The original sets m_Activity at the end.
+	const Activity oldActivity = m_Activity;
+
+	m_Activity = NewActivity; // Go ahead and set this so it doesn't keep trying when the anim is not present
+
+	// In case someone calls this with something other than the ideal activity
+	m_IdealActivity = m_Activity;
+
 	const int iSequence = LookupActivity(NewActivity);
 
 	// Set to the desired anim, or default anim if the desired is not present
@@ -1240,7 +1252,7 @@ void CBaseMonster::SetActivity(Activity NewActivity)
 		if (pev->sequence != iSequence || !m_fSequenceLoops)
 		{
 			// don't reset frame between walk and run
-			if (!(m_Activity == ACT_WALK || m_Activity == ACT_RUN) || !(NewActivity == ACT_WALK || NewActivity == ACT_RUN))
+			if (!(oldActivity == ACT_WALK || oldActivity == ACT_RUN) || !(NewActivity == ACT_WALK || NewActivity == ACT_RUN))
 				pev->frame = 0;
 		}
 
@@ -1254,11 +1266,6 @@ void CBaseMonster::SetActivity(Activity NewActivity)
 		ALERT(at_aiconsole, "%s has no sequence for act:%d\n", STRING(pev->classname), NewActivity);
 		pev->sequence = 0; // Set to the reset anim (if it's there)
 	}
-
-	m_Activity = NewActivity; // Go ahead and set this so it doesn't keep trying when the anim is not present
-
-	// In case someone calls this with something other than the ideal activity
-	m_IdealActivity = m_Activity;
 }
 
 //=========================================================
@@ -2223,9 +2230,9 @@ bool CBaseMonster::TaskIsRunning()
 // relationship between two types of monster.
 //=========================================================
 // orig 0x1c7e30, table iEnemy.925 read from the original's .data. Rocket Crowbar's PLAYER row makes
-// players nemeses of each other and allies of scientists and player allies. The HUMANPASSIVE row
-// is the SDK's (halflife-updated made scientists hate alien grunts and bullsquids instead of fear
-// them).
+// players nemeses of each other and allies of scientists and player allies. halflife-updated's fix,
+// kept, in the HUMANPASSIVE row: scientists hate alien grunts and bullsquids, since the SDK's (and
+// the original's) R_FR there does nothing and their fear behavior is coded for R_HT and R_DL.
 int CBaseMonster::IRelationship(CBaseEntity* pTarget)
 {
 	static int iEnemy[14][14] =
@@ -2233,7 +2240,7 @@ int CBaseMonster::IRelationship(CBaseEntity* pTarget)
 			/*NONE*/ {R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO},
 			/*MACHINE*/ {R_NO, R_NO, R_DL, R_DL, R_NO, R_DL, R_DL, R_DL, R_DL, R_DL, R_NO, R_DL, R_DL, R_DL},
 			/*PLAYER*/ {R_NO, R_DL, R_NM, R_AL, R_DL, R_DL, R_DL, R_DL, R_DL, R_DL, R_NO, R_AL, R_DL, R_DL},
-			/*HUMANPASSIVE*/ {R_NO, R_NO, R_AL, R_AL, R_HT, R_FR, R_NO, R_HT, R_DL, R_FR, R_NO, R_AL, R_NO, R_NO},
+			/*HUMANPASSIVE*/ {R_NO, R_NO, R_AL, R_AL, R_HT, R_HT, R_NO, R_HT, R_DL, R_DL, R_NO, R_AL, R_NO, R_NO},
 			/*HUMANMILITAR*/ {R_NO, R_NO, R_HT, R_DL, R_NO, R_HT, R_DL, R_DL, R_DL, R_DL, R_NO, R_HT, R_NO, R_NO},
 			/*ALIENMILITAR*/ {R_NO, R_DL, R_HT, R_DL, R_HT, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_DL, R_NO, R_NO},
 			/*ALIENPASSIVE*/ {R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO},
@@ -2570,9 +2577,22 @@ float CBaseMonster::ChangeYaw(int yawSpeed)
 	ideal = pev->ideal_yaw;
 	if (current != ideal)
 	{
-		// orig 0x1c8730: the original turns by frametime (halflife-updated measures the time since
-		// the last turn, m_flLastYawTime)
-		speed = (float)yawSpeed * gpGlobals->frametime * 10;
+		// orig 0x1c8730. halflife-updated's fix, kept: the turn step comes from the time since the
+		// last turn, not the server's frame time, so the turn rate doesn't follow the server's frame
+		// rate (halflife #2458); the original turns by frametime * 10
+		if (m_flLastYawTime == 0.0f)
+		{
+			m_flLastYawTime = gpGlobals->time - gpGlobals->frametime;
+		}
+
+		float delta = gpGlobals->time - m_flLastYawTime;
+		m_flLastYawTime = gpGlobals->time;
+
+		// Clamp delta like the engine does with frametime
+		if (delta > 0.25)
+			delta = 0.25;
+
+		speed = (float)yawSpeed * delta * 2;
 		move = ideal - current;
 
 		if (ideal > current)
@@ -3263,10 +3283,11 @@ bool CBaseMonster::FCanActiveIdle()
 	return false;
 }
 
-// orig 0x1c9e00
+// orig 0x1c9e00. halflife-updated's fix, kept: IsAllowedToSpeak() (no speaking while dying,
+// basemonster.h), where the original tests IsAlive()
 void CBaseMonster::PlaySentence(const char* pszSentence, float duration, float volume, float attenuation)
 {
-	if (pszSentence && IsAlive())
+	if (pszSentence && IsAllowedToSpeak())
 	{
 		if (pszSentence[0] == '!')
 			EMIT_SOUND_DYN(edict(), CHAN_VOICE, pszSentence, volume, attenuation, 0, PITCH_NORM);

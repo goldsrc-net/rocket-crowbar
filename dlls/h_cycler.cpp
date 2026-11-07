@@ -397,7 +397,7 @@ class CWreckage : public CBaseMonster
 	void Precache() override;
 	void Think() override;
 
-	int m_flStartTime; // the original keeps this time in an int (halflife-updated made it a float)
+	float m_flStartTime; // halflife-updated's fix, kept: a float, as the time it holds (the original's is an int; FIELD_TIME saves a float)
 };
 TYPEDESCRIPTION CWreckage::m_SaveData[] =
 	{

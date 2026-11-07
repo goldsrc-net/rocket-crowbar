@@ -101,7 +101,18 @@ float CFlyingMonster::ChangeYaw(int yawSpeed)
 				target = -90;
 		}
 
-		pev->angles.z = UTIL_Approach(target, pev->angles.z, 220.0 * gpGlobals->frametime);
+		// halflife-updated's fix, kept (Steven, 2026-11-07; its 343bbb2, halflife#2458): the roll steps by
+		// the time since the last call, not the server frame (the original's). Its later HL25 backport
+		// (95fdebe) made the step 220 * 220 * delta, a bug of its own; this is 343bbb2's 220 * delta.
+		if (m_flLastZYawTime == 0)
+			m_flLastZYawTime = gpGlobals->time - gpGlobals->frametime;
+
+		float delta = gpGlobals->time - m_flLastZYawTime;
+		m_flLastZYawTime = gpGlobals->time;
+		if (delta > 0.25)
+			delta = 0.25;
+
+		pev->angles.z = UTIL_Approach(target, pev->angles.z, 220.0 * delta);
 	}
 	return CBaseMonster::ChangeYaw(yawSpeed);
 }

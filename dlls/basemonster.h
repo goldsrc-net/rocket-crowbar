@@ -192,10 +192,12 @@ public:
 	virtual void ScheduleChange() {}
 	// virtual bool CanPlaySequence() { return ((m_pCine == NULL) && (m_MonsterState == MONSTERSTATE_NONE || m_MonsterState == MONSTERSTATE_IDLE || m_IdealMonsterState == MONSTERSTATE_IDLE)); }
 	virtual bool CanPlaySequence(bool fDisregardState, int interruptLevel);
-	// The original's sentence code lives in CBaseMonster (halflife-updated moved it to CBaseToggle and
-	// stopped dying monsters from speaking); these overrides are the original's bodies.
-	virtual bool CanPlaySentence(bool fDisregardState) { return IsAlive(); } // orig 0x1cab20
-	bool IsAllowedToSpeak() override { return IsAlive(); }
+	// The original's sentence code lives in CBaseMonster (halflife-updated moved it to CBaseToggle);
+	// these overrides are the original's bodies, with halflife-updated's fix, kept: a dying monster
+	// doesn't speak (scripted sentences included), unless a script is playing its death (its #171,
+	// #180). The original's tests are IsAlive() alone.
+	virtual bool CanPlaySentence(bool fDisregardState) { return IsAllowedToSpeak(); } // orig 0x1cab20
+	bool IsAllowedToSpeak() override { return IsAlive() && (m_MonsterState == MONSTERSTATE_SCRIPT || pev->deadflag == DEAD_NO); }
 	void PlaySentence(const char* pszSentence, float duration, float volume, float attenuation) override;
 	void PlayScriptedSentence(const char* pszSentence, float duration, float volume, float attenuation, bool bConcurrent, CBaseEntity* pListener) override;
 	void SentenceStop() override;

@@ -78,9 +78,10 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
 
 RC 1.9's stock-named functions have the original's behavior back wherever halflife-updated
 changed the game's design or balance, or added a feature; halflife-updated's evident bug fixes
-stay (audit of 2026-11-07, `reference/audit/r1.md`-`r6.md`, one row per function; the original
-decides, since RC 1.9 was built on SDK 2.1 and may have changed a stock body; the fix or design
-call per revert is in mod-rc2's `reference/audit/FIXES.md`, made the same way in both projects).
+stay (audit of 2026-11-07, `reference/audit/r1.md`-`r6.md`, one row per function, and the review
+of wave 2's packages the same day; the original decides, since RC 1.9 was built on SDK 2.1 and may
+have changed a stock body; the fix or design call per revert is in mod-rc2's
+`reference/audit/FIXES.md`, made the same way in both projects).
 What halflife-updated changed there and we keep, besides restyling and the crash guards listed
 under "Crashes in the original":
 
@@ -106,7 +107,7 @@ under "Crashes in the original":
     `momentary_rot_button` sends its target the value it is heading for (Use).
   - `func_breakable`'s "explosion" 1 is directed, it can't break twice, and its break volume uses
     `fabs` (`dlls/func_break.cpp` KeyValue, Die). Its directed gibs still fly along the attack
-    direction, as the original (FIXES.md, unclear).
+    direction, as the original (Steven, 2026-11-07).
   - `fabs` where SDK 2.1 called the int `abs()` on a float: the fan's pitch, volume and full-speed
     test (`dlls/bmodels.cpp` RampPitchVol, SpinUp), the roach's food height (`dlls/roach.cpp`
     MonsterThink), the train's pitch (`dlls/plats.cpp` UpdateSound, which keeps RC's 0-255 clamp).
@@ -126,7 +127,48 @@ under "Crashes in the original":
     on every path; ItemPostFrame runs no weapon frame on the frame a tank is taken; autoaim off
     resets the crosshair angle (GetAutoaimVector, still on `sv_aim` alone); ammo for an
     exhaustible weapon gives the weapon too (GiveAmmo, with RC's own count test kept), through the
-    pickup flow below.
+    pickup flow below; the death animation gets 4 seconds, not 120 think frames, and a grounded
+    corpse stops moving (PlayerDeathThink); health is sent held to a short, and 0-1 as 1
+    (UpdateClientData); a trigger_camera's view comes back after a save load (PreThink).
+  - From the wave-2 review (FIXES.md's mod-rockcrowbar wave 2 rows):
+  - Weapons (`dlls/weapons.cpp`): a held weapon's FallThink stops (FallThink, AttachToPlayer), a
+    respawning weapon tries again at FlWeaponTryRespawn's time, not that time added to now
+    (AttemptToMaterialize), secondary ammo and CanDeploy count as useable (IsUseable), the
+    secondary ammo index is the weapon's own (SecondaryAmmoIndex), a weapon whose primary ammo
+    was taken isn't left behind (ExtractAmmo), and an emptied weapon retires on a think 0.01 s on
+    (RetireWeapon, DoRetireWeapon).
+  - Grenades (`dlls/ggrenade.cpp`): the blast source is 1 unit lower against RadiusDamage's + 1
+    (Explode, with RC's pull-out distance), and the bounce and tumble sequences get their timing
+    and frame reset (BounceTouch, ShootTimed).
+  - Weapon animation and sound: the hand grenade forgets a primed throw when holstered
+    (`dlls/handgrenade.cpp` Holster); the snark's and satchel's first idle waits 1.7 s and 2 s
+    after a deploy, the RPG's fidget 6.1 s (`dlls/squeakgrenade.cpp`, `dlls/satchel.cpp` Deploy,
+    `dlls/rpg.cpp` WeaponIdle); the shotgun pumps after its last shell and while the trigger is
+    held, from its own ItemPostFrame (`dlls/shotgun.cpp`).
+  - Monsters (`dlls/monsters.cpp`): a triggered monster isn't set to alert (MonsterUse),
+    SetActivity sets the activity first (oldActivity is m_Activity), turns follow the time since
+    the last turn (ChangeYaw; the ichthyosaur's pitch and roll and the flying monsters' roll too,
+    `dlls/ichthyosaur.cpp`, `dlls/flyingmonster.cpp`), and scientists hate alien grunts and
+    bullsquids (IRelationship's HUMANPASSIVE row; RC's PLAYER row stays). A dying monster speaks
+    no sentence, scripted ones included, unless a script plays its death (`dlls/basemonster.h`,
+    PlaySentence in `dlls/monsters.cpp` and `dlls/talkmonster.cpp`).
+  - Talking monsters (`dlls/talkmonster.cpp`): the player they stare at, face or watch comes from
+    UTIL_GetLocalPlayer, and with none the stare fails (RunTask, GetScheduleOfType); a push
+    doesn't override a schedule that won't take it (Touch); a dying friend's schedule isn't reset
+    (TakeDamage); a monster about to start a script can't be made to follow (CanFollow).
+  - Other monsters: the houndeye's eyes use the model's 3 skins (`dlls/houndeye.cpp`); a grunt
+    drops its gun once and goes idle after its last kill (`dlls/hgrunt.cpp` HandleAnimEvent,
+    tlGruntVictoryDance); a controller out of combat stops facing its last enemy spot
+    (`dlls/controller.cpp` RunTask); the gargantua's stomp steps by the time between thinks and
+    saves it (`dlls/gargantua.cpp` CStomp); alien slave beams go at a level change
+    (`dlls/islave.cpp`); the zombie's idle and attack pitches are 95-104 (`dlls/zombie.cpp`); a
+    dead ichthyosaur floats in its own schedule and stays belly up across a load
+    (`dlls/ichthyosaur.cpp`, with RC's corpse fade); the osprey smokes from the engine hit and
+    holds still with no target instead of flying to a NaN origin (`dlls/osprey.cpp` TraceAttack,
+    Flight); cycler_wreckage keeps its start time in a float (`dlls/h_cycler.cpp`).
+  - A dead player takes no healthkit (`dlls/healthkit.cpp` MyTouch, rc.ini amount kept); a
+    disconnecting player lets go of a func_tank (`dlls/client.cpp` ClientDisconnect); a % in a
+    new name becomes a space (ClientUserInfoChanged, RC's message and log kept).
 
 - **Players keep the engine's `FL_PROXY` and `FL_FAKECLIENT` flags** (`dlls/player.cpp` Spawn). The
   original sets `pev->flags` to `FL_CLIENT`, so HLTV proxies and bots stay marked as such.
@@ -170,9 +212,11 @@ Decided by Steven, 2026-11-07 (`reference/audit/r7.md`):
   correction** (`dlls/func_tank.cpp` AdjustAnglesForBarrel). The original takes the square root of
   a negative there and aims with NaN angles. Kept as a guard.
 
-Kept as the original until Steven decides (FIXES.md "Unclear"): `UpdatePlayerSound`'s
-`UTIL_MakeVectors`, the roach's 1-unit height, `LinearMoveDone`'s snap, and `func_breakable`'s gib
-direction.
+Kept as the original until Steven decides (FIXES.md, the wave 2 "Unclear, for Steven" list):
+`PlayEmptySound`'s unpredicted sound, `CBasePlayer::Killed` without the weapon holster and the
+model index reset, the scientist's sound mask without scents and its fixed model name,
+`DeathNotice` without the HLTV event, and teamplay without TeamNames, the team-change ScoreInfo
+and the TeamInfo resend.
 
 ## Weapons
 
@@ -268,9 +312,9 @@ each, and the audit rows in `reference/audit/` have the reasoning):
   next message start is an engine error.
 - **Monster guards** (each marked VERIFY): the bullsquid's spit tests for an enemy
   (`dlls/bullsquid.cpp` HandleAnimEvent), `CHGrunt::CheckMeleeAttack1` fails with no enemy
-  (`dlls/hgrunt.cpp`), a talking monster's stare skips the distance test with no player 1 and
-  `CanFollow` checks `m_pCine` just after a script ends (`dlls/talkmonster.cpp` RunTask,
-  CanFollow), a hornet without an owner does no damage (`dlls/hornet.cpp` DieTouch), and the
+  (`dlls/hgrunt.cpp`), a talking monster's stare fails with no player 1 (halflife-updated's fix,
+  above) and `CanFollow` checks `m_pCine` just after a script ends (`dlls/talkmonster.cpp`
+  RunTask, CanFollow), a hornet without an owner does no damage (`dlls/hornet.cpp` DieTouch), and the
   osprey's flight checks its path corner (`dlls/osprey.cpp` FlyThink).
 - **Player inventory** (`dlls/player.cpp`): `RemovePlayerItem` also clears the last item when the
   active one goes, where the original left it pointing at the removed item; `SwitchWeapon` takes a

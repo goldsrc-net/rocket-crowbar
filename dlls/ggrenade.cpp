@@ -113,8 +113,13 @@ void CGrenade::Explode(TraceResult* pTrace, int bitsDamageType)
 
 	pev->owner = NULL; // can't traceline attack owner if this is set
 
-	// the 2001 SDK's RadiusDamage, from pev->origin (halflife-updated lowers it 1 unit first)
-	RadiusDamage(pev, pevOwner, pev->dmg, CLASS_NONE, bitsDamageType);
+	// halflife-updated's fix, kept: the source is lowered 1 unit to counteract the + 1 in
+	// RadiusDamage, so a grenade on the underside of a brush doesn't hurt what is on the other side
+	// (halflife #3244); the original, as SDK 2.1, used pev->origin
+	Vector origin = pev->origin;
+	origin.z -= 1;
+
+	RadiusDamage(origin, pev, pevOwner, pev->dmg, CLASS_NONE, bitsDamageType);
 
 	pev->owner = pevOwner->pContainingEntity;
 
@@ -322,7 +327,10 @@ void CGrenade::BounceTouch(CBaseEntity* pOther)
 		// add a bit of static friction
 		pev->velocity = pev->velocity * 0.8;
 
-		pev->sequence = RANDOM_LONG(1, 1); // the original doesn't ResetSequenceInfo here
+		pev->sequence = RANDOM_LONG(1, 1);
+		// halflife-updated's fix, kept: the new sequence gets its timing set up (the original
+		// doesn't)
+		ResetSequenceInfo();
 	}
 	else
 	{
@@ -334,7 +342,10 @@ void CGrenade::BounceTouch(CBaseEntity* pOther)
 		pev->framerate = 1;
 	else if (pev->framerate < 0.5)
 	{
-		pev->framerate = 0; // the original leaves pev->frame
+		// halflife-updated's fix, kept: the frame goes back to 0 too, so the grenade doesn't freeze
+		// mid-tumble (the original leaves pev->frame)
+		pev->framerate = 0;
+		pev->frame = 0;
 	}
 }
 
@@ -477,8 +488,7 @@ CGrenade* CGrenade::ShootTimed(entvars_t* pevOwner, Vector vecStart, Vector vecV
 		pGrenade->pev->velocity = Vector(0, 0, 0);
 	}
 
-	// orig 0x19dc60: in the original's order, without ResetSequenceInfo, and with no driver
-	// (ShootDETimed sets one after)
+	// orig 0x19dc60: in the original's order, and with no driver (ShootDETimed sets one after)
 	pGrenade->pev->sequence = RANDOM_LONG(3, 6);
 	pGrenade->pev->framerate = 1.0;
 	pGrenade->pev->dmg_inflictor = NULL;
@@ -490,6 +500,9 @@ CGrenade* CGrenade::ShootTimed(entvars_t* pevOwner, Vector vecStart, Vector vecV
 	pGrenade->pev->friction = 0.8;
 
 	SET_MODEL(ENT(pGrenade->pev), "models/w_grenade.mdl");
+	// halflife-updated's fix, kept: the tumble sequence's timing is set up once the model is there
+	// (the original doesn't)
+	pGrenade->ResetSequenceInfo();
 	pGrenade->pev->dmg = 100;
 
 	return pGrenade;

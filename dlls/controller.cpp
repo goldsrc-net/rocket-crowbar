@@ -670,9 +670,13 @@ void CController::RunTask(Task_t* pTask)
 	case TASK_WAIT:
 	case TASK_WAIT_FACE_ENEMY:
 	case TASK_WAIT_PVS:
-		// orig 0x10b590: faces m_vecEnemyLKP with or without an enemy (halflife-updated tests m_hEnemy)
-		MakeIdealYaw(m_vecEnemyLKP);
-		ChangeYaw(pev->yaw_speed);
+		// orig 0x10b590. halflife-updated's fix, kept: only with an enemy, so a controller out of
+		// combat doesn't keep turning to a stale enemy position; the original faces it either way
+		if (m_hEnemy != 0)
+		{
+			MakeIdealYaw(m_vecEnemyLKP);
+			ChangeYaw(pev->yaw_speed);
+		}
 
 		if (m_fSequenceFinished)
 		{

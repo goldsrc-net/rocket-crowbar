@@ -616,7 +616,9 @@ bool CSatchel::Deploy()
 	}
 
 	m_pPlayer->m_flNextAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("SATCHEL", "DeployNextFire", 1.0);
-	m_flTimeWeaponIdle = gpGlobals->time + RANDOM_FLOAT(10, 15);
+	// halflife-updated's fix, kept: the first idle comes 2 s after the deploy (halflife #2495); the
+	// original waits 10-15 s
+	m_flTimeWeaponIdle = gpGlobals->time + 2;
 	return true;
 }
 

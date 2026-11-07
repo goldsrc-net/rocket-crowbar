@@ -1097,8 +1097,10 @@ void CShotgun::PrimaryAttack()
 		// HEV suit - indicate out of ammo condition
 		m_pPlayer->SetSuitUpdate("!HEV_AMO0", false, 0);
 
-	if (m_iClip != 0)
-		m_flPumpTime = gpGlobals->time + 0.5;
+	// halflife-updated's fix, kept: the last shell pumps too (halflife #617); the original pumps only
+	// with shells left
+	//if (m_iClip != 0)
+	m_flPumpTime = gpGlobals->time + 0.5;
 
 	m_flNextPrimaryAttack = PREFS_KeyLoopUpFloat("SHOTGUN", "PrimaryRefire", 0.75) * m_pPlayer->m_fCurseRefireScale + gpGlobals->time;
 	m_flNextSecondaryAttack = PREFS_KeyLoopUpFloat("SHOTGUN", "PrimaryRefire", 0.75) * m_pPlayer->m_fCurseRefireScale + gpGlobals->time;
@@ -1363,20 +1365,26 @@ void CShotgun::Reload()
 }
 
 
-// orig 0x2118f0. The pump sound is here, as in RC 1.9's SDK (halflife-updated moved it to
-// ItemPostFrame, which plays it while the trigger is held too).
-void CShotgun::WeaponIdle()
+// halflife-updated's fix, kept: the pump sound plays here, so it plays while the trigger is held
+// too (halflife #617). The original plays it in WeaponIdle, as SDK 2.1, and has no ItemPostFrame.
+void CShotgun::ItemPostFrame()
 {
-	ResetEmptySound();
-
-	m_pPlayer->GetAutoaimVector(AUTOAIM_5DEGREES);
-
 	if (0 != m_flPumpTime && m_flPumpTime < gpGlobals->time)
 	{
 		// play pumping sound
 		EMIT_SOUND_DYN(ENT(m_pPlayer->pev), CHAN_ITEM, "weapons/scock1.wav", 1, ATTN_NORM, 0, 95 + RANDOM_LONG(0, 0x1f));
 		m_flPumpTime = 0;
 	}
+
+	CBasePlayerWeapon::ItemPostFrame();
+}
+
+// orig 0x2118f0
+void CShotgun::WeaponIdle()
+{
+	ResetEmptySound();
+
+	m_pPlayer->GetAutoaimVector(AUTOAIM_5DEGREES);
 
 	if (m_flTimeWeaponIdle < gpGlobals->time)
 	{

@@ -1541,7 +1541,9 @@ void CRpg::WeaponIdle()
 			else
 				iAnim = RPG_FIDGET;
 
-			m_flTimeWeaponIdle = gpGlobals->time + 3.0;
+			// halflife-updated's fix, kept: 6.1 s, so the fidget isn't cut short (halflife #2495); the
+			// original's is 3
+			m_flTimeWeaponIdle = gpGlobals->time + 6.1;
 		}
 		else
 		{

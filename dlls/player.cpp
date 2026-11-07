@@ -1412,16 +1412,24 @@ void CBasePlayer::PlayerDeathThink()
 	{
 		StudioFrameAdvance();
 
-		// The original counts think frames (its m_iRespawnFrames); halflife-updated counts 4 seconds.
-		m_flRespawnTimer += 1;
-		if (m_flRespawnTimer < 120) // 120 frames at 30 fps -- animations should be no longer than this
+		// halflife-updated's fix, kept: 4 seconds, where the original counts 120 think frames (its
+		// m_iRespawnFrames), which depend on the client's command rate
+		m_flRespawnTimer += gpGlobals->frametime;
+		if (m_flRespawnTimer < 4.0f) // 120 frames at 30 fps -- animations should be no longer than this
 			return;
 	}
 
-	// halflife-updated also copies the body to the body queue here in multiplayer and stops a
-	// grounded corpse (MOVETYPE_NONE); the original does neither.
+	// halflife-updated also copies the body to the body queue here in multiplayer (HL25's corpses);
+	// the original doesn't.
 	if (pev->deadflag == DEAD_DYING)
 		pev->deadflag = DEAD_DEAD;
+
+	// halflife-updated's fix, kept (the original doesn't): a grounded corpse stops moving, so it
+	// doesn't go to a player's head when he walks over it
+	// once we're done animating our death and we're on the ground, we want to set movetype to None so our dead body won't do collisions and stuff anymore
+	// this prevents a bug where the dead body would go to a player's head if he walked over it while the dead player was clicking their button to respawn
+	if (pev->movetype != MOVETYPE_NONE && FBitSet(pev->flags, FL_ONGROUND))
+		pev->movetype = MOVETYPE_NONE;
 
 	pev->frame = 255;
 	StopAnimation();
@@ -2559,6 +2567,20 @@ void CBasePlayer::PreThink()
 		m_iHideHUD &= ~HIDEHUD_FLASHLIGHT;
 	else
 		m_iHideHUD |= HIDEHUD_FLASHLIGHT;
+
+	// halflife-updated's fix, kept: the view entity a trigger_camera set comes back after a save
+	// game load (halflife #3031; Restore sets the flag). Singleplayer only; the original has none.
+	if (m_bResetViewEntity)
+	{
+		m_bResetViewEntity = false;
+
+		CBaseEntity* viewEntity = m_hViewEntity;
+
+		if (viewEntity)
+		{
+			SET_VIEW(edict(), viewEntity->edict());
+		}
+	}
 
 	CheckTimeBasedDamage();
 
@@ -5116,7 +5138,12 @@ void CBasePlayer::UpdateClientData()
 
 	if (pev->health != m_iClientHealth)
 	{
-		int iHealth = pev->health > 0 ? (int)pev->health : 0; // the original: no upper clamp, no 0-1 to 1
+		// halflife-updated's fix, kept: held to the short the message carries (halflife #2149), and
+		// a health between 0 and 1 is sent as 1, so a live player's HUD doesn't show 0. The original
+		// only stops negative values.
+		int iHealth = std::clamp<float>(pev->health, 0.f, (float)(std::numeric_limits<short>::max())); // make sure that no negative health values are sent
+		if (pev->health > 0.0f && pev->health <= 1.0f)
+			iHealth = 1;
 
 		// send "health" update message
 		MESSAGE_BEGIN(MSG_ONE, gmsgHealth, NULL, pev);

@@ -69,7 +69,7 @@ bullsquid.cpp CBullsquid::              spit reads a NULL enemy (VERIFY)        
 hgrunt.cpp CHGrunt::CheckMeleeAttack1   no enemy: Classify() through an uninitialized         guarded
   (0x1ac300)                            pointer (VERIFY)
 talkmonster.cpp CTalkMonster::RunTask   STARE with no edict-1 player reads a NULL player      guarded
-  (0x21e5e0)                            (VERIFY)
+  (0x21e5e0)                            (halflife-updated's fix: the task fails)
 talkmonster.cpp CTalkMonster::CanFollow m_pCine is NULL just after a script ends (VERIFY)     guarded
   (0x2203f0)
 hornet.cpp CHornet::DieTouch (0x1b0710) null attacker when the owner is gone (VERIFY)         guarded
@@ -168,7 +168,10 @@ func_tank.cpp CFuncTank::               target nearer than the barrel offset: sq
 
 Not folded into the tables above yet: each wave-2 dossier's section 8 lists the bugs found in
 its files (`reference/dossiers/w2-*.md`). They get merged here, with the crash sweep, when wave 2
-is complete.
+is complete. Some of those are no longer kept: where halflife-updated had fixed one (the weapon
+respawn time, FallThink on a held weapon, the grenade sequence timing, the osprey's NaN flight and
+smoke puffs, CWreckage's int time, the zombie's unused pitch), its fix is back; mod-rc2's
+`reference/audit/FIXES.md` (mod-rockcrowbar wave 2) lists each.
 
 ## Dead code
 

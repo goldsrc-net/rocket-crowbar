@@ -33,7 +33,9 @@
 #define HOUNDEYE_MAX_ATTACK_RADIUS 384
 #define HOUNDEYE_SQUAD_BONUS (float)1.1
 
-#define HOUNDEYE_EYE_FRAMES 4 // how many different switchable maps for the eye (the original's 4; halflife-updated uses 3)
+// halflife-updated's fix, kept: houndeye.mdl has 3 skin families, so the original's (and SDK 2.1's)
+// 4 picked a skin that isn't there and the eyes didn't blink or close right
+#define HOUNDEYE_EYE_FRAMES 3 // how many different switchable maps for the eye
 
 #define HOUNDEYE_SOUND_STARTLE_VOLUME 128 // how loud a sound has to be to badly scare a sleeping houndeye
 

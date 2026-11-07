@@ -459,8 +459,13 @@ void CBasePlayerItem::FallThink()
 
 		Materialize();
 	}
-	// halflife-updated stops this think once a player holds the weapon (and AttachToPlayer clears
-	// it); the original keeps it running (orig 0x239e50).
+	// orig 0x239e50. halflife-updated's fix, kept: the think stops once a player holds the weapon
+	// (AttachToPlayer clears it too), so it can't run while attached and give the weapon twice; the
+	// original keeps it running
+	else if (m_pPlayer != NULL)
+	{
+		SetThink(NULL);
+	}
 
 	// This weapon is an egon, it has no owner and we're in busting mode, so just remove it when it hits the ground
 	if (IsBustingGame() && FNullEnt(pev->owner))
@@ -506,9 +511,10 @@ void CBasePlayerItem::AttemptToMaterialize()
 		return;
 	}
 
-	// Original bug, kept (orig 0x239fc0): FlWeaponTryRespawn returns an absolute time and this
-	// adds the current time again, which puts the next try far off. halflife-updated sets it as is.
-	pev->nextthink = gpGlobals->time + time;
+	// orig 0x239fc0. halflife-updated's fix, kept: FlWeaponTryRespawn returns an absolute time, so
+	// it is the next think as it is; the original added the current time again, which put the next
+	// try far off
+	pev->nextthink = time;
 }
 
 //=========================================================
@@ -636,7 +642,8 @@ void CBasePlayerItem::AttachToPlayer(CBasePlayer* pPlayer)
 	pev->model = iStringNull;
 	pev->owner = pPlayer->edict();
 	pev->nextthink = gpGlobals->time + .1;
-	SetTouch(NULL); // the original (orig 0x23a730) leaves the think; see FallThink
+	SetTouch(NULL);
+	SetThink(NULL); // orig 0x23a730. halflife-updated's fix, kept: FallThink can't run while attached to the player (the original leaves it)
 }
 
 // CALLED THROUGH the newly-touched weapon's instance. The existing player weapon is pOriginal
@@ -818,19 +825,44 @@ bool CBasePlayerWeapon::AddSecondaryAmmo(int iCount, char* szName, int iMax)
 // (does it have ammo loaded? do I have any ammo for the
 // weapon?, etc)
 //=========================================================
-// orig 0x23ac50, the 2001 SDK's: only the clip and the primary ammo count (halflife-updated also
-// counts secondary ammo and falls back to CanDeploy).
+// orig 0x23ac50. halflife-updated's fix, kept: a weapon with secondary ammo left, or one
+// CanDeploy() allows, is useable too, so the MP5 isn't switched away from with grenades left
+// (halflife #3001) and the auto-switch picks a weapon it can deploy (halflife-updated #160). The
+// original, as SDK 2.1, counts only the clip and the primary ammo.
 bool CBasePlayerWeapon::IsUseable()
 {
-	// iMaxAmmo1 is tested first so a weapon without ammo (index -1) never reads m_rgAmmo[-1]; the
-	// result is the same
-	if (m_iClip <= 0 && iMaxAmmo1() != WEAPON_NOCLIP && m_pPlayer->m_rgAmmo[PrimaryAmmoIndex()] <= 0)
+	if (m_iClip > 0)
 	{
-		// clip is empty (or nonexistant) and the player has no more ammo of this type.
-		return false;
+		return true;
 	}
 
-	return true;
+	//Player has unlimited ammo for this weapon or does not use magazines
+	if (iMaxAmmo1() == WEAPON_NOCLIP)
+	{
+		return true;
+	}
+
+	if (m_pPlayer->m_rgAmmo[PrimaryAmmoIndex()] > 0)
+	{
+		return true;
+	}
+
+	if (pszAmmo2())
+	{
+		//Player has unlimited ammo for this weapon or does not use magazines
+		if (iMaxAmmo2() == WEAPON_NOCLIP)
+		{
+			return true;
+		}
+
+		if (m_pPlayer->m_rgAmmo[SecondaryAmmoIndex()] > 0)
+		{
+			return true;
+		}
+	}
+
+	// clip is empty (or nonexistant) and the player has no more ammo of this type.
+	return CanDeploy();
 }
 
 bool CBasePlayerWeapon::DefaultDeploy(const char* szViewModel, const char* szWeaponModel, int iAnim, const char* szAnimExt, int body)
@@ -871,10 +903,12 @@ int CBasePlayerWeapon::PrimaryAmmoIndex()
 
 //=========================================================
 //=========================================================
-// orig 0x23af90: -1, as in the 2001 SDK; the mp5 overrides it
+// orig 0x23af90. halflife-updated's fix, kept: the secondary ammo type the weapon was given, so a
+// weapon with secondary ammo that doesn't override this reads its own count (halflife #3029); the
+// original returns -1, as SDK 2.1, and the mp5 overrides it with the same index
 int CBasePlayerWeapon::SecondaryAmmoIndex()
 {
-	return -1;
+	return m_iSecondaryAmmoType;
 }
 
 void CBasePlayerWeapon::Holster()
@@ -971,8 +1005,10 @@ bool CBasePlayerWeapon::ExtractAmmo(CBasePlayerWeapon* pWeapon)
 
 	if (pszAmmo2() != NULL)
 	{
-		// orig 0x23b250: the secondary result replaces the primary one
-		iReturn = pWeapon->AddSecondaryAmmo(0, (char*)pszAmmo2(), iMaxAmmo2());
+		// orig 0x23b250. halflife-updated's fix, kept: the secondary result adds to the primary one,
+		// so a weapon whose primary ammo was taken isn't left behind (halflife #3027); the original
+		// replaced it
+		iReturn |= pWeapon->AddSecondaryAmmo(0, (char*)pszAmmo2(), iMaxAmmo2());
 	}
 
 	return iReturn;
@@ -1001,15 +1037,13 @@ bool CBasePlayerWeapon::ExtractClipAmmo(CBasePlayerWeapon* pWeapon)
 //=========================================================
 // RetireWeapon - no more ammo for this gun, put it away.
 //=========================================================
-// orig 0x23b370: retire at once, as the 2001 SDK did. halflife-updated defers this to
-// DoRetireWeapon on a think and holsters when there is nothing to switch to.
+// orig 0x23b370. halflife-updated's fix, kept: the switch waits for a think 0.01 s on
+// (DoRetireWeapon), which also unequips the weapon when there is nothing to switch to, so the
+// auto-switch plays the right animation (halflife-updated #160); the original retires at once
 void CBasePlayerWeapon::RetireWeapon()
 {
-	// first, no viewmodel at all.
-	m_pPlayer->pev->viewmodel = iStringNull;
-	m_pPlayer->pev->weaponmodel = iStringNull;
-
-	g_pGameRules->GetNextBestWeapon(m_pPlayer, this);
+	SetThink(&CBasePlayerWeapon::CallDoRetireWeapon);
+	pev->nextthink = gpGlobals->time + 0.01f;
 }
 
 void CBasePlayerWeapon::DoRetireWeapon()
