@@ -44,6 +44,13 @@ for i in range(ln // 64):
     open(p, "wb").write(b[o:o + s])
 EOF
 
+# Replace a library only when it changed, through a new file renamed into place: a running
+# server keeps its mapping of the old one (cp over a mapped .so truncates it under the server).
+put_lib() { # <src> <dst>
+	cmp -s "$1" "$2" 2>/dev/null && return 0
+	cp "$1" "$2.new" && mv -f "$2.new" "$2"
+}
+
 server_gamedir() { # <dir> <gamedll path>
 	local d="$1"
 	if [ ! -d "$d" ]; then
@@ -57,7 +64,7 @@ server_gamedir() { # <dir> <gamedll path>
 
 # server 1: the original
 server_gamedir "$RIG/rockcrowbar" "dlls/rc_i386.so"
-cp "$ORIG" "$RIG/rockcrowbar/dlls/rc_i386.so"
+put_lib "$ORIG" "$RIG/rockcrowbar/dlls/rc_i386.so"
 
 # server 2: ours, in a folder of links to the rig with its own rockcrowbar/
 if [ ! -d "$RIG2" ]; then
@@ -69,7 +76,7 @@ if [ ! -d "$RIG2" ]; then
 	done
 fi
 server_gamedir "$RIG2/rockcrowbar" "dlls/hl.so"
-cp "$OURS" "$RIG2/rockcrowbar/dlls/hl.so"
+put_lib "$OURS" "$RIG2/rockcrowbar/dlls/hl.so"
 
 # client: the v19 content (pak and all; the Steam client reads paks), with the player's valve binds
 if [ ! -d "$CLIENT/rockcrowbar" ]; then
