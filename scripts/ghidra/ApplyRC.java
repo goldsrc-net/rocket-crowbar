@@ -390,10 +390,19 @@ public class ApplyRC extends GhidraScript {
             currentProgram.getSymbolTable().getGlobalSymbols("g_engfuncs").toArray(new ghidra.program.model.symbol.Symbol[0]);
         if (syms.length == 0) return;
         Address base = syms[0].getAddress();
+        // Stop at the next real symbol: the original's table is the 2001 one (560 bytes, 140
+        // entries) while halflife-updated's eiface.h declares 157; past the end sit gpGlobals & co.
+        Address end = null;
+        for (ghidra.program.model.symbol.Symbol nx : currentProgram.getSymbolTable().getSymbolIterator(base.add(4), true)) {
+            String nm = nx.getName();
+            if (nm.startsWith("DAT_") || nm.startsWith("_DAT_") || nm.startsWith("g_engfuncs")) continue;
+            end = nx.getAddress(); break;
+        }
         DataType fp = dtm.getPointer(named("engine_fn"));
         int n = 0;
         for (DataTypeComponent c : ((Structure) ef).getDefinedComponents()) {
             Address a = base.add(c.getOffset());
+            if (end != null && a.compareTo(end) >= 0) break;
             try {
                 clearListing(a, a.add(3));
                 createData(a, fp);
