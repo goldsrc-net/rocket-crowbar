@@ -20,25 +20,45 @@ target_sources(hl PRIVATE
 	animating.cpp
 	animation.cpp
 	apache.cpp
+	auth_stuff.cpp
 	barnacle.cpp
 	barney.cpp
 	bigmomma.cpp
 	bloater.cpp
 	bmodels.cpp
+	bot_prefs.cpp
 	bullsquid.cpp
 	buttons.cpp
 	cbase.cpp
 	client.cpp
 	combat.cpp
 	controller.cpp
+	corpse.cpp
 	crossbow.cpp
 	crowbar.cpp
+	curses.cpp
+	deathballs.cpp
 	defaultai.cpp
 	doors.cpp
+	driveagrunt.cpp
+	driveapache.cpp
+	driveaslave.cpp
+	driveassassin.cpp
+	drivebm.cpp
+	drivebullsquid.cpp
+	drivechum.cpp
+	drivecontroll.cpp
 	driveent.cpp
+	drivegarg.cpp
+	drivehc.cpp
+	drivehoundeye.cpp
+	driveicky.cpp
+	drivepanth.cpp
+	driveturret.cpp
 	effects.cpp
 	egon.cpp
 	explode.cpp
+	flag.cpp
 	flyingmonster.cpp
 	func_break.cpp
 	func_tank.cpp
@@ -48,7 +68,13 @@ target_sources(hl PRIVATE
 	gauss.cpp
 	genericmonster.cpp
 	ggrenade.cpp
+	glock.cpp
 	gman.cpp
+	h_ai.cpp
+	h_battery.cpp
+	h_cine.cpp
+	h_cycler.cpp
+	h_export.cpp
 	handgrenade.cpp
 	hassassin.cpp
 	headcrab.cpp
@@ -57,17 +83,14 @@ target_sources(hl PRIVATE
 	hornet.cpp
 	hornetgun.cpp
 	houndeye.cpp
-	h_ai.cpp
-	h_battery.cpp
-	h_cine.cpp
-	h_cycler.cpp
-	h_export.cpp
 	ichthyosaur.cpp
 	islave.cpp
 	items.cpp
 	leech.cpp
+	levelcustom.cpp
 	lights.cpp
 	maprules.cpp
+	mdhash.cpp
 	monstermaker.cpp
 	monsters.cpp
 	monsterstate.cpp
@@ -75,6 +98,7 @@ target_sources(hl PRIVATE
 	mp5.cpp
 	multiplay_gamerules.cpp
 	nihilanth.cpp
+	nm.cpp
 	nodes.cpp
 	observer.cpp
 	osprey.cpp
@@ -82,6 +106,9 @@ target_sources(hl PRIVATE
 	plane.cpp
 	plats.cpp
 	player.cpp
+	pointexplo.cpp
+	Preff.cpp
+	pregame.cpp
 	python.cpp
 	rat.cpp
 	roach.cpp
@@ -109,10 +136,12 @@ target_sources(hl PRIVATE
 	UserMessages.cpp
 	util.cpp
 	vehicle.cpp
+	vote_kick.cpp
+	vote_map.cpp
 	weapons.cpp
 	weapons_shared.cpp
+	wog.cpp
 	world.cpp
-	glock.cpp
 	xen.cpp
 	zombie.cpp
 

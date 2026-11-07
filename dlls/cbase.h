@@ -378,6 +378,8 @@ public:
 	virtual bool FVisible(CBaseEntity* pEntity);
 	virtual bool FVisible(const Vector& vecOrigin);
 
+	void UpdateNVN() {} // Rocket Crowbar 1.9: empty in the original (@ 0xfc230)
+
 	// Rocket Crowbar 1.9: the virtuals RC added to CBaseEntity, in the original's order (its
 	// vtable slots 57-79, reference/vtables.tsv). Bodies are the original's defaults.
 	virtual void AskQuest() {}	  // talking monsters (CBarneyBomb, CScientistBomb) play a question
