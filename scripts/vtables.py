@@ -76,20 +76,21 @@ def main():
             sym = target(a + 4 * i)
             sig = demangle(sym) if sym else None
             if sym == "__pure_virtual":
-                slots.append(("(pure virtual)", ""))
+                slots.append(("(pure virtual)", "", ""))
             elif sig and "::" in sig.split("(")[0]:
                 owner, meth = sig.split("(")[0].rsplit("::", 1)
-                slots.append((meth, owner))
+                sargs = sig[sig.index("(") + 1:sig.rindex(")")] if "(" in sig else ""
+                slots.append((meth, owner, sargs))
             else:
-                slots.append((sym, ""))
+                slots.append((sym, "", ""))
         table[cls] = slots
 
     out = os.path.join(ROOT, "reference", "vtables.tsv")
     with open(out, "w") as f:
-        f.write("class\tslot\tmethod\timplemented_by\n")
+        f.write("class\tslot\tmethod\timplemented_by\targs\n")
         for cls in sorted(table):
-            for i, (m, o) in enumerate(table[cls]):
-                f.write(f"{cls}\t{i}\t{m}\t{o}\n")
+            for i, (m, o, a) in enumerate(table[cls]):
+                f.write(f"{cls}\t{i}\t{m}\t{o}\t{a}\n")
     print(f"{len(table)} vtables -> {os.path.relpath(out, ROOT)}")
 
     bases = {}
@@ -101,7 +102,7 @@ def main():
         b = bases.get(cls, "")
         start = len(table.get(b, [])) if b else 0
         print(f"\n{cls} (base {b or '-'}, {len(table.get(cls, []))} slots; new from slot {start}):")
-        for i, (m, o) in enumerate(table.get(cls, [])[start:], start):
+        for i, (m, o, _a) in enumerate(table.get(cls, [])[start:], start):
             print(f"  {i:3d} {m}  [{o}]")
 
 

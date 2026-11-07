@@ -2,9 +2,9 @@
 # re.sh - Ghidra front-end for the original rc_i386.so.
 #
 # Keeps one analyzed project at recovered/ghidra/rc (gitignored) so decompiles don't
-# re-analyze the binary. A slimmed-down version of mod-ts's scripts/ghidra/re.sh: no
-# ApplyInventory yet, so decompiles carry the gcc2 symbol names and, as a comment, the
-# demangled prototype from reference/signatures-gcc2.txt.
+# re-analyze the binary. A slimmed-down version of mod-ts's scripts/ghidra/re.sh. setup
+# runs ApplyRC.java (typed this/pev/vtables/engine calls, see its header) on a fresh import;
+# each export also carries the demangled prototype as a comment.
 #
 #   scripts/ghidra/re.sh setup              import + analyze (noreturn discovery off); ~minutes
 #   scripts/ghidra/re.sh export <filter>    decompile every function whose name contains
@@ -28,7 +28,8 @@ case "$cmd" in
     mkdir -p "$PROJDIR"
     rm -rf "${PROJDIR:?}/$PROJ.gpr" "${PROJDIR:?}/$PROJ.rep"
     "$GHIDRA" "$PROJDIR" "$PROJ" -import "$BIN" -scriptPath "$SCRIPTS" \
-      -preScript DisableNoReturn.java
+      -preScript DisableNoReturn.java -postScript ApplyRC.java "$ROOT/reference" 2>&1 \
+      | grep -E "ApplyRC|REPORT|ERROR" || true
     ;;
   export)
     mkdir -p "$OUT"

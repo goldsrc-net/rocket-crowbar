@@ -85,6 +85,10 @@ public class DecompExport extends GhidraScript {
             if (monitor.isCancelled()) break;
             Function f = it.next();
             if (f.isThunk() || f.isExternal()) continue;   // 6-byte PLT stubs carry the same names
+            // only real code: auto-analysis also makes "functions" out of .rodata/.eh_frame bytes, and
+            // one of those in rc_i386.so (0x2654ac) runs the full decompile timeout
+            ghidra.program.model.mem.MemoryBlock blk = currentProgram.getMemory().getBlock(f.getEntryPoint());
+            if (blk == null || !blk.getName().equals(".text")) continue;
             String name = f.getName(true);   // CTSGun::Deploy once renamed, else the raw symbol
             if (filter != null && !name.contains(filter)) continue;
             matched++;

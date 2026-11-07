@@ -56,6 +56,25 @@ def main():
             f.write(f"{r[0]}\t{r[1]}\t0x{r[2]:x}\t{r[3]}\t{r[4]}\t{r[5]}\n")
     print(f"{len({r[0] for r in rows})} classes, {len(rows)} fields -> {os.path.relpath(out, ROOT)}")
 
+    # members.tsv: the same fields with a C++ type, in the column layout scripts/ghidra/ApplyRC.java
+    # reads (class, offset, fieldtype, cpptype, name, count). Booleans are 1 byte here: RC's bool
+    # members sit at adjacent byte offsets (CBasePlayer m_blSetView 0x628, m_blCamInited 0x629).
+    out = os.path.join(ROOT, "reference", "members.tsv")
+    with open(out, "w") as f:
+        f.write("class\toffset\tfieldtype\tcpptype\tname\tcount\n")
+        for r in sorted(rows, key=lambda r: (r[0], r[2])):
+            f.write(f"{r[0]}\t0x{r[2]:x}\t{r[3]}\t{CPPTYPE.get(r[3], 'int')}\t{r[1]}\t{r[4]}\n")
+    print(f"-> {os.path.relpath(out, ROOT)}")
+
+
+CPPTYPE = {"FIELD_FLOAT": "float", "FIELD_TIME": "float", "FIELD_STRING": "string_t",
+           "FIELD_MODELNAME": "string_t", "FIELD_SOUNDNAME": "string_t", "FIELD_INTEGER": "int",
+           "FIELD_BOOLEAN": "bool", "FIELD_SHORT": "short", "FIELD_CHARACTER": "char",
+           "FIELD_VECTOR": "Vector", "FIELD_POSITION_VECTOR": "Vector",
+           "FIELD_CLASSPTR": "CBaseEntity *", "FIELD_EHANDLE": "EHANDLE",
+           "FIELD_EVARS": "entvars_t *", "FIELD_EDICT": "edict_t *", "FIELD_ENTITY": "EOFFSET",
+           "FIELD_POINTER": "void *", "FIELD_FUNCTION": "void *"}
+
 
 if __name__ == "__main__":
     main()
