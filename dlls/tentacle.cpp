@@ -325,10 +325,12 @@ void CTentacle::Precache()
 }
 
 
+// orig 0x222900. RC 1.9's own: without a sweeparc key the swing has no limit (360, SDK 2.1's
+// 65), and without a sound key the tap sound is 1, not 0
 CTentacle::CTentacle()
 {
-	m_flMaxYaw = 65;
-	m_iTapSound = 0;
+	m_flMaxYaw = 360;
+	m_iTapSound = 1;
 }
 
 bool CTentacle::KeyValue(KeyValueData* pkvd)

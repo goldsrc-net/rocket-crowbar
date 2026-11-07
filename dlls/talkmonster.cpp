@@ -663,6 +663,7 @@ CBaseEntity* CTalkMonster::EnumFriends(CBaseEntity* pPrevious, int listNumber, b
 }
 
 
+// orig 0x21ebd0. RC 1.9's own: with sv_loyalnpcs 1 a friend isn't provoked
 void CTalkMonster::AlertFriends()
 {
 	CBaseEntity* pFriend = NULL;
@@ -677,7 +678,8 @@ void CTalkMonster::AlertFriends()
 			if (pMonster->IsAlive())
 			{
 				// don't provoke a friend that's playing a death animation. They're a goner
-				pMonster->m_afMemory |= bits_MEMORY_PROVOKED;
+				if (CVAR_GET_FLOAT("sv_loyalnpcs") != 1)
+					pMonster->m_afMemory |= bits_MEMORY_PROVOKED;
 			}
 		}
 	}

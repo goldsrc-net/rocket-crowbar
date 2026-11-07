@@ -95,12 +95,9 @@ void CItem::Spawn()
 	UTIL_SetSize(pev, Vector(-16, -16, 0), Vector(16, 16, 16));
 	SetTouch(&CItem::ItemTouch);
 
-	if (DROP_TO_FLOOR(ENT(pev)) == 0)
-	{
-		ALERT(at_error, "Item %s fell out of level at %f,%f,%f", STRING(pev->classname), pev->origin.x, pev->origin.y, pev->origin.z);
-		UTIL_Remove(this);
-		return;
-	}
+	// orig 0x1bb750. RC 1.9's own: an item that can't reach the floor stays where it is; SDK 2.1
+	// removed it ("fell out of level")
+	DROP_TO_FLOOR(ENT(pev));
 }
 
 void CItem::ItemTouch(CBaseEntity* pOther)

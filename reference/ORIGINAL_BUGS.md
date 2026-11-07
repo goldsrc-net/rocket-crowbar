@@ -89,6 +89,8 @@ wog.cpp WOGCommand                      strikes the looked-at spot when CMD_ARGC
 wog.cpp CWOGSpawner                     never removed after it fires                          kept
 levelcustom.cpp FindOtherSameSpawner    can return the calling respawner itself              kept
 drivebm.cpp DestoryFlames               keeps dangling beam pointers (never read)             kept
+items.cpp CItem::Spawn (0x1bb750)       an item placed in a wall or outside the map is kept,  kept
+                                        floating (no "fell out of level" removal)
 ```
 
 ## Wave 2 (SDK files)

@@ -252,9 +252,10 @@ CXenTreeTrigger* CXenTreeTrigger::TriggerCreate(edict_t* pOwner, const Vector& p
 }
 
 
+// orig 0x241390. RC 1.9's own: the tree must still be a valid entity
 void CXenTreeTrigger::Touch(CBaseEntity* pOther)
 {
-	if (pev->owner)
+	if (pev->owner && UTIL_IsValidEntity(pev->owner))
 	{
 		CBaseEntity* pEntity = CBaseEntity::Instance(pev->owner);
 		pEntity->Touch(pOther);

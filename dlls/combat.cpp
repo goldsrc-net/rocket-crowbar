@@ -1063,13 +1063,14 @@ bool CBaseMonster::DeadTakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacke
 }
 
 
+// orig 0x108570. RC 1.9's own: knockback capped at 1500, not 1000
 float CBaseMonster::DamageForce(float damage)
 {
 	float force = damage * ((32 * 32 * 72.0) / (pev->size.x * pev->size.y * pev->size.z)) * 5;
 
-	if (force > 1000.0)
+	if (force > 1500.0)
 	{
-		force = 1000.0;
+		force = 1500.0;
 	}
 
 	return force;
