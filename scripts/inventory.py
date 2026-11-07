@@ -27,7 +27,8 @@ ORIG = os.path.join(ROOT, "reference", "rc_i386.so")
 TEXT_NDX = "17"   # .text's section index in rc_i386.so
 RUNTIME = {"crtstuff.c", "initfini.c", "libgcc2.c", "frame.c", "exception.cc",
            "new.cc", "new1.cc", "new2.cc", "tinfo.cc", "tinfo2.cc"}
-GENERATED = re.compile(r"^(__tf|__ti|_GLOBAL_\$|__thunk_|__\w+__F|_init$|_fini$)")
+GENERATED = re.compile(r"^(__tf|__ti|_GLOBAL_\$|__thunk_|__\w+__F|_init$|_fini$|GetClassPtr__H)")
+RUNTIME_SYM = re.compile(r"^(_init|_fini|__do_global_\w+|__libc_csu\w*|frame_dummy|call_\w+)$")
 
 
 def run(*cmd):
@@ -142,6 +143,10 @@ def main():
     for val, size, name in funcs:
         i = bisect.bisect_right(start_addrs, val) - 1
         src = starts[i][1] if i >= 0 else "?"
+        # Link-once code (inline methods defined in headers, template instances) is merged
+        # at the end of .text, after the last object file (initfini.c).
+        if src == "initfini.c" and not RUNTIME_SYM.match(name):
+            src = "(header)"
         sig = demangle(name)
         cls, meth = split_sig(sig) if sig else ("", name)
         if GENERATED.match(name) or (cls and meth in (cls.split("::")[-1], "~" + cls.split("::")[-1])):
