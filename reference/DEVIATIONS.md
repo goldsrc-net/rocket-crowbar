@@ -74,6 +74,9 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
   owner, `CASLRechargeBall::FlyToOwner` calls through a null target, and `CASLEngBall::EBThink`
   reads a trace it never filled (ours zeroes it first; `CASLEngBall` is unused anyway, since
   `CDriveASlave::DoBallAttack` is empty in the original).
+- **The shotgun rift and the egon's IsoBomb check for a gone owner** (`dlls/shotgun.cpp`
+  `CSpaceRift::FinalBoom`, `dlls/egon.cpp` `CIsoBomb::IsoBecomeSolid`). Both read through their
+  owner after the owner disconnected, which crashes the original.
 - **`GetFlagTeamColor` doesn't write into a string literal.** For a team outside 1-6 the original
   copies an error message into a read-only `""`, which crashes. Ours returns `""` without the write
   (`dlls/flag.cpp`, marked VERIFY).

@@ -570,20 +570,23 @@ public:
 	bool Swing(bool fFirst);
 	bool Deploy() override;
 	void Holster() override;
-	int m_iSwing;
-	TraceResult m_trHit;
+	int m_iSwing;		 // orig +0x8c
+	TraceResult m_trHit; // orig +0x90
 
-	bool UseDecrement() override
-	{
-#if defined(CLIENT_WEAPONS)
-		return true;
-#else
-		return false;
-#endif
-	}
+	// no UseDecrement: RC 1.9 keeps absolute weapon timers (the original has no override)
 
-private:
-	unsigned short m_usCrowbar;
+	// Rocket Crowbar 1.9 (crowbar.cpp): the rocket, the reload shove, the bot interface. RC's
+	// crowbar plays no event (its server sends every sound), so m_usCrowbar is gone.
+	void SecondaryAttack() override;
+	void Reload() override;
+	bool IsHornetGun() override;
+	int GetBotWeight(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotReloadWeapon() override;
+	bool BotCanHaveItem(CBaseEntity* pBot) override;
+	bool BotUseWeapon(CBot* pBot, CBaseEntity* pEnemy) override;
+	void BotWeaponFrame(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFirePrimary(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFireSecondary(CBot* pBot, CBaseEntity* pEnemy) override;
 };
 
 enum python_e
@@ -748,19 +751,22 @@ public:
 	bool Deploy() override;
 	void Reload() override;
 	void WeaponIdle() override;
-	void ItemPostFrame() override;
 	int m_fInReload; //TODO: not used, remove
-	float m_flNextReload;
-	int m_iShell;
+	float m_flNextReload; // orig +0x90
+	int m_iShell;		  // orig +0x94
 
-	bool UseDecrement() override
-	{
-#if defined(CLIENT_WEAPONS)
-		return true;
-#else
-		return false;
-#endif
-	}
+	// Rocket Crowbar 1.9 (shotgun.cpp): primary throws a CFlyinScientist, secondary opens and
+	// grows a CSpaceRift. The original has no ItemPostFrame here (the pump sound is in WeaponIdle).
+	void AddToPlayer(CBasePlayer* pPlayer) override;
+	void BotWeaponFrame(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFirePrimary(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFireSecondary(CBot* pBot, CBaseEntity* pEnemy) override;
+	int BotFireButton(CBot* pBot, CBaseEntity* pEnemy) override;
+	float m_flBotRiftTime;	  // orig +0x9c, time+1.3 when a bot's secondary hits a wall or rift. VERIFY name: nothing here reads it
+	Vector m_vecBotRiftSpot;  // orig +0xa0, where a bot's new rift opens. VERIFY name: nothing here reads it
+	float m_flBotNextThrow;	  // orig +0xac, BotFirePrimary holds fire until then
+
+	// no UseDecrement: RC 1.9 keeps absolute weapon timers (the original has no override)
 
 private:
 	unsigned short m_usDoubleFire;
@@ -985,10 +991,9 @@ public:
 	void EndAttack();
 	void Attack();
 	void PrimaryAttack() override;
-	bool ShouldWeaponIdle() override { return true; }
 	void WeaponIdle() override;
 
-	float m_flAmmoUseTime; // since we use < 1 point of ammo per update, we subtract ammo on a timer.
+	float m_flAmmoUseTime; // orig +0x8c, since we use < 1 point of ammo per update, we subtract ammo on a timer.
 
 	float GetPulseInterval();
 	float GetDischargeInterval();
@@ -996,32 +1001,37 @@ public:
 	void Fire(const Vector& vecOrigSrc, const Vector& vecDir);
 
 	bool HasAmmo();
-	bool CanHolster();
 
 	void UseAmmo(int count);
 
-	CBeam* m_pBeam;
-	CBeam* m_pNoise;
-	CSprite* m_pSprite;
+	CBeam* m_pBeam;		// orig +0x94
+	CBeam* m_pNoise;	// orig +0x98
+	CSprite* m_pSprite; // orig +0x9c, saved but never created in RC 1.9
 
-	bool UseDecrement() override
-	{
-#if defined(CLIENT_WEAPONS)
-		return true;
-#else
-		return false;
-#endif
-	}
+	// Rocket Crowbar 1.9 (egon.cpp): primary is a tractor beam, secondary fires a CIsoBomb, reload
+	// throws a splitting CEgonMirv. RC's CEgon has no ShouldWeaponIdle, CanHolster or UseDecrement
+	// override: WeaponIdle runs only with no attack button held, and its timers are absolute
+	// (gpGlobals->time), so they must not be decremented as client-predicted weapons are.
+	void AddToPlayer(CBasePlayer* pPlayer) override;
+	void ItemPreFrame() override;
+	bool IsHornetGun() override;
+	void SecondaryAttack() override;
+	void Reload() override;
+	void StartTractor(CBaseEntity* pEntity);
+	void StopTractor();
+	void UpdateTractor();
 
-	unsigned short m_usEgonStop;
+	EHANDLE m_pTrackEnt; // orig +0xb0, the entity the tractor beam holds
+	float m_flEntDist;	 // orig +0xb8, held at this distance in front of the player
+	float m_flOldGrav;	 // orig +0xbc, saved, never written
+	int m_iOldMoveTyp;	 // orig +0xc0, saved, never written
+	float m_flTractTime; // orig +0xc4, next tractor update
 
 private:
-	float m_shootTime;
-	EGON_FIREMODE m_fireMode;
-	float m_shakeTime;
-	bool m_deployed;
-
-	unsigned short m_usEgonFire;
+	float m_shootTime;		 // orig +0x90
+	EGON_FIREMODE m_fireMode; // orig +0xa4
+	float m_shakeTime;		 // orig +0xa8
+	int m_deployed;			 // orig +0xac
 };
 
 enum hgun_e

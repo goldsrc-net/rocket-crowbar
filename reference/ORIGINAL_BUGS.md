@@ -6,6 +6,8 @@ the original has it unless the **Ours** column says otherwise; anything we chang
 (`reference/dossiers/<package>.md`) has the full reasoning. Add new ones here as they turn up.
 
 Status: **kept** = same behavior as the original; **guarded** = we avoid a crash the original has.
+Policy since 2026-11-07: every crash gets guarded (the smallest check, nothing else changed); the
+crashes still marked "kept" below are from before that and get guarded in one sweep.
 Addresses are file addresses in `rc_i386.so` where the dossier gives one.
 
 ## Crashes
@@ -29,6 +31,8 @@ drivecontroll.cpp CDriveController::    writes through a null owner             
 driveaslave.cpp CASLRechargeBall::      calls through a null target                           guarded
   FlyToOwner
 driveaslave.cpp CASLEngBall::EBThink    reads an unfilled trace (unused: DoBallAttack empty)  guarded
+shotgun.cpp CSpaceRift::FinalBoom       reads through its owner after it disconnected         guarded
+egon.cpp CIsoBomb::IsoBecomeSolid       reads through its owner after it disconnected         guarded
 flag.cpp GetFlagTeamColor               team outside 1-6: sprintf into the read-only ""       guarded
                                         literal it returns (.rodata 0x265d66)
 bot_prefs.h CVEC::~CVEC, Resize         scalar delete on new[] memory: heap corruption at     changed
