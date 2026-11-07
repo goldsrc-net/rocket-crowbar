@@ -630,7 +630,9 @@ void CDriveIcky::Killed(entvars_t* pevAttacker, int iGib)
 	pev->gravity = 3.0;
 	UTIL_SetSize(pev, g_vecZero, g_vecZero);
 
-	if (pev->owner)
+	// VERIFY: guard, the original crashes here: it calls through Instance()'s result unchecked
+	// (NULL once the pickup's edict is freed)
+	if (pev->owner && CBaseEntity::Instance(pev->owner))
 		CBaseEntity::Instance(pev->owner)->DeathNotice(pev);
 
 	int iPitch = RANDOM_LONG(95, 105);

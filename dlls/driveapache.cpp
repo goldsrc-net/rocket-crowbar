@@ -1077,7 +1077,9 @@ void CDriveApache::DyingThink()
 	pev->nextthink = gpGlobals->time + 0.1;
 
 	// the pickup that made us schedules its respawn
-	if (pev->owner)
+	// VERIFY: guard, the original crashes here: it calls through Instance()'s result unchecked
+	// (NULL once the pickup's edict is freed)
+	if (pev->owner && CBaseEntity::Instance(pev->owner))
 		CBaseEntity::Instance(pev->owner)->DeathNotice(pev);
 
 	DEClientLeave();
@@ -1111,7 +1113,8 @@ void CDriveApache::FlyTouch(CBaseEntity* pOther)
 		float flSpeed = pev->velocity.Length();
 		pev->velocity = pev->velocity + tr.vecPlaneNormal * (flSpeed + 300);
 
-		TakeDamage(pev, m_pOwner->pev, 400, DMG_CRUSH);
+		// VERIFY: guard, the original crashes here: m_pOwner unchecked (no driver)
+		TakeDamage(pev, m_pOwner ? m_pOwner->pev : pev, 400, DMG_CRUSH);
 
 		Vector vecSpot = pev->origin;
 		MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, vecSpot);
@@ -1417,6 +1420,9 @@ void CDriveApache::DEClientEject()
 	}
 
 	CBasePlayer* pOwner = (CBasePlayer*)m_pOwner;
+	// VERIFY: guard, the original crashes here: m_pOwner unchecked (no driver)
+	if (!pOwner)
+		return;
 	if (!pOwner->m_bInDriveEnt || !pOwner->m_pCurDriveEnt || pOwner->m_pCurDriveEnt->pev != pev)
 		return;
 	if (!(pOwner->m_pCurDriveEnt->pev->health > 0))

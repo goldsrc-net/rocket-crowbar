@@ -275,10 +275,10 @@ info_player_start is a CBaseDMStart.
    landing). Kept, the calls stay for RNG parity.
 7. **UpdateClientData always writes 0 to the Train message**, so the train speed HUD never shows.
    Kept.
-8. **CheatImpulseCommands 33-39** use Create's result without checking it. Kept.
+8. **CheatImpulseCommands 33-39** use Create's result without checking it. Guarded (crash sweep).
 9. **DoEntSpawnPointStuff** can telefrag the spawning player. Kept.
 10. From the other files: CBaseMonster::TakeDamage with mp_deathballsonly 1 reads
-    `pevInflictor->pContainingEntity` unchecked (NULL inflictor crashes); CBaseDMStart::KeyValue
+    `pevInflictor->pContainingEntity` unchecked (NULL inflictor crashes; guarded, crash sweep); CBaseDMStart::KeyValue
     marks "master" unhandled after storing it; CRecharge::BotCanHaveItem clamps MaxArmor to 250
     where Use clamps to 999, CHealthKit::BotCanHaveItem tests health < 100 not max_health; BotUseMe
     discards BotCanHaveItem's result; GetBotWeight compares a field the game never writes;

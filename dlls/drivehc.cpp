@@ -853,7 +853,9 @@ void CDriveHC::Killed(entvars_t* pevAttacker, int iGib)
 		MESSAGE_END();
 	}
 
-	if (pev->owner)
+	// VERIFY: guard, the original crashes here: it calls through Instance()'s result unchecked
+	// (NULL once the pickup's edict is freed)
+	if (pev->owner && CBaseEntity::Instance(pev->owner))
 		CBaseEntity::Instance(pev->owner)->DeathNotice(pev);
 
 	pev->classname = MAKE_STRING("headcrabeye");
@@ -1196,8 +1198,9 @@ void DHCHeadcrabifyEnt(edict_t* pent, edict_t* pentAttacker)
 		pEntity->Killed(pEntity->pev, GIB_NORMAL);
 		pEntity->pev->flags |= FL_KILLME;
 		CBaseEntity* pCrab = CBaseEntity::Create("monster_headcrab", vecOrigin, pEntity->pev->angles);
-		// VERIFY: the original doesn't check pCrab for NULL
-		EMIT_SOUND_DYN(pCrab->pev->pContainingEntity, CHAN_ITEM, "debris/beamstart7.wav", 1.0, 0.9, 0, 120);
+		// VERIFY: guard, the original crashes here: it doesn't check pCrab for NULL
+		if (pCrab)
+			EMIT_SOUND_DYN(pCrab->pev->pContainingEntity, CHAN_ITEM, "debris/beamstart7.wav", 1.0, 0.9, 0, 120);
 		return;
 	}
 

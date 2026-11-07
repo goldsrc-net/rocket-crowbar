@@ -688,8 +688,10 @@ void CDriveBM::Killed(entvars_t* pevAttacker, int iGib)
 		MESSAGE_END();
 	}
 
-	// tell the pickup that made this one (no null check on the instance, as in the original)
-	if (pev->owner)
+	// tell the pickup that made this one
+	// VERIFY: guard, the original crashes here: it calls through Instance()'s result unchecked
+	// (NULL once the pickup's edict is freed)
+	if (pev->owner && CBaseEntity::Instance(pev->owner))
 		CBaseEntity::Instance(pev->owner)->DeathNotice(pev);
 
 	pev->classname = MAKE_STRING("gonarch");

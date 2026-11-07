@@ -4558,6 +4558,9 @@ bool AllowToTransform(edict_t* pPlayer)
 // Puts pPlayer into a new drive monster it just created (the transform cheats).
 static void EnterNewDriveEnt(CBasePlayer* pPlayer)
 {
+	// VERIFY: guard, the original crashes here: 33-39 don't check Create's result
+	if (!pPlayer->m_pCurDriveEnt)
+		return;
 	pPlayer->m_pCurDriveEnt->pev->angles = Vector(0, pPlayer->pev->v_angle.y, 0);
 	pPlayer->m_pCurDriveEnt->DEClientEnter(pPlayer);
 	pPlayer->m_bInDriveEnt = true;
@@ -4584,7 +4587,8 @@ void CBasePlayer::CheatImpulseCommands(int iImpulse)
 	case 33:
 		if (!AllowToTransform(edict()) || m_bInDriveEnt)
 			return;
-		// VERIFY: the original doesn't check Create's result for 33-39 (crashes if it fails)
+		// VERIFY: the original doesn't check Create's result for 33-39 (crashes if it fails;
+		// guarded in EnterNewDriveEnt and for 36 below)
 		m_pCurDriveEnt = (CBaseDriveEnt*)Create("drive_apache", Center() + Vector(0, 0, 256), Vector(0, pev->v_angle.y, 0));
 		EnterNewDriveEnt(this);
 		return;
@@ -4613,6 +4617,9 @@ void CBasePlayer::CheatImpulseCommands(int iImpulse)
 			return;
 
 		m_pCurDriveEnt = (CBaseDriveEnt*)Create("drive_turret", tr.vecEndPos + tr.vecPlaneNormal, tr.vecPlaneNormal);
+		// VERIFY: guard, the original crashes here: Create's result unchecked
+		if (!m_pCurDriveEnt)
+			return;
 		if (tr.vecPlaneNormal == Vector(0, 0, 1))
 			m_pCurDriveEnt->pev->angles.y = pev->v_angle.y;
 		else

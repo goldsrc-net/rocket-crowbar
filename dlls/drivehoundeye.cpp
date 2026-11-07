@@ -1508,7 +1508,9 @@ void CDriveHE::Killed(entvars_t* pevAttacker, int iGib)
 	}
 
 	// tell the pickup that made us
-	if (pev->owner)
+	// VERIFY: guard, the original crashes here: it calls through Instance()'s result unchecked
+	// (NULL once the pickup's edict is freed)
+	if (pev->owner && CBaseEntity::Instance(pev->owner))
 		CBaseEntity::Instance(pev->owner)->DeathNotice(pev);
 
 	pev->classname = MAKE_STRING("houndeye");
@@ -1931,8 +1933,11 @@ void CDHEEyeSprite::ESThink()
 {
 	pev->nextthink = 0.01 + gpGlobals->time;
 
-	// VERIFY: no check for a missing owner, as in the original (the houndeye removes us first)
+	// VERIFY: guard, the original crashes here: no check for a missing owner (the houndeye
+	// removes us first)
 	entvars_t* pevOwner = VARS(pev->owner);
+	if (!pevOwner)
+		return;
 	UTIL_MakeVectors(pevOwner->angles);
 	UTIL_SetOrigin(pev, pevOwner->origin + gpGlobals->v_forward * 30 + gpGlobals->v_up * 28);
 }

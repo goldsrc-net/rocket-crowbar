@@ -928,7 +928,9 @@ void CDriveBullsquid::Killed(entvars_t* pevAttacker, int iGib)
 	}
 
 	// tell the pickup it can respawn
-	if (pev->owner)
+	// VERIFY: guard, the original crashes here: it calls through Instance()'s result unchecked
+	// (NULL once the pickup's edict is freed)
+	if (pev->owner && CBaseEntity::Instance(pev->owner))
 		CBaseEntity::Instance(pev->owner)->DeathNotice(pev);
 
 	pev->classname = MAKE_STRING("Bullsquid"); // sic, capital B in the original

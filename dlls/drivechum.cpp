@@ -928,7 +928,9 @@ void CDriveChumtoad::Killed(entvars_t* pevAttacker, int iGib)
 		MESSAGE_END();
 	}
 
-	if (pev->owner)
+	// VERIFY: guard, the original crashes here: it calls through Instance()'s result unchecked
+	// (NULL once the pickup's edict is freed)
+	if (pev->owner && CBaseEntity::Instance(pev->owner))
 		CBaseEntity::Instance(pev->owner)->DeathNotice(pev);
 
 	DEClientLeave();

@@ -867,11 +867,12 @@ bool CBaseMonster::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, f
 		return DeadTakeDamage(pevInflictor, pevAttacker, flDamage, bitsDamageType);
 	}
 
-	// Rocket Crowbar: with mp_deathballsonly 1 only deathballs hurt monsters. The original reads
-	// the inflictor unchecked (a NULL inflictor or one without an edict crashes); kept.
+	// Rocket Crowbar: with mp_deathballsonly 1 only deathballs hurt monsters.
+	// VERIFY: guard, the original crashes here: it reads the inflictor unchecked (a NULL
+	// inflictor or one without an edict). Ours takes no damage from those.
 	if (CVAR_GET_FLOAT("mp_deathballsonly") == 1)
 	{
-		if (0 != strcmp(STRING(VARS(pevInflictor->pContainingEntity)->classname), "deathball"))
+		if (!pevInflictor || !pevInflictor->pContainingEntity || 0 != strcmp(STRING(VARS(pevInflictor->pContainingEntity)->classname), "deathball"))
 			return false;
 	}
 

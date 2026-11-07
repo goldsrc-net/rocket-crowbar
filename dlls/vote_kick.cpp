@@ -56,8 +56,8 @@ const char* VK_InitVote(CBaseEntity* pInit, int iIndex)
 	for (int i = 1; i <= gpGlobals->maxClients; i++)
 	{
 		CBaseEntity* pPlayer = UTIL_PlayerByIndex(i);
-		// VERIFY: as the original, pInit is dereferenced here even though it may be NULL above.
-		if (pPlayer && pPlayer->edict()->pvPrivateData && pPlayer->IsNetClient() && pPlayer->edict() != pInit->edict() && pPlayer->edict() != g_pVKBoot->edict())
+		// VERIFY: guard, the original crashes here: it dereferences pInit, which may be NULL above.
+		if (pPlayer && pPlayer->edict()->pvPrivateData && pPlayer->IsNetClient() && (!pInit || pPlayer->edict() != pInit->edict()) && pPlayer->edict() != g_pVKBoot->edict())
 		{
 			g_pVKVoters[g_iVKTotal] = pPlayer;
 			g_iVKTotal++;
@@ -76,6 +76,11 @@ const char* VK_InitVote(CBaseEntity* pInit, int iIndex)
 	g_flVKUpdateTime = gpGlobals->time - 1.0;
 	if (pInit)
 		((CBasePlayer*)pInit)->m_flNextVoteTime = CVAR_GET_FLOAT("sv_votefreq") + gpGlobals->time;
+
+	// VERIFY: guard, the original crashes here: the messages below read a NULL pInit's name. Ours
+	// uses the world entity, as VK_ValidatePTRS does for a gone initiator.
+	if (!pInit)
+		g_pVKInit = pInit = CBaseEntity::Instance(ENT(0));
 
 	// The original's arguments: the target's name first, so it reads "for <target> against <initiator>".
 	UTIL_ClientPrintAll(HUD_PRINTTALK, UTIL_VarArgs("* Votekick initiated for %s against %s, need %0.1f precent to succed\n", STRING(g_pVKBoot->pev->netname), STRING(pInit->pev->netname), 100.0 * g_flVKFractForKick));

@@ -126,7 +126,7 @@ All `ok` = literal reading, checked against the disassembly where noted.
 | 0x184550 / 0x184740 | CIsoBomb::UpdateBeams / DoRingPulse | ok |
 | 0x184940 | CIsoBomb::DoArc | ok, disasm |
 | 0x184d00 / 0x184fd0 / 0x185520 | CIsoBomb::IsoPostArmThink / InitBeams / ArmTouch | ok |
-| 0x185710 | CIsoBomb::IsoBecomeSolid | VERIFY, null-owner crash kept (section 8) |
+| 0x185710 | CIsoBomb::IsoBecomeSolid | VERIFY, null-owner crash guarded (section 8) |
 | 0x185800 | weapon_egon | ok |
 | 0x185830 / 0x185880 | CEgon::Save / Restore | ok, table in weapons.cpp |
 | 0x1858d0 / 0x185950 / 0x1859a0 | CEgon::Spawn / ItemPreFrame / Precache | ok |
@@ -296,7 +296,7 @@ animations, the egon's lack of events).
     bot's. Kept.
 12. **Egon (from the fork):** IsoGoBoom's second blast is centred at origin + tr.vecEndPos -
     (0,0,32), far away (kept); DoArc sends MSG_PVS with a NULL origin (kept); IsoBecomeSolid
-    reads a NULL m_pRealOwner after the thrower disconnects, a crash (kept, VERIFY); Fire shakes
+    reads a NULL m_pRealOwner after the thrower disconnects, a crash (guarded, VERIFY); Fire shakes
     around an unfilled trace (changed: zeroed, VERIFY); ItemPreFrame dereferences m_pPlayer right
     after a NULL test (kept, harmless); m_pTrackEnt EHANDLE saved as FIELD_CLASSPTR (changed to
     FIELD_EHANDLE); MFTouch/MFThink cone with stale v_up/v_right (kept); UpdateTractor and Reload
@@ -304,5 +304,5 @@ animations, the egon's lack of events).
     g_iTractorBeamSpr, m_pSprite never used (kept); flying_expel debris is invisible except its
     trail (kept); IsoBecomeSolid rethinks every 0.3 s until armed (kept).
 
-Not a bug but worth knowing: IsoBecomeSolid (kept crash) and FinalBoom (guarded) handle the same
-disconnect case differently; the coordinator may want one rule.
+IsoBecomeSolid and FinalBoom both guard the same disconnect case (DEVIATIONS.md, Crashes in the
+original).

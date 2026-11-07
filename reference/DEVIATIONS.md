@@ -277,6 +277,28 @@ and the TeamInfo resend.
 - **`GetFlagTeamColor` doesn't write into a string literal.** For a team outside 1-6 the original
   copies an error message into a read-only `""`, which crashes. Ours returns `""` without the write
   (`dlls/flag.cpp`, marked VERIFY).
+- **More drive monster guards for a missing driver** (each marked VERIFY):
+  `CDriveTurret::TakeDamage` and `CDriveGarg::TakeDamage` skip the eject-time write with no
+  driver, `CDriveGarg::DoFlameDamage` and `CDriveApache::FlyTouch` credit the monster itself as the
+  attacker, and `CDriveApache::DEClientEject` returns (`dlls/driveturret.cpp`, `dlls/drivegarg.cpp`,
+  `dlls/driveapache.cpp`). The original dereferences the null driver in each.
+- **A dying drive monster tells its pickup only when the pickup still exists** (DyingThink or
+  Killed in all 14 `dlls/drive*.cpp`). The original calls `DeathNotice` through
+  `CBaseEntity::Instance(pev->owner)` without checking it, which is NULL once that edict is freed.
+- **The houndeye's eye sprite and the gonarch's headcrabifier check their pointers**
+  (`dlls/drivehoundeye.cpp` `CDHEEyeSprite::ESThink` returns with no owner, `dlls/drivehc.cpp`
+  `DHCHeadcrabifyEnt` plays its sound only when the `monster_headcrab` was created).
+- **An `rc.ini` line of only `=` is skipped** (`dlls/Preff.cpp` PREFS_LoadFile). The original gets
+  a NULL token from strtok there and crashes.
+- **A vote with no initiator names the world entity** (`dlls/vote_kick.cpp` VK_InitVote,
+  `dlls/vote_map.cpp` VM_InitVote), as the votes' ValidatePTRS do for a gone initiator. The
+  original tests the initiator for NULL, then reads its name anyway. Only the server could start
+  one, and nothing calls them without a player. The allowedmaps.txt name buffer is 65 bytes where
+  the original's 64 overflows by sscanf's terminator.
+- **The transform cheats check Create's result** (`dlls/player.cpp` CheatImpulseCommands 33-39,
+  in EnterNewDriveEnt and for the turret), where the original uses a failed create's NULL.
+- **`mp_deathballsonly 1` takes a NULL inflictor as not a deathball** (`dlls/combat.cpp`
+  CBaseMonster::TakeDamage): no damage, where the original crashes reading its classname.
 
 - **CVEC frees with `delete[]`** (`dlls/bot_prefs.h`). The original uses scalar delete on memory
   from `new[]`, which corrupts its heap at shutdown for `CVEC<sHeading>`.

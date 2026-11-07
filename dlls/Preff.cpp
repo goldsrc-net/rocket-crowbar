@@ -327,9 +327,12 @@ bool PREFS_LoadFile(const char* szFile)
 			continue;
 
 		char* pTok = strtok(szLine, "=\n");
+		// VERIFY: guard, the original crashes here: a line of only '=' gives a NULL token.
+		if (!pTok)
+			continue;
 		strncpy(szKey, pTok, 256);
 		// VERIFY: the original terminates the token, not szKey (movb $0,0xff(%esi) at 0xe211c,
-		// esi = the strtok result), and a line of only '=' gives a NULL token here and crashes.
+		// esi = the strtok result).
 		pTok[255] = '\0';
 		pTok = strtok(NULL, "=\n");
 		if (pTok)

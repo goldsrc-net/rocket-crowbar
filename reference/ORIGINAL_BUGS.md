@@ -10,26 +10,25 @@ audit rows (`reference/audit/r1.md`-`r6.md`), and halflife-updated's guards amon
 
 Status: **kept** = same behavior as the original; **guarded** = we avoid a crash the original has;
 **changed** = we differ for another reason, said in the column.
-Policy since 2026-11-07: every crash gets guarded (the smallest check, nothing else changed); the
-crashes still marked "kept" below are from before that and get guarded in one sweep.
+Policy since 2026-11-07: every crash gets guarded (the smallest check, nothing else changed).
 Addresses are file addresses in `rc_i386.so` where the dossier or audit row gives one.
 
 ## Crashes
 
 ```
 Where                                   What                                                  Ours
-Preff.cpp PREFS_LoadFile                a line of only "=" gives a NULL token -> crash        kept
-                                        (also terminates the token, not the key copy)
-vote_kick/vote_map VK_/VM_InitVote      dereference a NULL initiator (server console) after   kept
-                                        testing it for NULL
-drivehc.cpp DHCHeadcrabifyEnt           no NULL check on the monster_headcrab it creates      kept
+Preff.cpp PREFS_LoadFile                a line of only "=" gives a NULL token -> crash        guarded
+                                        (also terminates the token, not the key copy: kept)
+vote_kick/vote_map VK_/VM_InitVote      dereference a NULL initiator (server console) after   guarded
+                                        testing it for NULL                                   (world entity)
+drivehc.cpp DHCHeadcrabifyEnt           no NULL check on the monster_headcrab it creates      guarded
 driveicky.cpp CDriveIcky::TakeDamage    writes through m_pOwner with no driver                guarded
-driveturret.cpp CDriveTurret::TakeDmg   writes m_pOwner->m_fDrvEntEjectTime with no driver    kept
-drivegarg.cpp TakeDamage, DoFlameDamage dereference the driver with no null test              kept
-driveapache.cpp FlyTouch, DEClientEject dereference m_pOwner unchecked                        kept
-DyingThink / Killed (Apache, assassin,  CBaseEntity::Instance(pev->owner)->DeathNotice with   kept
-  BM, garg)                             no null check
-drivehoundeye.cpp CDHEEyeSprite::ESThink dereferences its owner unchecked                      kept
+driveturret.cpp CDriveTurret::TakeDmg   writes m_pOwner->m_fDrvEntEjectTime with no driver    guarded
+drivegarg.cpp TakeDamage, DoFlameDamage dereference the driver with no null test              guarded
+driveapache.cpp FlyTouch, DEClientEject dereference m_pOwner unchecked                        guarded
+DyingThink / Killed (all 14 drive       CBaseEntity::Instance(pev->owner)->DeathNotice with   guarded
+  monsters)                             no null check on the instance
+drivehoundeye.cpp CDHEEyeSprite::ESThink dereferences its owner unchecked                      guarded
 drivecontroll.cpp CDriveController::    writes through a null owner                           guarded
   TakeDamage
 driveaslave.cpp CASLRechargeBall::      calls through a null target                           guarded
@@ -78,6 +77,11 @@ player.cpp CBasePlayer::                removing the active item leaves m_pLastI
   RemovePlayerItem (0x1f4050)           at it
 player.cpp CBasePlayer::SwitchWeapon    no NULL weapon test                                   guarded
   (0x1f5fe0)
+---- wave 2
+combat.cpp CBaseMonster::TakeDamage     mp_deathballsonly 1 reads the inflictor unchecked: a  guarded
+  (0x107b30)                            NULL inflictor or one without an edict crashes
+player.cpp CBasePlayer::                impulses 33-39 use Create's result unchecked          guarded
+  CheatImpulseCommands (0x1f2f70)
 ```
 
 ## Logic bugs
@@ -87,8 +91,8 @@ Where                                   What                                    
 Preff.cpp (Linux build)                 doesn't strip \r: the shipped CRLF rc.ini loads no    changed
                                         headings, so Linux servers ran on built-in defaults   (accepts CRLF)
 vote_map.cpp VM_InitVote (0x237e85)     tests the kick vote, reports "Vote map in progress"   kept
-vote_map.cpp VM_InitVote                allowedmaps.txt scan stops at a name whose first      kept
-                                        char is <= 12; its 64-byte buffer overflows by one
+vote_map.cpp VM_InitVote                allowedmaps.txt scan stops at a name whose first      kept (overflow
+                                        char is <= 12; its 64-byte buffer overflows by one    guarded: 65 bytes)
 pregame.cpp GetRandomObserverSpawn      spot 1 twice as likely, the last spot never chosen    kept
 drivehoundeye.cpp CDrvHESpawner::Spawn  names itself drive_panth_spawner (0x2636e3), so       kept
                                         CreateDrvHESpawner never finds an existing one
@@ -167,8 +171,8 @@ func_tank.cpp CFuncTank::               target nearer than the barrel offset: sq
 ## Wave 2 (SDK files)
 
 Not folded into the tables above yet: each wave-2 dossier's section 8 lists the bugs found in
-its files (`reference/dossiers/w2-*.md`). They get merged here, with the crash sweep, when wave 2
-is complete. Some of those are no longer kept: where halflife-updated had fixed one (the weapon
+its files (`reference/dossiers/w2-*.md`). They get merged here when wave 2 is complete; the two
+crashes they had kept are guarded and already in the Crashes table. Some of those are no longer kept: where halflife-updated had fixed one (the weapon
 respawn time, FallThink on a held weapon, the grenade sequence timing, the osprey's NaN flight and
 smoke puffs, CWreckage's int time, the zombie's unused pitch), its fix is back; mod-rc2's
 `reference/audit/FIXES.md` (mod-rockcrowbar wave 2) lists each.

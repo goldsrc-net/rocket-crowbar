@@ -1005,15 +1005,16 @@ void CDriveGarg::DoFlameDamage(Vector vecStart, Vector vecEnd, float flDamage)
 		else
 			flAdjustedDamage = flDamage;
 
-		// VERIFY: the attacker is the driver, with no null check
+		// VERIFY: guard, the original crashes here: the attacker is the driver, with no null
+		// check. Ours credits the garg itself with no driver.
 		if (tr.flFraction != 1.0)
 		{
 			ClearMultiDamage();
 			pEntity->TraceAttack(pev, flAdjustedDamage, (tr.vecEndPos - vecSrc).Normalize(), &tr, DMG_BURN);
-			ApplyMultiDamage(pev, m_pOwner->pev);
+			ApplyMultiDamage(pev, m_pOwner ? m_pOwner->pev : pev);
 		}
 		else
-			pEntity->TakeDamage(pev, m_pOwner->pev, flAdjustedDamage, DMG_BURN);
+			pEntity->TakeDamage(pev, m_pOwner ? m_pOwner->pev : pev, flAdjustedDamage, DMG_BURN);
 	}
 	pev->classname = MAKE_STRING("drive_garg");
 }
@@ -1186,8 +1187,9 @@ bool CDriveGarg::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, flo
 			flDamage = flDamage * 0.8;
 	}
 
-	// VERIFY: no null check on the driver here in the original
-	m_pOwner->m_fDrvEntEjectTime = gpGlobals->time + 2;
+	// VERIFY: guard, the original crashes here: no null check on the driver
+	if (m_pOwner)
+		m_pOwner->m_fDrvEntEjectTime = gpGlobals->time + 2;
 	return CBaseMonster::TakeDamage(pevInflictor, pevAttacker, flDamage, bitsDamageType);
 }
 
@@ -1294,8 +1296,10 @@ void CDriveGarg::DyingThink()
 		MESSAGE_END();
 	}
 
-	// tell the pickup that made this one (no null check on the instance, as in the original)
-	if (pev->owner)
+	// tell the pickup that made this one
+	// VERIFY: guard, the original crashes here: it calls through Instance()'s result unchecked
+	// (NULL once the pickup's edict is freed)
+	if (pev->owner && CBaseEntity::Instance(pev->owner))
 		CBaseEntity::Instance(pev->owner)->DeathNotice(pev);
 
 	pev->classname = MAKE_STRING("garg");

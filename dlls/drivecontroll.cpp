@@ -1371,7 +1371,9 @@ void CDriveController::Killed(entvars_t* pevAttacker, int iGib)
 	UTIL_SetSize(pev, g_vecZero, g_vecZero);
 
 	// tell the pickup it may respawn
-	if (pev->owner)
+	// VERIFY: guard, the original crashes here: it calls through Instance()'s result unchecked
+	// (NULL once the pickup's edict is freed)
+	if (pev->owner && CBaseEntity::Instance(pev->owner))
 		CBaseEntity::Instance(pev->owner)->DeathNotice(pev);
 
 	int pitch = RANDOM_LONG(95, 105);

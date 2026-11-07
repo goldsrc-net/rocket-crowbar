@@ -119,7 +119,10 @@ const char* VM_InitVote(CBaseEntity* pInit, const char* szMap)
 	if (pInit)
 		((CBasePlayer*)pInit)->m_flNextVoteTime = CVAR_GET_FLOAT("sv_votefreq") + gpGlobals->time;
 
-	// VERIFY: as the original, the messages below read pInit's name even when pInit is NULL.
+	// VERIFY: guard, the original crashes here: the messages below read a NULL pInit's name. Ours
+	// uses the world entity, as VM_ValidatePTRS does for a gone initiator.
+	if (!pInit)
+		g_pVMInit = pInit = CBaseEntity::Instance(ENT(0));
 	UTIL_ClientPrintAll(HUD_PRINTTALK, UTIL_VarArgs("* Votemap initiated for %s by %s, need %0.1f precent to succed\n", g_szMapName, STRING(g_pVMInit->pev->netname), 100.0 * g_flFractForMap));
 
 	if (IS_DEDICATED_SERVER())

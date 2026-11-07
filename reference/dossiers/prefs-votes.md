@@ -82,7 +82,7 @@ Checked off-engine:
 | 0x1c20b0 | compress | mdhash.cpp | ok (table-driven; same digest) |
 | 0x1c3960 | MDfinish | mdhash.cpp | ok |
 | 0x1c3a40 | RMD | mdhash.cpp | ok |
-| 0x236760 | VK_InitVote | vote_kick.cpp | VERIFY: dereferences pInit when NULL (V5) |
+| 0x236760 | VK_InitVote | vote_kick.cpp | VERIFY: NULL pInit crash, guarded (V5) |
 | 0x236c30 | VK_VoteDissconnect | vote_kick.cpp | ok |
 | 0x236cc0 | VK_ValidatePTRS | vote_kick.cpp | ok (resets to the world entity, V6) |
 | 0x236e80 | VK_VoteFail | vote_kick.cpp | ok |
@@ -92,7 +92,7 @@ Checked off-engine:
 | 0x2376a0 | VK_SendVKMsg | vote_kick.cpp | ok |
 | 0x237ae0 | VK_VoteFrame | vote_kick.cpp | ok |
 | 0x237cc0 | VK_RegisterVote | vote_kick.cpp | ok |
-| 0x237e70 | VM_InitVote | vote_map.cpp | VERIFY: tests the kick vote with the map message (V8); allowedmaps.txt stop at char <= 12 (V9); NULL pInit (V5) |
+| 0x237e70 | VM_InitVote | vote_map.cpp | VERIFY: tests the kick vote with the map message (V8); allowedmaps.txt stop at char <= 12 (V9); NULL pInit crash, guarded (V5) |
 | 0x238360 | VM_ValidatePTRS | vote_map.cpp | ok |
 | 0x238450 | VM_VoteFail | vote_map.cpp | ok |
 | 0x238620 | VM_VoteSucceede | vote_map.cpp | ok |
@@ -237,15 +237,15 @@ bits on amd64 and would break the hash. `VK_InitVote`/`VM_InitVote` return `cons
 ## 6. VERIFY list
 
 - V1 `PREFS_LoadFile`: `pTok[255] = 0` after `strncpy(szKey, pTok, 256)` (0xe211c writes through
-  the strtok result), and a line of only `=` characters gives a NULL token and crashes the
-  original. Kept literally. A runtime test with a long key line or `==` line settles whether to
-  keep the crash.
+  the strtok result), kept literally, and a line of only `=` characters gives a NULL token and
+  crashes the original. That crash is guarded (the line is skipped, ORIGINAL_BUGS.md).
 - V2-V4 names: `sPrefKey`, `sPrefHeading` (no names in the binary); `sHeading`'s first two
   members; the CBasePlayer members in section 5. Settled by any other source of RC's names (the
   rcbot.dll interface, RC2's source).
 - V5 `VK_InitVote` dereferences `pInit` in the voter loop and the messages, and `VM_InitVote` in
-  its messages, after testing it for NULL. Literal. A server-console caller (NULL) would crash;
-  check client.cpp's ClientCommand reconstruction for whether NULL is ever passed.
+  its messages, after testing it for NULL, so a NULL initiator crashes the original. Guarded: the
+  voter loop skips the test and the messages use the world entity, as V6 does. ClientCommand, the
+  only caller, always passes a player.
 - V6 `VK_ValidatePTRS`/`VM_ValidatePTRS` reset a gone handle to `CBaseEntity::Instance(ENT(0))`,
   the world, not NULL (the original's inlined Instance(int 0)); `VK_VoteFrame` fails the vote when
   the target is the world. Read from the disassembly; behavior relies on it (the fail messages
