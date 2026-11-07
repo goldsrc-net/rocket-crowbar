@@ -35,6 +35,7 @@ the commit that drops the valve-gamedir gate, which a mod in its own gamedir nee
 | `reference/DEVIATIONS.md` | everything we do differently from the original |
 | `reference/ORIGINAL_BUGS.md` | the original's bugs, kept or guarded |
 | `reference/dossiers/` | one per reconstruction package; `AGENT_BRIEF.md` is the brief for parallel workers |
+| `tools/rig/` | the side-by-side test servers (`setup.sh`, `run.sh`, `smoke.py`, the egcs shim) |
 | `scripts/` | `build.sh`, the table generators (`inventory`, `hierarchy`, `vtables`, `savefields`, `cvars`, `sdk_baseline`), `check_file.py`, `ghidra/` (`re.sh`, `ApplyRC.java`) and small objdump helpers |
 
 How the decompile and tables are set up, and how to repeat it for RC2: `../DECOMPILE.md`. The
@@ -52,18 +53,19 @@ typed decompile lives in `recovered/decomp/` (gitignored); rebuild it with
 
 ## Status (2026-11-07)
 
-Built, not yet run in an engine. Builds on i386 and amd64.
+Every original function has a counterpart (4,878 of 4,888; the other 10 are stock `EHANDLE`
+operators under modern names and gcc runtime). Builds on i386 and amd64. Boots, changes maps
+and quits on a 32-bit ReHLDS with logs matching the original's line for line
+(`tools/rig/smoke.py`), and a player can join, spawn and drive a monster. Gameplay has not been
+compared with the original beyond that.
 
-- Done: RC's 46 cvars, its additions to the SDK base classes (`CBaseEntity`'s 23 virtuals,
-  `CBaseDriveEnt`, the bot interface, `CanPlayerAnnoy`, the player's saved members), the
-  `LINK_ENTITY_TO_CLASS` precache-list change, and all 30 of RC's own source files: 1,093 of 1,093
-  original functions present (`scripts/check_file.py`). 281 `VERIFY` marks in `dlls/`.
-- Wave 2, next: RC's changes inside SDK files (`RECONSTRUCTION.md` "SDK files with RC additions",
-  791 functions): the weapons (egon, shotgun, rpg, crossbow, handgrenade, hornetgun, tripmine,
-  gauss, squeak, crowbar, python, mp5, glock, satchel), `player.cpp` (the drive hand-off in
-  PreThink/PostThink, `PlayerDoID`), `client.cpp` (RC's commands, `SetupVisibility` accepting NULL,
-  `IsClientListenServer`), `world.cpp` (the drive spawners at map start), `teamplay_gamerules.cpp`
-  (CTF scoring), `headcrab.cpp` (the killer babycrab), `combat.cpp` (`ThrowFakeGibs`). The callers
-  each package needs are in its dossier's section 5. Four `TEMP STUB`s remain (`grep -n "TEMP
-  STUB" dlls/*.cpp`).
-- Then: run it next to the original (32-bit engine) and test the dossiers' section 7 items.
+- Run both side by side: `tools/rig/setup.sh`, then `tools/rig/run.sh original` (port 27031)
+  and `tools/rig/run.sh ours` (27032); `tools/rig/README.md`.
+- Decided along the way (`reference/DEVIATIONS.md`): the server builds without
+  `CLIENT_WEAPONS`, as RC's did; crashes in the original get guarded; `rc.ini` may be CRLF;
+  messages use today's client's sizes (`Health` 2 bytes, `ScoreInfo` 9).
+- Next: compare gameplay against the original (each dossier's "Behavior worth testing"); guard
+  the crashes wave 1 kept and fold wave 2's bugs into `reference/ORIGINAL_BUGS.md`; the ~300
+  `VERIFY` marks in `dlls/`.
+- Found outside RC: the rig's ReHLDS `filesystem_stdio.so` crashes on any gamedir with a pak
+  file (`tools/rig/README.md`).
