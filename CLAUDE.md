@@ -24,8 +24,8 @@ A fork of `goldsrc-net/halflife-updated` branch `64bit-demo` (the branch mod-ts 
 the commit that drops the valve-gamedir gate, which a mod in its own gamedir needs).
 
 - `upstream` = `git@github.com:goldsrc-net/halflife-updated.git`, tracked by `main`.
-- No `origin` yet. When it gets one it is a private goldsrc-net repo (`../REPOS.md`: reconstructions
-  are private).
+- `origin` = `git@github.com:goldsrc-net/rocket-crowbar.git`, private (`../REPOS.md`:
+  reconstructions are private until Steven releases them).
 
 | Path | What |
 |---|---|
