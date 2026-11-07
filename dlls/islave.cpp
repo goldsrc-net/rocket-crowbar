@@ -549,11 +549,12 @@ void CISlave::Spawn()
 //=========================================================
 // Precache - precaches all resources this monster needs
 //=========================================================
+// orig 0x1ba530
 void CISlave::Precache()
 {
 	PRECACHE_MODEL("models/islave.mdl");
 	PRECACHE_MODEL("sprites/lgtning.spr");
-	PRECACHE_SOUND("debris/zap1.wav");
+	// RC 1.9's own: no debris/zap1.wav (only the #if 0 code above plays it)
 	PRECACHE_SOUND("debris/zap4.wav");
 	PRECACHE_SOUND("weapons/electro4.wav");
 	PRECACHE_SOUND("hassault/hw_shoot1.wav");
