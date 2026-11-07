@@ -1,9 +1,9 @@
 /***
 *
 *	Copyright (c) 1996-2001, Valve LLC. All rights reserved.
-*	
-*	This product contains software technology licensed from Id 
-*	Software, Inc. ("Id Technology").  Id Technology (c) 1996 Id Software, Inc. 
+*
+*	This product contains software technology licensed from Id
+*	Software, Inc. ("Id Technology").  Id Technology (c) 1996 Id Software, Inc.
 *	All Rights Reserved.
 *
 *   Use, distribution, and modification of this source code and/or resulting
@@ -12,6 +12,14 @@
 *   without written permission from Valve LLC.
 *
 ****/
+
+/*
+*	Rocket Crowbar 1.9 replaced the gauss gun with a teleporter. Secondary fire throws a beacon
+*	(CTeleBecon, "gauss_tele") that sticks to what it hits. With a beacon out, secondary
+*	teleports the player to it, primary fires a beam that teleports whatever it hits to it, and
+*	reload brings the beacon back. Without one, reload teleports the player to a random spawn
+*	point. Every cost and refire time comes from rc.ini's [GAUSS] heading.
+*/
 
 #include "extdll.h"
 #include "util.h"
@@ -23,39 +31,588 @@
 #include "shake.h"
 #include "gamerules.h"
 #include "UserMessages.h"
+#include "Preff.h"
 
-LINK_ENTITY_TO_CLASS(weapon_gauss, CGauss);
+extern edict_t* EntSelectSpawnPoint(CBaseEntity* pPlayer); // player.cpp
 
-float CGauss::GetFullChargeTime()
+// sprites CGauss::Precache loads; globals in the original
+int m_iEndTeleBall;	   // sprites/redflare1.spr, the trail where a teleport lands
+int m_iStartTeleFlash; // sprites/xflare1.spr, the flash where it starts
+int m_iImpactSpr;	   // sprites/xspark2.spr, where a beam that teleports nothing hits
+
+// HasRCCap bits this file tests. VERIFY names: the original's are not in the binary.
+#define RC_CAP_GAUSS_TELEPORTABLE 0x1 // the gauss beam may teleport it to a beacon
+#define RC_CAP_TELEFRAGGABLE 0x2	  // a teleport landing on it kills it instead of failing
+
+//=========================================================
+// CTeleBecon: the gauss beacon ("gauss_tele" once thrown)
+//=========================================================
+class CTeleBecon : public CBaseMonster
 {
-#ifdef CLIENT_DLL
-	if (bIsMultiplayer())
-#else
-	if (g_pGameRules->IsMultiplayer())
-#endif
-	{
-		return 1.5;
-	}
+public:
+	bool Save(CSave& save) override;
+	bool Restore(CRestore& restore) override;
+	static TYPEDESCRIPTION m_SaveData[];
 
-	return 4;
+	static CTeleBecon* BecCreate();
+	void Spawn() override;
+	void Killed(entvars_t* pevAttacker, int iGib) override;
+	bool IsAlive() override;
+	Vector GetBotShootOrg() override;
+	int GetBotTargetWeight(CBaseEntity* pBot) override;
+	bool BotTargetRealseable(CBaseEntity* pBot) override;
+	void EntIsBeingRemoved(edict_t* pEdict) override;
+	int GetRCCaps() override;
+
+	void EXPORT ActiveThink();
+	void EXPORT BeconAttach(CBaseEntity* pOther);
+	bool BeconTeleport(CGauss* pGauss, entvars_t* pevTarget);
+
+	bool m_blAttached;		 // orig +0x27c, stuck to something
+	Vector m_vecPlaneNormal; // orig +0x280, normal of the surface it stuck to
+	EHANDLE m_hOwner;		 // orig +0x28c, the entity it stuck to (pev->owner is the thrower)
+	Vector m_posOwner;		 // orig +0x294, m_hOwner's origin when it stuck
+	Vector m_angleOwner;	 // orig +0x2a0, m_hOwner's angles when it stuck
+};
+
+LINK_ENTITY_TO_CLASS(telebecon, CTeleBecon);
+
+TYPEDESCRIPTION CTeleBecon::m_SaveData[] =
+	{
+		DEFINE_FIELD(CTeleBecon, m_blAttached, FIELD_BOOLEAN),
+		DEFINE_FIELD(CTeleBecon, m_vecPlaneNormal, FIELD_VECTOR),
+		DEFINE_FIELD(CTeleBecon, m_hOwner, FIELD_EHANDLE),
+		DEFINE_FIELD(CTeleBecon, m_posOwner, FIELD_POSITION_VECTOR),
+		DEFINE_FIELD(CTeleBecon, m_angleOwner, FIELD_VECTOR),
+};
+
+IMPLEMENT_SAVERESTORE(CTeleBecon, CBaseMonster); // orig 0x197ea0, 0x197ef0
+
+// Removes every tele_flare whose owner is pOwner. The beacon code repeats this loop inline.
+static void RemoveTeleFlares(edict_t* pOwner)
+{
+	edict_t* pFind = FIND_ENTITY_BY_CLASSNAME(NULL, "tele_flare");
+	while (!FNullEnt(pFind))
+	{
+		CBaseEntity* pFlare = CBaseEntity::Instance(pFind);
+		if (pFlare && pFlare->pev->owner == pOwner)
+			pFlare->SUB_Remove();
+		pFind = FIND_ENTITY_BY_CLASSNAME(pFind, "tele_flare");
+	}
 }
 
-#ifdef CLIENT_DLL
-extern bool g_irunninggausspred;
-#endif
+// The player's beacon, or NULL.
+static CTeleBecon* FindPlayersBecon(CBasePlayer* pPlayer)
+{
+	edict_t* pFind = NULL;
+	while (true)
+	{
+		pFind = FIND_ENTITY_BY_CLASSNAME(pFind, "gauss_tele");
+		if (FNullEnt(pFind))
+			return NULL;
+		CTeleBecon* pBecon = (CTeleBecon*)CBaseEntity::Instance(pFind);
+		if (pBecon && pBecon->pev->owner == pPlayer->edict())
+			return pBecon;
+	}
+}
 
+// orig 0x197f40
+CTeleBecon* CTeleBecon::BecCreate()
+{
+	CTeleBecon* pBecon = GetClassPtr((CTeleBecon*)NULL);
+	pBecon->pev->classname = MAKE_STRING("gauss_tele");
+	pBecon->Spawn();
+	return pBecon;
+}
+
+// orig 0x197f90
+void CTeleBecon::Spawn()
+{
+	Precache();
+	pev->movetype = MOVETYPE_BOUNCE;
+	pev->solid = SOLID_BBOX;
+
+	if (PREFS_KeyLoopUpBool("GAUSS", "BeconKillable", true))
+	{
+		pev->takedamage = DAMAGE_YES;
+		pev->health = 1;
+	}
+	else
+	{
+		pev->takedamage = DAMAGE_NO;
+	}
+
+	pev->gravity = PREFS_KeyLoopUpFloat("GAUSS", "BeconGravity", 0.6);
+	m_bloodColor = DONT_BLEED;
+	SET_MODEL(ENT(pev), "models/w_adrenaline.mdl");
+	UTIL_SetOrigin(pev, pev->origin);
+	UTIL_SetSize(pev, Vector(-2, -2, 0), Vector(2, 2, 16));
+
+	m_hOwner = NULL;
+	SetTouch(&CTeleBecon::BeconAttach);
+	m_blAttached = false;
+}
+
+// orig 0x1980e0
+void CTeleBecon::Killed(entvars_t* pevAttacker, int iGib)
+{
+	pev->deadflag = DEAD_DEAD;
+	pev->takedamage = DAMAGE_NO;
+
+	RemoveTeleFlares(edict());
+
+	Vector vecExplode;
+	if (m_blAttached)
+		vecExplode = pev->origin + m_vecPlaneNormal * 16;
+	else
+		vecExplode = pev->origin;
+
+	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, pev->origin);
+	WRITE_BYTE(TE_EXPLOSION);
+	WRITE_COORD(vecExplode.x);
+	WRITE_COORD(vecExplode.y);
+	WRITE_COORD(vecExplode.z);
+	if (UTIL_PointContents(pev->origin) == CONTENTS_WATER)
+		WRITE_SHORT(g_sModelIndexWExplosion);
+	else
+		WRITE_SHORT(g_sModelIndexFireball);
+	WRITE_BYTE(12); // scale * 10
+	WRITE_BYTE(18); // framerate
+	WRITE_BYTE(TE_EXPLFLAG_NONE);
+	MESSAGE_END();
+
+	SetThink(&CBaseEntity::SUB_Remove);
+	SetTouch(NULL);
+	pev->nextthink = gpGlobals->time + 0.1;
+}
+
+// orig 0x198390: while stuck. Dies when what it stuck to moves or turns, pings now and then,
+// and goes away (without exploding) when its thrower is gone.
+void CTeleBecon::ActiveThink()
+{
+	pev->nextthink = gpGlobals->time + 0.1;
+
+	if (m_hOwner != NULL && m_posOwner == m_hOwner->pev->origin && m_angleOwner == m_hOwner->pev->angles)
+	{
+		if (pev->dmgtime < gpGlobals->time)
+		{
+			EMIT_SOUND(ENT(pev), CHAN_WEAPON, "turret/tu_ping.wav", 0.4, ATTN_NORM);
+			pev->dmgtime = gpGlobals->time + RANDOM_FLOAT(1.0, 1.5);
+		}
+
+		if (pev->owner && pev->owner->pvPrivateData && 0 == pev->owner->free)
+			return;
+
+		RemoveTeleFlares(edict());
+		SetThink(&CBaseEntity::SUB_Remove);
+		return;
+	}
+
+	Killed(pev, 0);
+}
+
+// orig 0x198650: touch until stuck. Sticks to the surface it hit, or dies in the sky.
+void CTeleBecon::BeconAttach(CBaseEntity* pOther)
+{
+	if (pOther->edict() == pev->owner)
+		return;
+
+	TraceResult trHit = UTIL_GetGlobalTrace();
+	Vector vecStart = trHit.vecEndPos + trHit.vecPlaneNormal * 4;
+	Vector vecEnd = trHit.vecEndPos - trHit.vecPlaneNormal * 16;
+
+	TraceResult tr;
+	UTIL_TraceLine(vecStart, vecEnd, dont_ignore_monsters, edict(), &tr);
+	if (!tr.pHit)
+		return;
+
+	if (UTIL_PointContents(tr.vecEndPos) == CONTENTS_SKY)
+	{
+		Killed(pev, 0);
+		return;
+	}
+
+	m_hOwner = CBaseEntity::Instance(tr.pHit);
+	if (m_hOwner == NULL)
+		return;
+
+	m_posOwner = m_hOwner->pev->origin;
+	m_angleOwner = m_hOwner->pev->angles;
+
+	pev->angles = UTIL_VecToAngles(tr.vecPlaneNormal) - Vector(90, 0, 0);
+	UTIL_SetOrigin(pev, tr.vecEndPos);
+	pev->movetype = MOVETYPE_NONE;
+	pev->velocity = g_vecZero;
+	pev->avelocity = g_vecZero;
+	m_blAttached = true;
+	m_vecPlaneNormal = tr.vecPlaneNormal;
+	SetTouch(NULL);
+	EMIT_SOUND(ENT(pev), CHAN_WEAPON, "weapons/mine_deploy.wav", 0.75, ATTN_NORM);
+
+	// the glow that marks it
+	CBaseEntity* pFlare = GetClassPtr((CBaseEntity*)NULL);
+	pFlare->Spawn();
+	pFlare->pev->classname = MAKE_STRING("tele_flare");
+	pFlare->pev->movetype = MOVETYPE_NONE;
+	pFlare->pev->solid = SOLID_NOT;
+	pFlare->pev->renderamt = 164;
+	pFlare->pev->rendermode = kRenderGlow;
+	pFlare->pev->renderfx = kRenderFxPulseFast;
+	pFlare->pev->scale = 0.2;
+	pFlare->pev->owner = edict();
+	SET_MODEL(pFlare->edict(), "sprites/redflare1.spr");
+	UTIL_SetOrigin(pFlare->pev, tr.vecEndPos + tr.vecPlaneNormal * 16);
+
+	SetThink(&CTeleBecon::ActiveThink);
+	pev->nextthink = gpGlobals->time + 0.1;
+	pev->dmgtime = gpGlobals->time + 1.0;
+}
+
+// orig 0x198ae0: room for a hull and a box of vecMins/vecMaxs at vecOrigin, monsters ignored.
+bool TeleIsValidSpot(Vector vecOrigin, Vector vecMins, Vector vecMaxs, int iHull, entvars_t* pevIgnore)
+{
+	TraceResult tr;
+
+	UTIL_TraceLine(vecOrigin + vecMaxs, vecOrigin + vecMins, ignore_monsters, pevIgnore->pContainingEntity, &tr);
+	if (tr.flFraction != 1.0 || 0 != tr.fStartSolid || 0 != tr.fAllSolid)
+		return false;
+
+	UTIL_TraceHull(vecOrigin, vecOrigin, ignore_monsters, iHull, pevIgnore->pContainingEntity, &tr);
+	if (tr.flFraction != 1.0 || 0 != tr.fStartSolid || 0 != tr.fAllSolid)
+		return false;
+
+	UTIL_TraceLine(Vector(vecMins.x + vecOrigin.x, vecMins.y + vecOrigin.y, vecMaxs.z + vecOrigin.z),
+		Vector(vecMaxs.x + vecOrigin.x, vecMaxs.y + vecOrigin.y, vecMins.z + vecOrigin.z),
+		ignore_monsters, pevIgnore->pContainingEntity, &tr);
+	if (tr.flFraction != 1.0 || 0 != tr.fStartSolid || 0 != tr.fAllSolid)
+		return false;
+
+	return true;
+}
+
+// The check TeleIsValidSpotCheckEnts makes after each trace: false when the trace hit something
+// alive that can't be telefragged.
+static bool TeleTraceHitBlocks(TraceResult& tr)
+{
+	if (!tr.pHit)
+		return false;
+	int iCap = RC_CAP_TELEFRAGGABLE;
+	CBaseEntity* pHit = CBaseEntity::Instance(tr.pHit);
+	return !pHit->HasRCCap(iCap) && pHit->IsAlive();
+}
+
+// orig 0x198cd0: the same three traces with monsters, failing on anything alive that can't be
+// telefragged. *ppHit is the first entity hit (the world counts).
+bool TeleIsValidSpotCheckEnts(Vector vecOrigin, Vector vecMins, Vector vecMaxs, int iHull, entvars_t* pevIgnore, CBaseEntity** ppHit)
+{
+	TraceResult tr;
+	*ppHit = NULL;
+
+	UTIL_TraceLine(vecOrigin + vecMaxs, vecOrigin + vecMins, dont_ignore_monsters, pevIgnore->pContainingEntity, &tr);
+	if (TeleTraceHitBlocks(tr))
+		return false;
+	if (tr.pHit && !*ppHit)
+		*ppHit = CBaseEntity::Instance(tr.pHit);
+
+	UTIL_TraceHull(vecOrigin, vecOrigin, dont_ignore_monsters, iHull, pevIgnore->pContainingEntity, &tr);
+	if (TeleTraceHitBlocks(tr))
+		return false;
+	if (tr.pHit && !*ppHit)
+		*ppHit = CBaseEntity::Instance(tr.pHit);
+
+	UTIL_TraceLine(Vector(vecMins.x + vecOrigin.x, vecMins.y + vecOrigin.y, vecMaxs.z + vecOrigin.z),
+		Vector(vecMaxs.x + vecOrigin.x, vecMaxs.y + vecOrigin.y, vecMins.z + vecOrigin.z),
+		dont_ignore_monsters, pevIgnore->pContainingEntity, &tr);
+	if (TeleTraceHitBlocks(tr))
+		return false;
+	if (tr.pHit && !*ppHit)
+		*ppHit = CBaseEntity::Instance(tr.pHit);
+
+	return true;
+}
+
+// Kills whatever living thing (other than pevTarget and pevSkip) is in the box at vecSpot. When
+// one survives, pevTarget is killed, and when that survives too, the gauss's player. Returns
+// false when something in the box can't be telefragged. RandomTeleEnt and BeconTeleport repeat
+// this loop inline; they differ in which takedamage counts and in the damage.
+static bool TeleFragBox(CGauss* pGauss, entvars_t* pevTarget, entvars_t* pevSkip, const Vector& vecSpot,
+	bool bAimOnly, float flDamage, entvars_t* pevLastInflictor)
+{
+	CBaseEntity* pList[8];
+	int iCount = UTIL_EntitiesInBox(pList, 8, vecSpot + pevTarget->mins, vecSpot + pevTarget->maxs, 0);
+	for (int i = 0; i < iCount; i++)
+	{
+		entvars_t* pevEnt = pList[i]->pev;
+		if (pevEnt->pContainingEntity == pevTarget->pContainingEntity)
+			continue;
+		if (pevSkip && pevEnt->pContainingEntity == pevSkip->pContainingEntity)
+			continue;
+		if (bAimOnly ? pevEnt->takedamage != DAMAGE_AIM : pevEnt->takedamage == DAMAGE_NO)
+			continue;
+		if (pevEnt->deadflag != DEAD_NO)
+			continue;
+
+		int iCap = RC_CAP_TELEFRAGGABLE;
+		if (!pList[i]->HasRCCap(iCap))
+			return false;
+
+		pList[i]->TakeDamage(pGauss->pev, pGauss->m_pPlayer->pev, flDamage, DMG_ALWAYSGIB);
+		if (pList[i]->pev->takedamage != DAMAGE_NO && pList[i]->pev->deadflag == DEAD_NO)
+		{
+			CBaseEntity* pTarget = CBaseEntity::Instance(pevTarget->pContainingEntity);
+			pTarget->TakeDamage(pGauss->pev, pGauss->m_pPlayer->pev, flDamage, DMG_ALWAYSGIB);
+			if (pevTarget->takedamage != DAMAGE_NO && pevTarget->deadflag == DEAD_NO)
+			{
+				pTarget->TakeDamage(pevLastInflictor, pevLastInflictor, flDamage, DMG_ALWAYSGIB);
+				pGauss->m_pPlayer->TakeDamage(pGauss->pev, pGauss->m_pPlayer->pev, flDamage, DMG_ALWAYSGIB);
+			}
+		}
+	}
+	return true;
+}
+
+// orig 0x1990d0: moves pevTarget out from the beacon along the surface normal. Telefrags what's
+// there, removes the beacon. False when there's no room.
+bool CTeleBecon::BeconTeleport(CGauss* pGauss, entvars_t* pevTarget)
+{
+	float flDistOut;
+	int iHull;
+	Vector vecOfs;
+
+	CBaseEntity* pTarget = CBaseEntity::Instance(pevTarget->pContainingEntity);
+	if (!pTarget)
+	{
+		flDistOut = 56;
+		iHull = head_hull;
+		vecOfs = g_vecZero;
+	}
+	else
+	{
+		flDistOut = pTarget->GetGuassDistOut();
+		iHull = pTarget->GetGuassHull();
+		vecOfs = Vector(0, 0, (pTarget->pev->mins.z + pTarget->pev->maxs.z) * 0.5);
+	}
+
+	if (!m_blAttached)
+		return false;
+
+	if (pev->angles.x > 360)
+		pev->angles.x -= 360;
+	if (pev->angles.y > 360)
+		pev->angles.y -= 360;
+	if (pev->angles.z > 360)
+		pev->angles.z -= 360;
+	if (pev->angles.x < 0)
+		pev->angles.x += 360;
+	if (pev->angles.y < 0)
+		pev->angles.y += 360;
+	if (pev->angles.z < 0)
+		pev->angles.z += 360;
+
+	Vector vecDest = pev->origin + m_vecPlaneNormal * flDistOut;
+	if (m_vecPlaneNormal.z == 0)
+	{
+		vecDest = vecDest - vecOfs;
+	}
+	else
+	{
+		float flSign = fabs(m_vecPlaneNormal.z) / m_vecPlaneNormal.z;
+		vecDest = vecDest + vecOfs * flSign;
+	}
+
+	TraceResult tr;
+	UTIL_TraceLine(pev->origin + m_vecPlaneNormal, vecDest, ignore_monsters, edict(), &tr);
+	Vector vecSpot = tr.vecEndPos;
+	if (tr.flFraction != 1.0 || 0 != tr.fStartSolid || 0 != tr.fAllSolid)
+		return false;
+
+	if (!TeleIsValidSpot(vecSpot, pevTarget->mins, pevTarget->maxs, iHull, pev))
+		return false;
+
+	CBaseEntity* pHit;
+	if (!TeleIsValidSpotCheckEnts(vecSpot, pevTarget->mins, pevTarget->maxs, iHull, pev, &pHit))
+		return false;
+
+	if (pHit && pHit->edict() != pevTarget->pContainingEntity)
+		pHit->TakeDamage(pGauss->pev, pGauss->m_pPlayer->pev, 50000, DMG_ALWAYSGIB);
+
+	if (!TeleFragBox(pGauss, pevTarget, pev, vecSpot, false, 50000, pev))
+		return false;
+
+	pev->solid = SOLID_NOT;
+	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, pev->origin);
+	WRITE_BYTE(TE_SPRITETRAIL);
+	WRITE_COORD(pev->origin.x);
+	WRITE_COORD(pev->origin.y);
+	WRITE_COORD(pev->origin.z);
+	WRITE_COORD(pev->origin.x + m_vecPlaneNormal.x);
+	WRITE_COORD(pev->origin.y + m_vecPlaneNormal.y);
+	WRITE_COORD(pev->origin.z + m_vecPlaneNormal.z);
+	WRITE_SHORT(m_iEndTeleBall);
+	WRITE_BYTE(5);	// count
+	WRITE_BYTE(3);	// life * 10
+	WRITE_BYTE(3);	// scale * 10
+	WRITE_BYTE(10); // velocity along the vector * 10
+	WRITE_BYTE(30); // randomness * 10
+	MESSAGE_END();
+	pev->solid = SOLID_BBOX;
+
+	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, pevTarget->origin);
+	WRITE_BYTE(TE_EXPLOSION);
+	WRITE_COORD(pevTarget->origin.x);
+	WRITE_COORD(pevTarget->origin.y);
+	WRITE_COORD(pevTarget->origin.z);
+	WRITE_SHORT(m_iStartTeleFlash);
+	WRITE_BYTE(40); // scale * 10
+	WRITE_BYTE(20); // framerate
+	WRITE_BYTE(TE_EXPLFLAG_NOSOUND | TE_EXPLFLAG_NOPARTICLES);
+	MESSAGE_END();
+
+	RemoveTeleFlares(edict());
+
+	UTIL_SetOrigin(pevTarget, vecSpot);
+	pevTarget->velocity = g_vecZero;
+	pevTarget->fixangle = 2; // VERIFY: 2, not the 1 that sets angles; the original writes 2
+	pevTarget->flags &= ~FL_ONGROUND;
+
+	SetThink(&CBaseEntity::SUB_Remove);
+	pev->nextthink = gpGlobals->time + 0.1;
+	return true;
+}
+
+// orig 0x19c260
+void CTeleBecon::EntIsBeingRemoved(edict_t* pEdict)
+{
+	if (m_hOwner != NULL && m_hOwner->edict() == pEdict)
+		m_hOwner = NULL;
+
+	if (pev->owner && pev->owner == pEdict)
+		pev->owner = NULL;
+
+	if (m_blAttached && (m_hOwner == NULL || !pev->owner))
+		Killed(pev, 0);
+}
+
+// orig 0x19c310
+Vector CTeleBecon::GetBotShootOrg()
+{
+	return pev->origin - Vector(0, 0, 16);
+}
+
+// orig 0x19c370
+int CTeleBecon::GetRCCaps()
+{
+	return 0x802; // VERIFY meaning: telefraggable (0x2) and 0x800
+}
+
+// orig 0x19c380
+bool CTeleBecon::BotTargetRealseable(CBaseEntity* pBot)
+{
+	return true;
+}
+
+// orig 0x19c390
+int CTeleBecon::GetBotTargetWeight(CBaseEntity* pBot)
+{
+	return 1;
+}
+
+// orig 0x19c3a0
+bool CTeleBecon::IsAlive()
+{
+	return true;
+}
+
+//=========================================================
+// CGauss
+//=========================================================
+LINK_ENTITY_TO_CLASS(weapon_gauss, CGauss);
+
+// orig 0x199ca0
+bool CGauss::IsHornetGun()
+{
+	return true;
+}
+
+// The "retrieve the beacon" effect and cost shared by Reload and SecondaryAttack.
+static void RetrieveBecon(CGauss* pGauss, CTeleBecon* pBecon)
+{
+	EMIT_SOUND(ENT(pGauss->m_pPlayer->pev), CHAN_WEAPON, "weapons/electro4.wav", 0.75, ATTN_NORM);
+
+	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, pGauss->pev->origin);
+	WRITE_BYTE(TE_EXPLOSION);
+	WRITE_COORD(pBecon->pev->origin.x);
+	WRITE_COORD(pBecon->pev->origin.y);
+	WRITE_COORD(pBecon->pev->origin.z);
+	WRITE_SHORT(m_iStartTeleFlash);
+	WRITE_BYTE(10); // scale * 10
+	WRITE_BYTE(25); // framerate
+	WRITE_BYTE(TE_EXPLFLAG_NOSOUND | TE_EXPLFLAG_NOPARTICLES);
+	MESSAGE_END();
+
+	RemoveTeleFlares(pBecon->edict());
+	pBecon->SUB_Remove();
+
+	pGauss->m_pPlayer->m_rgAmmo[pGauss->m_iPrimaryAmmoType] -= PREFS_KeyLoopUpInt("GAUSS", "RetriveBeconCaust", 5);
+}
+
+// orig 0x199cb0: with a beacon out, retrieve it; without one, teleport to a random spawn point.
+void CGauss::Reload()
+{
+	if (m_flNextPrimaryAttack > gpGlobals->time || m_flNextSecondaryAttack > gpGlobals->time)
+		return;
+
+	float flNext;
+	if (m_pPlayer->pev->waterlevel == 3)
+	{
+		PlayEmptySound();
+		flNext = gpGlobals->time + 0.15;
+	}
+	else
+	{
+		CTeleBecon* pBecon = FindPlayersBecon(m_pPlayer);
+		if (!pBecon)
+		{
+			if (m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] >= PREFS_KeyLoopUpInt("GAUSS", "SelfTeleportCaust", 15) && RandomTeleEnt(m_pPlayer->pev))
+			{
+				EMIT_SOUND(ENT(m_pPlayer->pev), CHAN_WEAPON, "debris/beamstart7.wav", 1.0, ATTN_NORM);
+				m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] -= PREFS_KeyLoopUpInt("GAUSS", "SelfTeleportCaust", 15);
+				m_flNextPrimaryAttack = m_flNextSecondaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("GAUSS", "SelfTeleRefire", 0.8) * m_pPlayer->m_fCurseRefireScale;
+				return;
+			}
+			PlayEmptySound();
+			m_pPlayer->m_flNextAttack = gpGlobals->time + 0.5;
+			return;
+		}
+
+		if (m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] < PREFS_KeyLoopUpInt("GAUSS", "RetriveBeconCaust", 5))
+		{
+			PlayEmptySound();
+			m_pPlayer->m_flNextAttack = gpGlobals->time + 0.5;
+			return;
+		}
+
+		RetrieveBecon(this, pBecon);
+		flNext = gpGlobals->time + PREFS_KeyLoopUpFloat("GAUSS", "RetriveRefire", 0.8) * m_pPlayer->m_fCurseRefireScale;
+	}
+
+	m_flNextPrimaryAttack = flNext;
+	m_flNextSecondaryAttack = flNext;
+}
+
+// orig 0x19a190
 void CGauss::Spawn()
 {
 	Precache();
 	m_iId = WEAPON_GAUSS;
 	SET_MODEL(ENT(pev), "models/w_gauss.mdl");
 
-	m_iDefaultAmmo = GAUSS_DEFAULT_GIVE;
+	m_iDefaultAmmo = PREFS_KeyLoopUpIntClamp("GAUSS", "PickupAmmo", 40, 0, 250);
 
 	FallInit(); // get ready to fall down.
 }
 
-
+// orig 0x19a210
 void CGauss::Precache()
 {
 	PRECACHE_MODEL("models/w_gauss.mdl");
@@ -66,23 +623,36 @@ void CGauss::Precache()
 
 	PRECACHE_SOUND("weapons/gauss2.wav");
 	PRECACHE_SOUND("weapons/electro4.wav");
-	PRECACHE_SOUND("weapons/electro5.wav");
-	PRECACHE_SOUND("weapons/electro6.wav");
-	PRECACHE_SOUND("ambience/pulsemachine.wav");
+	PRECACHE_SOUND("debris/beamstart7.wav");
+	PRECACHE_SOUND("debris/beamstart14.wav");
+	PRECACHE_SOUND("weapons/mine_deploy.wav");
+	PRECACHE_SOUND("weapons/rocketfire1.wav");
+	PRECACHE_SOUND("debris/beamstart4.wav");
+	PRECACHE_SOUND("turret/tu_ping.wav");
+	PRECACHE_MODEL("models/w_adrenaline.mdl");
 
-	m_iGlow = PRECACHE_MODEL("sprites/hotglow.spr");
-	m_iBalls = PRECACHE_MODEL("sprites/hotglow.spr");
-	m_iBeam = PRECACHE_MODEL("sprites/smoke.spr");
-
-	m_usGaussFire = PRECACHE_EVENT(1, "events/gauss.sc");
-	m_usGaussSpin = PRECACHE_EVENT(1, "events/gaussspin.sc");
+	m_iEndTeleBall = PRECACHE_MODEL("sprites/redflare1.spr");
+	m_iStartTeleFlash = PRECACHE_MODEL("sprites/xflare1.spr");
+	m_iImpactSpr = PRECACHE_MODEL("sprites/xspark2.spr");
 }
 
+// orig 0x19a370. The 2001 SDK's weapons send WeapPickup from AddToPlayer; halflife-updated sends
+// it from CBasePlayer::AddPlayerItem, so this only calls the base (reference/dossiers).
+void CGauss::AddToPlayer(CBasePlayer* pPlayer)
+{
+	CBasePlayerWeapon::AddToPlayer(pPlayer);
+	// As the original: this weapon tells the player it was picked up (AddPlayerItem doesn't)
+	MESSAGE_BEGIN(MSG_ONE, gmsgWeapPickup, NULL, pPlayer->pev);
+	WRITE_BYTE(m_iId);
+	MESSAGE_END();
+}
+
+// orig 0x19a400
 bool CGauss::GetItemInfo(ItemInfo* p)
 {
 	p->pszName = STRING(pev->classname);
 	p->pszAmmo1 = "uranium";
-	p->iMaxAmmo1 = URANIUM_MAX_CARRY;
+	p->iMaxAmmo1 = PREFS_KeyLoopUpIntClamp("ITEMS", "CellsMax", 200, 0, 250);
 	p->pszAmmo2 = NULL;
 	p->iMaxAmmo2 = -1;
 	p->iMaxClip = WEAPON_NOCLIP;
@@ -90,541 +660,351 @@ bool CGauss::GetItemInfo(ItemInfo* p)
 	p->iPosition = 1;
 	p->iId = m_iId = WEAPON_GAUSS;
 	p->iFlags = 0;
-	p->iWeight = GAUSS_WEIGHT;
+	p->iWeight = -1;
 
 	return true;
 }
 
+// orig 0x19a4b0
 bool CGauss::Deploy()
 {
-	m_pPlayer->m_flPlayAftershock = 0.0;
 	return DefaultDeploy("models/v_gauss.mdl", "models/p_gauss.mdl", GAUSS_DRAW, "gauss");
 }
 
+// orig 0x19a4f0
 void CGauss::Holster()
 {
-	SendStopEvent(true);
-
-	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
+	m_pPlayer->m_flNextAttack = gpGlobals->time + 0.5;
 
 	SendWeaponAnim(GAUSS_HOLSTER);
-	m_fInAttack = 0;
+	EMIT_SOUND(ENT(m_pPlayer->pev), CHAN_WEAPON, "common/null.wav", 1.0, ATTN_NORM);
 }
 
+// orig 0x19a570: teleports pevTarget to a spawn point (EntSelectSpawnPoint), telefragging
+// what's there. False when there's no room.
+bool CGauss::RandomTeleEnt(entvars_t* pevTarget)
+{
+	int iHull;
+	CBaseEntity* pTarget = CBaseEntity::Instance(pevTarget->pContainingEntity);
+	if (!pTarget)
+	{
+		iHull = head_hull;
+	}
+	else
+	{
+		pTarget->GetGuassDistOut(); // the original calls it and drops the result
+		iHull = pTarget->GetGuassHull();
+	}
 
+	EMIT_SOUND(pevTarget->pContainingEntity, CHAN_WEAPON, "debris/beamstart7.wav", 1.0, ATTN_NORM);
+
+	edict_t* pSpot = EntSelectSpawnPoint(pTarget);
+	Vector vecSpot = VARS(pSpot)->origin;
+
+	if (!TeleIsValidSpot(vecSpot, pevTarget->mins, pevTarget->maxs, iHull, m_pPlayer->pev))
+		return false;
+
+	if (!TeleFragBox(this, pevTarget, NULL, vecSpot, true, 500, pev))
+		return false;
+
+	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, pevTarget->origin);
+	WRITE_BYTE(TE_EXPLOSION);
+	WRITE_COORD(pevTarget->origin.x);
+	WRITE_COORD(pevTarget->origin.y);
+	WRITE_COORD(pevTarget->origin.z);
+	WRITE_SHORT(m_iStartTeleFlash);
+	WRITE_BYTE(40); // scale * 10
+	WRITE_BYTE(20); // framerate
+	WRITE_BYTE(TE_EXPLFLAG_NOSOUND | TE_EXPLFLAG_NOPARTICLES);
+	MESSAGE_END();
+
+	pevTarget->origin = vecSpot + Vector(0, 0, 1);
+	pevTarget->v_angle = g_vecZero;
+	pevTarget->velocity = g_vecZero;
+	pevTarget->angles = VARS(pSpot)->angles;
+	pevTarget->punchangle = g_vecZero;
+	pevTarget->fixangle = 1;
+	UTIL_SetOrigin(pevTarget, pevTarget->origin);
+	pevTarget->velocity = g_vecZero;
+	pevTarget->fixangle = 2; // VERIFY: overwrites the 1 above; the original writes both
+	pevTarget->flags &= ~FL_ONGROUND;
+
+	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, VARS(pSpot)->origin);
+	WRITE_BYTE(TE_SPRITETRAIL);
+	WRITE_COORD(vecSpot.x);
+	WRITE_COORD(vecSpot.y);
+	WRITE_COORD(vecSpot.z);
+	WRITE_COORD(vecSpot.x);
+	WRITE_COORD(vecSpot.y);
+	WRITE_COORD(vecSpot.z + 1);
+	WRITE_SHORT(m_iEndTeleBall);
+	WRITE_BYTE(5);	// count
+	WRITE_BYTE(3);	// life * 10
+	WRITE_BYTE(3);	// scale * 10
+	WRITE_BYTE(10); // velocity along the vector * 10
+	WRITE_BYTE(30); // randomness * 10
+	MESSAGE_END();
+
+	return true;
+}
+
+// orig 0x19ac50: with a beacon out, a beam that teleports what it hits to the beacon.
 void CGauss::PrimaryAttack()
 {
 	// don't fire underwater
 	if (m_pPlayer->pev->waterlevel == 3)
 	{
 		PlayEmptySound();
-		m_flNextSecondaryAttack = m_flNextPrimaryAttack = GetNextAttackDelay(0.15);
+		m_flNextSecondaryAttack = m_flNextPrimaryAttack = gpGlobals->time + 0.15;
 		return;
 	}
 
-	if (m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] < 2)
+	if (m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] < PREFS_KeyLoopUpInt("GAUSS", "FireBlankCaust", 2))
 	{
 		PlayEmptySound();
-		m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
+		m_pPlayer->m_flNextAttack = gpGlobals->time + 0.5;
 		return;
 	}
 
-	m_pPlayer->m_iWeaponVolume = GAUSS_PRIMARY_FIRE_VOLUME;
-	m_fPrimaryFire = true;
-
-	m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] -= 2;
-
-	StartFire();
-	m_fInAttack = 0;
-	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.0;
-	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.2;
-}
-
-void CGauss::SecondaryAttack()
-{
-	// JoshA: Sanitize this so it's not total garbage on level transition
-	// and we end up ear blasting the player!
-	m_pPlayer->m_flStartCharge = V_min(m_pPlayer->m_flStartCharge, gpGlobals->time);
-
-	// don't fire underwater
-	if (m_pPlayer->pev->waterlevel == 3)
+	CTeleBecon* pBecon = FindPlayersBecon(m_pPlayer);
+	if (!pBecon)
 	{
-		if (m_fInAttack != 0)
-		{
-			EMIT_SOUND_DYN(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/electro4.wav", 1.0, ATTN_NORM, 0, 80 + RANDOM_LONG(0, 0x3f));
-			//Have to send to the host as well because the client will predict the frame with m_fInAttack == 0
-			SendStopEvent(true);
-			SendWeaponAnim(GAUSS_IDLE);
-			m_fInAttack = 0;
-		}
-		else
-		{
-			PlayEmptySound();
-		}
-
-		m_flNextSecondaryAttack = m_flNextPrimaryAttack = GetNextAttackDelay(0.5);
+		PlayEmptySound();
+		m_pPlayer->m_flNextAttack = gpGlobals->time + 0.5;
 		return;
 	}
 
-	if (m_fInAttack == 0)
-	{
-		if (m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0)
-		{
-			EMIT_SOUND(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/357_cock1.wav", 0.8, ATTN_NORM);
-			m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
-			return;
-		}
-
-		m_fPrimaryFire = false;
-
-		m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]--; // take one ammo just to start the spin
-		m_pPlayer->m_flNextAmmoBurn = UTIL_WeaponTimeBase();
-
-		// spin up
-		m_pPlayer->m_iWeaponVolume = GAUSS_PRIMARY_CHARGE_VOLUME;
-
-		SendWeaponAnim(GAUSS_SPINUP);
-		m_fInAttack = 1;
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.5;
-		m_pPlayer->m_flStartCharge = gpGlobals->time;
-		m_pPlayer->m_flAmmoStartCharge = UTIL_WeaponTimeBase() + GetFullChargeTime();
-
-		PLAYBACK_EVENT_FULL(FEV_NOTHOST, m_pPlayer->edict(), m_usGaussSpin, 0.0, g_vecZero, g_vecZero, 0.0, 0.0, 110, 0, 0, 0);
-
-		m_iSoundState = SND_CHANGE_PITCH;
-	}
-	else if (m_fInAttack == 1)
-	{
-		if (m_flTimeWeaponIdle < UTIL_WeaponTimeBase())
-		{
-			SendWeaponAnim(GAUSS_SPIN);
-			m_fInAttack = 2;
-		}
-	}
-	else
-	{
-		if (m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] > 0)
-		{
-			// during the charging process, eat one bit of ammo every once in a while
-			if (UTIL_WeaponTimeBase() >= m_pPlayer->m_flNextAmmoBurn && m_pPlayer->m_flNextAmmoBurn != 1000)
-			{
-#ifdef CLIENT_DLL
-				if (bIsMultiplayer())
-#else
-				if (g_pGameRules->IsMultiplayer())
-#endif
-				{
-					m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]--;
-					m_pPlayer->m_flNextAmmoBurn = UTIL_WeaponTimeBase() + 0.1;
-				}
-				else
-				{
-					m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]--;
-					m_pPlayer->m_flNextAmmoBurn = UTIL_WeaponTimeBase() + 0.3;
-				}
-			}
-		}
-
-		if (m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0)
-		{
-			// out of ammo! force the gun to fire
-			StartFire();
-			m_fInAttack = 0;
-			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.0;
-			m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 1;
-			return;
-		}
-
-		if (UTIL_WeaponTimeBase() >= m_pPlayer->m_flAmmoStartCharge)
-		{
-			// don't eat any more ammo after gun is fully charged.
-			m_pPlayer->m_flNextAmmoBurn = 1000;
-		}
-
-		int pitch = (gpGlobals->time - m_pPlayer->m_flStartCharge) * (150 / GetFullChargeTime()) + 100;
-		if (pitch > 250)
-			pitch = 250;
-
-		// ALERT( at_console, "%d %d %d\n", m_fInAttack, m_iSoundState, pitch );
-
-		if (m_iSoundState == 0)
-			ALERT(at_console, "sound state %d\n", m_iSoundState);
-
-		PLAYBACK_EVENT_FULL(FEV_NOTHOST, m_pPlayer->edict(), m_usGaussSpin, 0.0, g_vecZero, g_vecZero, 0.0, 0.0, pitch, 0, (m_iSoundState == SND_CHANGE_PITCH) ? 1 : 0, 0);
-
-		m_iSoundState = SND_CHANGE_PITCH; // hack for going through level transitions
-
-		m_pPlayer->m_iWeaponVolume = GAUSS_PRIMARY_CHARGE_VOLUME;
-
-		// m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.1;
-		if (m_pPlayer->m_flStartCharge < gpGlobals->time - 10)
-		{
-			// Player charged up too long. Zap him.
-			EMIT_SOUND_DYN(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/electro4.wav", 1.0, ATTN_NORM, 0, 80 + RANDOM_LONG(0, 0x3f));
-			EMIT_SOUND_DYN(ENT(m_pPlayer->pev), CHAN_ITEM, "weapons/electro6.wav", 1.0, ATTN_NORM, 0, 75 + RANDOM_LONG(0, 0x3f));
-
-			m_fInAttack = 0;
-			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.0;
-			m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 1.0;
-
-			SendStopEvent(false);
-
-#ifndef CLIENT_DLL
-			m_pPlayer->TakeDamage(CWorld::World->pev, CWorld::World->pev, 50, DMG_SHOCK);
-			UTIL_ScreenFade(m_pPlayer, Vector(255, 128, 0), 2, 0.5, 128, FFADE_IN);
-#endif
-			SendWeaponAnim(GAUSS_IDLE);
-
-			// Player may have been killed and this weapon dropped, don't execute any more code after this!
-			return;
-		}
-	}
-}
-
-//=========================================================
-// StartFire- since all of this code has to run and then
-// call Fire(), it was easier at this point to rip it out
-// of weaponidle() and make its own function then to try to
-// merge this into Fire(), which has some identical variable names
-//=========================================================
-void CGauss::StartFire()
-{
-	float flDamage;
-
-	// JoshA: Sanitize this so it's not total garbage on level transition
-	// and we end up ear blasting the player!
-	m_pPlayer->m_flStartCharge = V_min(m_pPlayer->m_flStartCharge, gpGlobals->time);
+	m_flNextSecondaryAttack = m_flNextPrimaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("GAUSS", "PrimaryHasBeconRefire", 0.5) * m_pPlayer->m_fCurseRefireScale;
 
 	UTIL_MakeVectors(m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle);
-	Vector vecAiming = gpGlobals->v_forward;
-	Vector vecSrc = m_pPlayer->GetGunPosition(); // + gpGlobals->v_up * -8 + gpGlobals->v_right * 8;
+	SendWeaponAnim(GAUSS_FIRE2);
+	m_pPlayer->SetAnimation(PLAYER_ATTACK1);
+	m_pPlayer->pev->punchangle.x -= PREFS_KeyLoopUpInt("GAUSS", "PrimaryAngleKick", 4);
 
-	if (gpGlobals->time - m_pPlayer->m_flStartCharge > GetFullChargeTime())
+	Vector vecSrc = m_pPlayer->GetGunPosition();
+	TraceResult tr;
+	UTIL_TraceLine(vecSrc, vecSrc + gpGlobals->v_forward * 4096, dont_ignore_monsters, m_pPlayer->edict(), &tr);
+
+	// the beam starts at the gun's muzzle
+	vecSrc = vecSrc + gpGlobals->v_right * 8 + gpGlobals->v_up * -12;
+
+	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, vecSrc);
+	WRITE_BYTE(TE_BEAMPOINTS);
+	WRITE_COORD(vecSrc.x);
+	WRITE_COORD(vecSrc.y);
+	WRITE_COORD(vecSrc.z);
+	WRITE_COORD(tr.vecEndPos.x);
+	WRITE_COORD(tr.vecEndPos.y);
+	WRITE_COORD(tr.vecEndPos.z);
+	WRITE_SHORT(g_sModelIndexLaser);
+	WRITE_BYTE(0);	 // startframe
+	WRITE_BYTE(50);	 // framerate
+	WRITE_BYTE(1);	 // life
+	WRITE_BYTE(40);	 // width
+	WRITE_BYTE(0);	 // noise
+	WRITE_BYTE(128); // r, g, b
+	WRITE_BYTE(128);
+	WRITE_BYTE(255);
+	WRITE_BYTE(250); // brightness
+	WRITE_BYTE(50);	 // speed
+	MESSAGE_END();
+
+	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, vecSrc);
+	WRITE_BYTE(TE_BEAMPOINTS);
+	WRITE_COORD(vecSrc.x);
+	WRITE_COORD(vecSrc.y);
+	WRITE_COORD(vecSrc.z);
+	WRITE_COORD(tr.vecEndPos.x);
+	WRITE_COORD(tr.vecEndPos.y);
+	WRITE_COORD(tr.vecEndPos.z);
+	WRITE_SHORT(g_sModelIndexLaser);
+	WRITE_BYTE(0);	 // startframe
+	WRITE_BYTE(50);	 // framerate
+	WRITE_BYTE(1);	 // life
+	WRITE_BYTE(12);	 // width
+	WRITE_BYTE(60);	 // noise
+	WRITE_BYTE(200); // r, g, b
+	WRITE_BYTE(200);
+	WRITE_BYTE(255);
+	WRITE_BYTE(250); // brightness
+	WRITE_BYTE(50);	 // speed
+	MESSAGE_END();
+
+	EMIT_SOUND(ENT(m_pPlayer->pev), CHAN_WEAPON, "debris/beamstart4.wav", 1.0, ATTN_NORM);
+
+	if (g_pGameRules->CanPlayerAnnoy(m_pPlayer->pev, tr.pHit ? VARS(tr.pHit) : NULL) && tr.pHit)
 	{
-		flDamage = 200;
-	}
-	else
-	{
-		flDamage = 200 * ((gpGlobals->time - m_pPlayer->m_flStartCharge) / GetFullChargeTime());
-	}
-
-	if (m_fPrimaryFire)
-	{
-		// fixed damage on primary attack
-#ifdef CLIENT_DLL
-		flDamage = 20;
-#else
-		flDamage = gSkillData.plrDmgGauss;
-#endif
-	}
-
-	if (m_fInAttack != 3)
-	{
-		//ALERT ( at_console, "Time:%f Damage:%f\n", gpGlobals->time - m_pPlayer->m_flStartCharge, flDamage );
-
-#ifndef CLIENT_DLL
-		float flZVel = m_pPlayer->pev->velocity.z;
-
-		if (!m_fPrimaryFire)
+		int iCap = RC_CAP_GAUSS_TELEPORTABLE;
+		if (CBaseEntity::Instance(tr.pHit)->HasRCCap(iCap))
 		{
-			m_pPlayer->pev->velocity = m_pPlayer->pev->velocity - gpGlobals->v_forward * flDamage * 5;
-		}
-
-		if (!g_pGameRules->IsMultiplayer())
-
-		{
-			// in deathmatch, gauss can pop you up into the air. Not in single play.
-			m_pPlayer->pev->velocity.z = flZVel;
-		}
-#endif
-		// player "shoot" animation
-		m_pPlayer->SetAnimation(PLAYER_ATTACK1);
-	}
-
-	// time until aftershock 'static discharge' sound
-	m_pPlayer->m_flPlayAftershock = gpGlobals->time + UTIL_SharedRandomFloat(m_pPlayer->random_seed, 0.3, 0.8);
-
-	Fire(vecSrc, vecAiming, flDamage);
-}
-
-void CGauss::Fire(Vector vecOrigSrc, Vector vecDir, float flDamage)
-{
-	m_pPlayer->m_iWeaponVolume = GAUSS_PRIMARY_FIRE_VOLUME;
-
-	Vector vecSrc = vecOrigSrc;
-	Vector vecDest = vecSrc + vecDir * 8192;
-	edict_t* pentIgnore;
-	TraceResult tr, beam_tr;
-	float flMaxFrac = 1.0;
-	int nTotal = 0;
-	bool fHasPunched = false;
-	bool fFirstBeam = true;
-	int nMaxHits = 10;
-
-	pentIgnore = m_pPlayer->edict();
-
-#ifdef CLIENT_DLL
-	if (m_fPrimaryFire == false)
-		g_irunninggausspred = true;
-#endif
-
-	// The main firing event is sent unreliably so it won't be delayed.
-	PLAYBACK_EVENT_FULL(FEV_NOTHOST, m_pPlayer->edict(), m_usGaussFire, 0.0, m_pPlayer->pev->origin, m_pPlayer->pev->angles, flDamage, 0.0, 0, 0, m_fPrimaryFire ? 1 : 0, 0);
-
-	SendStopEvent(false);
-
-
-	/*ALERT( at_console, "%f %f %f\n%f %f %f\n", 
-		vecSrc.x, vecSrc.y, vecSrc.z, 
-		vecDest.x, vecDest.y, vecDest.z );*/
-
-
-	//	ALERT( at_console, "%f %f\n", tr.flFraction, flMaxFrac );
-
-#ifndef CLIENT_DLL
-	while (flDamage > 10 && nMaxHits > 0)
-	{
-		nMaxHits--;
-
-		// ALERT( at_console, "." );
-		UTIL_TraceLine(vecSrc, vecDest, dont_ignore_monsters, pentIgnore, &tr);
-
-		if (0 != tr.fAllSolid)
-			break;
-
-		CBaseEntity* pEntity = CBaseEntity::Instance(tr.pHit);
-
-		if (pEntity == NULL)
-			break;
-
-		if (fFirstBeam)
-		{
-			m_pPlayer->pev->effects |= EF_MUZZLEFLASH;
-			fFirstBeam = false;
-
-			nTotal += 26;
-		}
-
-		if (0 != pEntity->pev->takedamage)
-		{
-			ClearMultiDamage();
-
-			// if you hurt yourself clear the headshot bit
-			if (m_pPlayer->pev == pEntity->pev)
+			if (m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] >= PREFS_KeyLoopUpInt("GAUSS", "OtherTeleportCaust", 20))
 			{
-				tr.iHitgroup = 0;
-			}
-
-			pEntity->TraceAttack(m_pPlayer->pev, flDamage, vecDir, &tr, DMG_BULLET);
-			ApplyMultiDamage(m_pPlayer->pev, m_pPlayer->pev);
-		}
-
-		if (pEntity->ReflectGauss())
-		{
-			float n;
-
-			pentIgnore = NULL;
-
-			n = -DotProduct(tr.vecPlaneNormal, vecDir);
-
-			if (n < 0.5) // 60 degrees
-			{
-				// ALERT( at_console, "reflect %f\n", n );
-				// reflect
-				Vector r;
-
-				r = 2.0 * tr.vecPlaneNormal * n + vecDir;
-				flMaxFrac = flMaxFrac - tr.flFraction;
-				vecDir = r;
-				vecSrc = tr.vecEndPos + vecDir * 8;
-				vecDest = vecSrc + vecDir * 8192;
-
-				// explode a bit
-				m_pPlayer->RadiusDamage(tr.vecEndPos, pev, m_pPlayer->pev, flDamage * n, CLASS_NONE, DMG_BLAST);
-
-				nTotal += 34;
-
-				// lose energy
-				if (n == 0)
-					n = 0.1;
-				flDamage = flDamage * (1 - n);
-			}
-			else
-			{
-				nTotal += 13;
-
-				// limit it to one hole punch
-				if (fHasPunched)
-					break;
-				fHasPunched = true;
-
-				// try punching through wall if secondary attack (primary is incapable of breaking through)
-				if (!m_fPrimaryFire)
+				if (!pBecon->BeconTeleport(this, VARS(tr.pHit)))
 				{
-					UTIL_TraceLine(tr.vecEndPos + vecDir * 8, vecDest, dont_ignore_monsters, pentIgnore, &beam_tr);
-					if (0 == beam_tr.fAllSolid)
-					{
-						// trace backwards to find exit point
-						UTIL_TraceLine(beam_tr.vecEndPos, tr.vecEndPos, dont_ignore_monsters, pentIgnore, &beam_tr);
+					m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] -= PREFS_KeyLoopUpInt("GAUSS", "FireBlankCaust", 2);
+					EMIT_SOUND(tr.pHit, CHAN_WEAPON, "debris/beamstart14.wav", 0.5, ATTN_NORM);
 
-						float n = (beam_tr.vecEndPos - tr.vecEndPos).Length();
-
-						if (n < flDamage)
-						{
-							if (n == 0)
-								n = 1;
-							flDamage -= n;
-
-							// ALERT( at_console, "punch %f\n", n );
-							nTotal += 21;
-
-							// exit blast damage
-							//m_pPlayer->RadiusDamage( beam_tr.vecEndPos + vecDir * 8, pev, m_pPlayer->pev, flDamage, CLASS_NONE, DMG_BLAST );
-							float damage_radius;
-
-
-							if (g_pGameRules->IsMultiplayer())
-							{
-								damage_radius = flDamage * 1.75; // Old code == 2.5
-							}
-							else
-							{
-								damage_radius = flDamage * 2.5;
-							}
-
-							::RadiusDamage(beam_tr.vecEndPos + vecDir * 8, pev, m_pPlayer->pev, flDamage, damage_radius, CLASS_NONE, DMG_BLAST);
-
-							CSoundEnt::InsertSound(bits_SOUND_COMBAT, pev->origin, NORMAL_EXPLOSION_VOLUME, 3.0);
-
-							nTotal += 53;
-
-							vecSrc = beam_tr.vecEndPos + vecDir;
-						}
-					}
-					else
-					{
-						//ALERT( at_console, "blocked %f\n", n );
-						flDamage = 0;
-					}
+					MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, vecSrc);
+					WRITE_BYTE(TE_BEAMPOINTS);
+					WRITE_COORD(vecSrc.x);
+					WRITE_COORD(vecSrc.y);
+					WRITE_COORD(vecSrc.z);
+					WRITE_COORD(tr.vecEndPos.x);
+					WRITE_COORD(tr.vecEndPos.y);
+					WRITE_COORD(tr.vecEndPos.z);
+					WRITE_SHORT(g_sModelIndexLaser);
+					WRITE_BYTE(0);	 // startframe
+					WRITE_BYTE(50);	 // framerate
+					WRITE_BYTE(1);	 // life
+					WRITE_BYTE(10);	 // width
+					WRITE_BYTE(40);	 // noise
+					WRITE_BYTE(200); // r, g, b
+					WRITE_BYTE(20);
+					WRITE_BYTE(10);
+					WRITE_BYTE(250); // brightness
+					WRITE_BYTE(20);	 // speed
+					MESSAGE_END();
 				}
 				else
 				{
-					//ALERT( at_console, "blocked solid\n" );
-
-					flDamage = 0;
+					EMIT_SOUND(tr.pHit, CHAN_WEAPON, "debris/beamstart7.wav", 1.0, ATTN_NORM);
+					m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] -= PREFS_KeyLoopUpInt("GAUSS", "OtherTeleportCaust", 20);
 				}
 			}
+
+			m_flNextSecondaryAttack = m_flNextPrimaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("GAUSS", "OtherTeleportedRefire", 0.8) * m_pPlayer->m_fCurseRefireScale;
+			return;
+		}
+	}
+
+	// hit nothing teleportable: a spark where the beam ends
+	Vector vecSpark = tr.vecEndPos - gpGlobals->v_forward * 5;
+	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, tr.vecEndPos);
+	WRITE_BYTE(TE_SPRITE);
+	WRITE_COORD(vecSpark.x);
+	WRITE_COORD(vecSpark.y);
+	WRITE_COORD(vecSpark.z);
+	WRITE_SHORT(m_iImpactSpr);
+	WRITE_BYTE(10);	 // scale * 10
+	WRITE_BYTE(255); // brightness
+	MESSAGE_END();
+
+	m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] -= PREFS_KeyLoopUpInt("GAUSS", "FireBlankCaust", 2);
+}
+
+// orig 0x19b8a0: throws the beacon, or with one out teleports the player to it (retrieving it
+// when the teleport fails or the player can't afford one).
+void CGauss::SecondaryAttack()
+{
+	if (m_pPlayer->pev->waterlevel == 3)
+	{
+		PlayEmptySound();
+		m_flNextSecondaryAttack = m_flNextPrimaryAttack = gpGlobals->time + 0.5;
+		return;
+	}
+
+	CTeleBecon* pBecon = FindPlayersBecon(m_pPlayer);
+	if (!pBecon)
+	{
+		UTIL_MakeVectors(m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle);
+		SendWeaponAnim(GAUSS_FIRE2);
+		m_pPlayer->SetAnimation(PLAYER_ATTACK1);
+		m_pPlayer->pev->punchangle.x = -2;
+
+		Vector vecSrc = m_pPlayer->GetGunPosition();
+		CTeleBecon* pNew = CTeleBecon::BecCreate();
+		UTIL_SetOrigin(pNew->pev, vecSrc);
+		pNew->pev->velocity = gpGlobals->v_forward * PREFS_KeyLoopUpFloat("GAUSS", "BeconLaunchSpeed", 600);
+		pNew->pev->velocity.z += PREFS_KeyLoopUpFloat("GAUSS", "BeconLaunchZBoost", 100);
+		pNew->pev->owner = m_pPlayer->edict();
+		pNew->pev->angles = UTIL_VecToAngles(pNew->pev->velocity);
+		pNew->pev->angles.y -= 180;
+		pNew->pev->angles.x -= 180;
+		pNew->pev->avelocity = Vector(RANDOM_FLOAT(-100, 100), RANDOM_FLOAT(-100, 100), RANDOM_FLOAT(-100, 100));
+
+		EMIT_SOUND(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/rocketfire1.wav", 0.75, ATTN_NORM);
+
+		// the original sets 0.5 and then 0.8
+		m_flNextSecondaryAttack = m_flNextPrimaryAttack = gpGlobals->time + 0.5;
+		m_flNextSecondaryAttack = m_flNextPrimaryAttack = gpGlobals->time + 0.8;
+		return;
+	}
+
+	const char* pszRefire;
+	if (m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] < PREFS_KeyLoopUpInt("GAUSS", "SelfTeleportCaust", 15))
+	{
+		if (m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] < PREFS_KeyLoopUpInt("GAUSS", "RetriveBeconCaust", 5))
+			PlayEmptySound();
+		else
+			RetrieveBecon(this, pBecon);
+		pszRefire = "RetriveRefire";
+	}
+	else
+	{
+		if (!pBecon->BeconTeleport(this, m_pPlayer->pev))
+		{
+			if (m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] < PREFS_KeyLoopUpInt("GAUSS", "RetriveBeconCaust", 5))
+				PlayEmptySound();
+			else
+				RetrieveBecon(this, pBecon);
 		}
 		else
 		{
-			vecSrc = tr.vecEndPos + vecDir;
-			pentIgnore = ENT(pEntity->pev);
+			EMIT_SOUND(ENT(m_pPlayer->pev), CHAN_WEAPON, "debris/beamstart7.wav", 1.0, ATTN_NORM);
+			m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] -= PREFS_KeyLoopUpInt("GAUSS", "SelfTeleportCaust", 15);
 		}
+		pszRefire = "SelfTeleRefire";
 	}
-#endif
-	// ALERT( at_console, "%d bytes\n", nTotal );
+
+	m_flNextSecondaryAttack = m_flNextPrimaryAttack = gpGlobals->time + PREFS_KeyLoopUpFloat("GAUSS", pszRefire, 0.8) * m_pPlayer->m_fCurseRefireScale;
 }
 
-
-
-
+// orig 0x19c170. Only times the next idle: like the SDK's, it never sends the idle animation.
 void CGauss::WeaponIdle()
 {
 	ResetEmptySound();
 
-	// play aftershock static discharge
-	if (0 != m_pPlayer->m_flPlayAftershock && m_pPlayer->m_flPlayAftershock < gpGlobals->time)
-	{
-		switch (RANDOM_LONG(0, 3))
-		{
-		case 0:
-			EMIT_SOUND(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/electro4.wav", RANDOM_FLOAT(0.7, 0.8), ATTN_NORM);
-			break;
-		case 1:
-			EMIT_SOUND(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/electro5.wav", RANDOM_FLOAT(0.7, 0.8), ATTN_NORM);
-			break;
-		case 2:
-			EMIT_SOUND(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/electro6.wav", RANDOM_FLOAT(0.7, 0.8), ATTN_NORM);
-			break;
-		case 3:
-			break; // no sound
-		}
-		m_pPlayer->m_flPlayAftershock = 0.0;
-	}
-
-	if (m_flTimeWeaponIdle > UTIL_WeaponTimeBase())
+	if (m_flTimeWeaponIdle > gpGlobals->time)
 		return;
 
-	if (m_fInAttack != 0)
-	{
-		StartFire();
-		m_fInAttack = 0;
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 2.0;
-	}
+	float flRand = RANDOM_FLOAT(0, 1);
+	if (flRand <= 0.5 || flRand <= 0.75)
+		m_flTimeWeaponIdle = gpGlobals->time + RANDOM_FLOAT(10, 15);
 	else
-	{
-		int iAnim;
-		float flRand = RANDOM_FLOAT(0, 1);
-		if (flRand <= 0.5)
-		{
-			iAnim = GAUSS_IDLE;
-			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat(m_pPlayer->random_seed, 10, 15);
-		}
-		else if (flRand <= 0.75)
-		{
-			iAnim = GAUSS_IDLE2;
-			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat(m_pPlayer->random_seed, 10, 15);
-		}
-		else
-		{
-			iAnim = GAUSS_FIDGET;
-			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 3;
-		}
-
-		return;
-		SendWeaponAnim(iAnim);
-	}
-}
-
-void CGauss::SendStopEvent(bool sendToHost)
-{
-	// This reliable event is used to stop the spinning sound
-	// It's delayed by a fraction of second to make sure it is delayed by 1 frame on the client
-	// It's sent reliably anyway, which could lead to other delays
-
-	int flags = FEV_RELIABLE | FEV_GLOBAL;
-
-	if (!sendToHost)
-	{
-		flags |= FEV_NOTHOST;
-	}
-
-	PLAYBACK_EVENT_FULL(flags, m_pPlayer->edict(), m_usGaussFire, 0.01, m_pPlayer->pev->origin, m_pPlayer->pev->angles, 0.0, 0.0, 0, 0, 0, 1);
+		m_flTimeWeaponIdle = gpGlobals->time + 3;
 }
 
 
 
 class CGaussAmmo : public CBasePlayerAmmo
 {
+	// orig 0x24c850
 	void Spawn() override
 	{
 		Precache();
 		SET_MODEL(ENT(pev), "models/w_gaussammo.mdl");
 		CBasePlayerAmmo::Spawn();
 	}
+	// orig 0x24c810
 	void Precache() override
 	{
 		PRECACHE_MODEL("models/w_gaussammo.mdl");
 		PRECACHE_SOUND("items/9mmclip1.wav");
 	}
+	// orig 0x24c760. Reads the egon's heading for the amount, as the original does.
 	bool AddAmmo(CBaseEntity* pOther) override
 	{
-		if (pOther->GiveAmmo(AMMO_URANIUMBOX_GIVE, "uranium", URANIUM_MAX_CARRY) != -1)
+		if (pOther->GiveAmmo(PREFS_KeyLoopUpIntClamp("EGON", "AmmoBoxGive", 40, 0, 250), "uranium", PREFS_KeyLoopUpIntClamp("ITEMS", "CellsMax", 200, 0, 250)) != -1)
 		{
 			EMIT_SOUND(ENT(pev), CHAN_ITEM, "items/9mmclip1.wav", 1, ATTN_NORM);
 			return true;
 		}
 		return false;
+	}
+	// orig 0x24c750
+	int GetBotWeight(CBot* pBot, CBaseEntity* pEnemy) override
+	{
+		return 5;
 	}
 };
 LINK_ENTITY_TO_CLASS(ammo_gaussclip, CGaussAmmo);

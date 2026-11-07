@@ -30,6 +30,7 @@
 #include "decals.h"
 #include "gamerules.h"
 #include "UserMessages.h"
+#include "rcbot.h"
 
 #define NOT_USED 255
 
@@ -217,8 +218,13 @@ void ExplodeModel( const Vector &vecOrigin, float speed, int model, int count )
 #endif
 
 // Precaches the weapon and queues the weapon info for sending to clients
+// Rocket Crowbar 1.9 (orig 0x239650): skips a classname already on the precache list and adds
+// it once precached.
 void UTIL_PrecacheOtherWeapon(const char* szClassname)
 {
+	if (IsClassnamePrecachedNoInvalid(szClassname))
+		return;
+
 	edict_t* pent;
 
 	pent = CREATE_NAMED_ENTITY(MAKE_STRING(szClassname));
@@ -253,12 +259,15 @@ void UTIL_PrecacheOtherWeapon(const char* szClassname)
 
 			memset(&II, 0, sizeof II);
 		}
+
+		AddToPrecachedList(szClassname);
 	}
 
 	REMOVE_ENTITY(pent);
 }
 
-// called by worldspawn
+// called by worldspawn. Rocket Crowbar 1.9 (orig 0x2397e0) adds item_healthkit, ammo_egonclip and
+// the CTF flag model.
 void W_Precache()
 {
 	memset(CBasePlayerItem::ItemInfoArray, 0, sizeof(CBasePlayerItem::ItemInfoArray));
@@ -273,6 +282,7 @@ void W_Precache()
 	UTIL_PrecacheOther("item_antidote");
 	UTIL_PrecacheOther("item_security");
 	UTIL_PrecacheOther("item_longjump");
+	UTIL_PrecacheOther("item_healthkit");
 
 	// shotgun
 	UTIL_PrecacheOtherWeapon("weapon_shotgun");
@@ -297,6 +307,7 @@ void W_Precache()
 	// gauss
 	UTIL_PrecacheOtherWeapon("weapon_gauss");
 	UTIL_PrecacheOther("ammo_gaussclip");
+	UTIL_PrecacheOther("ammo_egonclip");
 
 	// rpg
 	UTIL_PrecacheOtherWeapon("weapon_rpg");
@@ -356,6 +367,8 @@ void W_Precache()
 	PRECACHE_SOUND("weapons/bullet_hit2.wav"); // hit by bullet
 
 	PRECACHE_SOUND("items/weapondrop1.wav"); // weapon falls to the ground
+
+	PRECACHE_MODEL("models/flag.mdl"); // CTF flags (flag.cpp)
 }
 
 
@@ -446,10 +459,8 @@ void CBasePlayerItem::FallThink()
 
 		Materialize();
 	}
-	else if (m_pPlayer != NULL)
-	{
-		SetThink(NULL);
-	}
+	// halflife-updated stops this think once a player holds the weapon (and AttachToPlayer clears
+	// it); the original keeps it running (orig 0x239e50).
 
 	// This weapon is an egon, it has no owner and we're in busting mode, so just remove it when it hits the ground
 	if (IsBustingGame() && FNullEnt(pev->owner))
@@ -495,7 +506,9 @@ void CBasePlayerItem::AttemptToMaterialize()
 		return;
 	}
 
-	pev->nextthink = time;
+	// Original bug, kept (orig 0x239fc0): FlWeaponTryRespawn returns an absolute time and this
+	// adds the current time again, which puts the next try far off. halflife-updated sets it as is.
+	pev->nextthink = gpGlobals->time + time;
 }
 
 //=========================================================
@@ -591,10 +604,12 @@ void CBasePlayerItem::AddToPlayer(CBasePlayer* pPlayer)
 	m_pPlayer = pPlayer;
 }
 
+// orig 0x23a630: the original also holsters the item.
 void CBasePlayerItem::Drop()
 {
 	SetTouch(NULL);
 	SetThink(&CBasePlayerItem::SUB_Remove);
+	Holster();
 	pev->nextthink = gpGlobals->time + .1;
 }
 
@@ -621,8 +636,7 @@ void CBasePlayerItem::AttachToPlayer(CBasePlayer* pPlayer)
 	pev->model = iStringNull;
 	pev->owner = pPlayer->edict();
 	pev->nextthink = gpGlobals->time + .1;
-	SetTouch(NULL);
-	SetThink(NULL); // Clear FallThink function so it can't run while attached to player.
+	SetTouch(NULL); // the original (orig 0x23a730) leaves the think; see FallThink
 }
 
 // CALLED THROUGH the newly-touched weapon's instance. The existing player weapon is pOriginal
@@ -661,10 +675,26 @@ void CBasePlayerWeapon::AddToPlayer(CBasePlayer* pPlayer)
 		m_iPrimaryAmmoType = pPlayer->GetAmmoIndex(pszAmmo1());
 		m_iSecondaryAmmoType = pPlayer->GetAmmoIndex(pszAmmo2());
 	}
+
+	// The original (orig 0x23a830) ends with "return AddWeapon();", taking the weapon's ammo here.
+	// In this tree CBasePlayer::AddPlayerItem does that (ExtractAmmo) once the weapon is in the
+	// player's list, so AddWeapon is not called.
 }
 
+// orig 0x23c0e0. Nothing calls it in this tree; see AddToPlayer.
+bool CBasePlayerWeapon::AddWeapon()
+{
+	ExtractAmmo(this);
+	return true;
+}
+
+// orig 0x23a8e0. As the 2001 SDK: nothing for a client that isn't a net client, and every weapon
+// resends when the active weapon changes (halflife-updated resends only the old and new one).
 bool CBasePlayerWeapon::UpdateClientData(CBasePlayer* pPlayer)
 {
+	if (!pPlayer->IsNetClient())
+		return true;
+
 	bool bSend = false;
 	int state = 0;
 	if (pPlayer->m_pActiveItem == this)
@@ -681,14 +711,9 @@ bool CBasePlayerWeapon::UpdateClientData(CBasePlayer* pPlayer)
 		bSend = true;
 	}
 
-	// This is the current or last weapon, so the state will need to be updated
-	if (this == pPlayer->m_pActiveItem ||
-		this == pPlayer->m_pClientActiveItem)
+	if (pPlayer->m_pActiveItem != pPlayer->m_pClientActiveItem)
 	{
-		if (pPlayer->m_pActiveItem != pPlayer->m_pClientActiveItem)
-		{
-			bSend = true;
-		}
+		bSend = true;
 	}
 
 	// If the ammo, state, or fov has changed, update the weapon
@@ -719,17 +744,10 @@ bool CBasePlayerWeapon::UpdateClientData(CBasePlayer* pPlayer)
 }
 
 
+// orig 0x23aa30. RC's server always sends the animation: its players run Half-Life's own
+// client, which has no prediction for RC's weapons (halflife-updated skips predicting clients).
 void CBasePlayerWeapon::SendWeaponAnim(int iAnim, int body)
 {
-	const bool skiplocal = !m_ForceSendAnimations && UseDecrement() != false;
-
-	m_pPlayer->pev->weaponanim = iAnim;
-
-#if defined(CLIENT_WEAPONS)
-	if (skiplocal && ENGINE_CANSKIP(m_pPlayer->edict()))
-		return;
-#endif
-
 	MESSAGE_BEGIN(MSG_ONE, SVC_WEAPONANIM, NULL, m_pPlayer->pev);
 	WRITE_BYTE(iAnim);	   // sequence number
 	WRITE_BYTE(pev->body); // weaponmodel bodygroup.
@@ -739,6 +757,10 @@ void CBasePlayerWeapon::SendWeaponAnim(int iAnim, int body)
 bool CBasePlayerWeapon::AddPrimaryAmmo(CBasePlayerWeapon* origin, int iCount, char* szName, int iMaxClip, int iMaxCarry)
 {
 	int iIdAmmo;
+
+	// Rocket Crowbar 1.9 (orig 0x23aab0): no player, no ammo
+	if (!m_pPlayer || !m_pPlayer->pev || FNullEnt(m_pPlayer->pev))
+		return false;
 
 	if (iMaxClip < 1)
 	{
@@ -796,40 +818,19 @@ bool CBasePlayerWeapon::AddSecondaryAmmo(int iCount, char* szName, int iMax)
 // (does it have ammo loaded? do I have any ammo for the
 // weapon?, etc)
 //=========================================================
+// orig 0x23ac50, the 2001 SDK's: only the clip and the primary ammo count (halflife-updated also
+// counts secondary ammo and falls back to CanDeploy).
 bool CBasePlayerWeapon::IsUseable()
 {
-	if (m_iClip > 0)
+	// iMaxAmmo1 is tested first so a weapon without ammo (index -1) never reads m_rgAmmo[-1]; the
+	// result is the same
+	if (m_iClip <= 0 && iMaxAmmo1() != WEAPON_NOCLIP && m_pPlayer->m_rgAmmo[PrimaryAmmoIndex()] <= 0)
 	{
-		return true;
+		// clip is empty (or nonexistant) and the player has no more ammo of this type.
+		return false;
 	}
 
-	//Player has unlimited ammo for this weapon or does not use magazines
-	if (iMaxAmmo1() == WEAPON_NOCLIP)
-	{
-		return true;
-	}
-
-	if (m_pPlayer->m_rgAmmo[PrimaryAmmoIndex()] > 0)
-	{
-		return true;
-	}
-
-	if (pszAmmo2())
-	{
-		//Player has unlimited ammo for this weapon or does not use magazines
-		if (iMaxAmmo2() == WEAPON_NOCLIP)
-		{
-			return true;
-		}
-
-		if (m_pPlayer->m_rgAmmo[SecondaryAmmoIndex()] > 0)
-		{
-			return true;
-		}
-	}
-
-	// clip is empty (or nonexistant) and the player has no more ammo of this type.
-	return CanDeploy();
+	return true;
 }
 
 bool CBasePlayerWeapon::DefaultDeploy(const char* szViewModel, const char* szWeaponModel, int iAnim, const char* szAnimExt, int body)
@@ -843,8 +844,8 @@ bool CBasePlayerWeapon::DefaultDeploy(const char* szViewModel, const char* szWea
 	strcpy(m_pPlayer->m_szAnimExtention, szAnimExt);
 	SendWeaponAnim(iAnim, body);
 
-	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
-	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.0;
+	m_pPlayer->m_flNextAttack = gpGlobals->time + 0.5;
+	m_flTimeWeaponIdle = gpGlobals->time + 1.0;
 	m_flLastFireTime = 0.0;
 
 	return true;
@@ -854,7 +855,7 @@ bool CBasePlayerWeapon::PlayEmptySound()
 {
 	if (m_iPlayEmptySound)
 	{
-		EMIT_SOUND_PREDICTED(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/357_cock1.wav", 0.8, ATTN_NORM, 0, PITCH_NORM);
+		EMIT_SOUND_DYN(ENT(m_pPlayer->pev), CHAN_WEAPON, "weapons/357_cock1.wav", 0.8, ATTN_NORM, 0, PITCH_NORM); // orig 0x23af00
 		m_iPlayEmptySound = false;
 		return false;
 	}
@@ -870,9 +871,10 @@ int CBasePlayerWeapon::PrimaryAmmoIndex()
 
 //=========================================================
 //=========================================================
+// orig 0x23af90: -1, as in the 2001 SDK; the mp5 overrides it
 int CBasePlayerWeapon::SecondaryAmmoIndex()
 {
-	return m_iSecondaryAmmoType;
+	return -1;
 }
 
 void CBasePlayerWeapon::Holster()
@@ -969,7 +971,8 @@ bool CBasePlayerWeapon::ExtractAmmo(CBasePlayerWeapon* pWeapon)
 
 	if (pszAmmo2() != NULL)
 	{
-		iReturn |= pWeapon->AddSecondaryAmmo(0, (char*)pszAmmo2(), iMaxAmmo2());
+		// orig 0x23b250: the secondary result replaces the primary one
+		iReturn = pWeapon->AddSecondaryAmmo(0, (char*)pszAmmo2(), iMaxAmmo2());
 	}
 
 	return iReturn;
@@ -998,10 +1001,15 @@ bool CBasePlayerWeapon::ExtractClipAmmo(CBasePlayerWeapon* pWeapon)
 //=========================================================
 // RetireWeapon - no more ammo for this gun, put it away.
 //=========================================================
+// orig 0x23b370: retire at once, as the 2001 SDK did. halflife-updated defers this to
+// DoRetireWeapon on a think and holsters when there is nothing to switch to.
 void CBasePlayerWeapon::RetireWeapon()
 {
-	SetThink(&CBasePlayerWeapon::CallDoRetireWeapon);
-	pev->nextthink = gpGlobals->time + 0.01f;
+	// first, no viewmodel at all.
+	m_pPlayer->pev->viewmodel = iStringNull;
+	m_pPlayer->pev->weaponmodel = iStringNull;
+
+	g_pGameRules->GetNextBestWeapon(m_pPlayer, this);
 }
 
 void CBasePlayerWeapon::DoRetireWeapon()
@@ -1047,10 +1055,10 @@ float CBasePlayerWeapon::GetNextAttackDelay(float delay)
 	// save the last fire time
 	m_flLastFireTime = gpGlobals->time;
 
-	float flNextAttack = UTIL_WeaponTimeBase() + delay - flCreep;
+	float flNextAttack = gpGlobals->time + delay - flCreep;
 	// we need to remember what the m_flNextPrimaryAttack time is set to for each shot,
 	// store it as m_flPrevPrimaryAttack.
-	m_flPrevPrimaryAttack = flNextAttack - UTIL_WeaponTimeBase();
+	m_flPrevPrimaryAttack = flNextAttack - gpGlobals->time;
 	// 	char szMsg[256];
 	// 	snprintf( szMsg, sizeof(szMsg), "next attack time: %0.4f\n", gpGlobals->time + flNextAttack );
 	// 	OutputDebugString( szMsg );
@@ -1114,6 +1122,10 @@ void CWeaponBox::Spawn()
 	UTIL_SetSize(pev, g_vecZero, g_vecZero);
 
 	SET_MODEL(ENT(pev), "models/w_weaponbox.mdl");
+
+	// Rocket Crowbar 1.9 (orig 0x23b840): every box goes after 30 seconds
+	SetThink(&CWeaponBox::Kill);
+	pev->nextthink = gpGlobals->time + 30;
 }
 
 //=========================================================
@@ -1475,11 +1487,19 @@ bool CBasePlayerWeapon::BotCanHaveItem(CBaseEntity* pBot)
 	return g_pGameRules->CanHavePlayerItem(static_cast<CBasePlayer*>(pBot), this);
 }
 
-// RC's bot object: what the original game library reads of it. Its first member is the bot's
-// entvars; the float at +0x698 (name unknown) gates firing. These are the original i386 bot's
-// offsets in a class this library never defines, so they hold only for that bot binary.
-static entvars_t* RCBotPev(CBot* pBot) { return *reinterpret_cast<entvars_t**>(pBot); }
-static float RCBotFireGate(CBot* pBot) { return *reinterpret_cast<float*>(reinterpret_cast<byte*>(pBot) + 0x698); } // VERIFY name
+// orig 0x23b410. Original bug, kept: it asks BotFirePrimary twice (the second was surely meant
+// to be BotFireSecondary), so it is twice the weight when the primary would fire, else 0.
+int CBasePlayerWeapon::GetBotWeight(CBot* pBot, CBaseEntity* pEnemy)
+{
+	int iWeight = 0;
+	if (BotFirePrimary(pBot, pEnemy))
+		iWeight = ItemInfoArray[m_iId].iWeight;
+	if (BotFirePrimary(pBot, pEnemy))
+		iWeight += ItemInfoArray[m_iId].iWeight;
+	return iWeight;
+}
+
+// RC's bot object is read through rcbot.h.
 
 // Press the bot's buttons for this weapon: reload when the clip is empty, otherwise fire.
 // The original also calls pEnemy->GetBotShootOrg() twice and discards both results; the base

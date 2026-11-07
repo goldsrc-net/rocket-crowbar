@@ -55,6 +55,7 @@ public:
 	void EXPORT DangerSoundThink();
 	void EXPORT PreDetonate();
 	void EXPORT Detonate();
+	void EXPORT DetonateSnark(); // Rocket Crowbar 1.9: TumbleThink's detonation, the same as Detonate
 	void EXPORT DetonateUse(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE useType, float value);
 	void EXPORT TumbleThink();
 
@@ -64,6 +65,39 @@ public:
 
 	bool m_fRegisteredSound; // whether or not this grenade has issued its DANGER sound to the world sound list yet.
 };
+
+// Rocket Crowbar 1.9: the grenades declared in a header in the original (their inline members
+// are compiled as "(header)" functions). Package w2-rpg-handgrenade.
+
+// The hand grenade's secondary fire (handgrenade.cpp): explodes into a push that knocks
+// everything near away and makes walking things slide (CFictionTimer, "friction_timer").
+class CBubleGrenade : public CGrenade
+{
+public:
+	static void ShootBubTimed(entvars_t* pevOwner, Vector vecStart, Vector vecVelocity, float time);
+	void EXPORT SlippyGoBoom();
+	void EXPORT PreDetThink();
+	void EXPORT SlippyTouch(CBaseEntity* pOther);
+	int GetRCCaps() override { return 0x6080001c; } // orig 0x24ddc0
+};
+
+// The hivehand's freeze grenade. Its methods are in hornetgun.cpp (w2-crossbow-hornet).
+class CFreezeGreande : public CGrenade
+{
+public:
+	static CFreezeGreande* ShootFreezeTimed(entvars_t* pevOwner, Vector vecStart, Vector vecVelocity, float flTime);
+	void EXPORT FreezeDet();
+	void EXPORT PreDetThink();
+	void EXPORT FreezeBounceTouch(CBaseEntity* pOther);
+
+	void ProMagApplyForce(CBaseEntity* pMagnet, Vector vecForce) override;
+	virtual bool ProMagEffected(CBaseEntity* pMagnet); // new in CFreezeGreande (orig slot 151); bodies in hornetgun.cpp
+
+	Vector m_vecMaxAVel; // orig +0x280, the spin it was thrown with; bounces scale it down. VERIFY name
+};
+
+// handgrenade.cpp: ends the slide CBubleGrenade put on pev (player.cpp calls it).
+extern void DestroyFrictionTimer(entvars_t* pev);
 
 
 // constant items
@@ -311,6 +345,7 @@ public:
 
 	virtual bool ExtractAmmo(CBasePlayerWeapon* pWeapon);	  //{ return true; }			// Return true if you can add ammo to yourself when picked up
 	virtual bool ExtractClipAmmo(CBasePlayerWeapon* pWeapon); // { return true; }			// Return true if you can add ammo to yourself when picked up
+	virtual bool AddWeapon(); // Rocket Crowbar 1.9 (the 2001 SDK's): ExtractAmmo(this)
 
 	// generic "shared" ammo handlers
 	bool AddPrimaryAmmo(CBasePlayerWeapon* origin, int iCount, char* szName, int iMaxClip, int iMaxCarry);
@@ -359,6 +394,7 @@ public:
 	virtual bool BotFirePrimary(CBot* pBot, CBaseEntity* pEnemy) { return true; }
 	virtual bool BotFireSecondary(CBot* pBot, CBaseEntity* pEnemy) { return false; }
 	virtual int BotFireButton(CBot* pBot, CBaseEntity* pEnemy) { return -1; } // -1: decide by Primary/Secondary
+	int GetBotWeight(CBot* pBot, CBaseEntity* pEnemy) override;
 
 	int PrimaryAmmoIndex() override;
 	int SecondaryAmmoIndex() override;
@@ -490,6 +526,11 @@ public:
 	int m_rgAmmo[MAX_AMMO_SLOTS];	 // ammo quantities
 
 	int m_cAmmoTypes; // how many ammo types packed into this box (if packed by a level designer)
+
+	// Rocket Crowbar 1.9: the virtuals CWeaponBox adds, in the original's order
+	virtual bool IsGravGreandeMoveable() { return true; }			// orig 0x23bf60
+	virtual bool BotCanHaveItem(CBaseEntity* pBot) { return true; } // orig 0x23bf50
+	virtual int GetBotWeight(CBot* pBot, CBaseEntity* pEnemy) { return 25; } // orig 0x23bf40
 };
 
 #ifdef CLIENT_DLL
@@ -526,21 +567,16 @@ public:
 	void Reload() override;
 	void WeaponIdle() override;
 
-	bool UseDecrement() override
-	{
-#if defined(CLIENT_WEAPONS)
-		return true;
-#else
-		return false;
-#endif
-	}
+	// Rocket Crowbar 1.9: the bot interface
+	int GetBotWeight(CBot* pBot, CBaseEntity* pEnemy) override;
+	void BotWeaponFrame(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFireSecondary(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFirePrimary(CBot* pBot, CBaseEntity* pEnemy) override;
+
+	// No UseDecrement: RC 1.9 predates client weapon prediction and keeps absolute timers
 
 private:
-	int m_iShell;
-
-
-	unsigned short m_usFireGlock1;
-	unsigned short m_usFireGlock2;
+	int m_iShell; // orig +0x8c
 };
 
 enum crowbar_e
@@ -608,6 +644,7 @@ public:
 	void Precache() override;
 	int iItemSlot() override { return 2; }
 	bool GetItemInfo(ItemInfo* p) override;
+	void AddToPlayer(CBasePlayer* pPlayer) override;
 	void PrimaryAttack() override;
 	void SecondaryAttack() override;
 	bool Deploy() override;
@@ -615,17 +652,17 @@ public:
 	void Reload() override;
 	void WeaponIdle() override;
 
-	bool UseDecrement() override
-	{
-#if defined(CLIENT_WEAPONS)
-		return true;
-#else
-		return false;
-#endif
-	}
+	// Rocket Crowbar 1.9: the bot interface
+	int GetBotWeight(CBot* pBot, CBaseEntity* pEnemy) override;
+	int BotFireButton(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFireSecondary(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFirePrimary(CBot* pBot, CBaseEntity* pEnemy) override;
 
-private:
-	unsigned short m_usFirePython;
+	// No UseDecrement: RC 1.9 predates client weapon prediction and keeps absolute timers
+
+	// The 2001 SDK's python members, which halflife-updated dropped (orig +0x8c, +0x90)
+	float m_flSoundDelay = 0; // when WeaponIdle plays the reload sound, 0 for none
+	bool m_fInZoom = false;	  // never set in RC: its SecondaryAttack fires instead of zooming
 };
 
 enum mp5_e
@@ -647,27 +684,33 @@ public:
 	void Precache() override;
 	int iItemSlot() override { return 3; }
 	bool GetItemInfo(ItemInfo* p) override;
+	void AddToPlayer(CBasePlayer* pPlayer) override;
+	int SecondaryAmmoIndex() override;
 
 	void PrimaryAttack() override;
 	void SecondaryAttack() override;
 	bool Deploy() override;
 	void Reload() override;
 	void WeaponIdle() override;
-	float m_flNextAnimTime;
-	int m_iShell;
+	float m_flNextAnimTime; // orig +0x8c
+	int m_iShell;			// orig +0x90
 
-	bool UseDecrement() override
-	{
-#if defined(CLIENT_WEAPONS)
-		return true;
-#else
-		return false;
-#endif
-	}
+	// Rocket Crowbar 1.9: the primary is a lightning beam, the secondary a backward blast
+	bool IsGoodTarget(Vector vecSrc, Vector vecAngles, CBaseEntity* pEntity);
+	void DoBeamEffects(Vector vecStart, Vector vecEnd, int iWidth);
+	void FireBeam(Vector vecSrc, Vector vecAngles, Vector vecBeamStart);
 
-private:
-	unsigned short m_usMP5;
-	unsigned short m_usMP52;
+	int GetBotWeight(CBot* pBot, CBaseEntity* pEnemy) override;
+	int BotFireButton(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFireSecondary(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFirePrimary(CBot* pBot, CBaseEntity* pEnemy) override;
+
+	// Unsaved; names chosen from use
+	float m_flSpawnTime = 0;  // orig +0x94, set by Spawn and never read. VERIFY name
+	int m_iBeamState = 0;	  // orig +0x98, 1 while firing, back to 0 on empty or idle. VERIFY name
+	float m_flBeamStateTime = 0; // orig +0x9c, PrimaryAttack re-arms m_iBeamState once it passes. VERIFY name
+
+	// No UseDecrement: RC 1.9 predates client weapon prediction and keeps absolute timers
 };
 
 enum crossbow_e
@@ -693,9 +736,14 @@ public:
 	void Precache() override;
 	int iItemSlot() override { return 3; }
 	bool GetItemInfo(ItemInfo* p) override;
+	void AddToPlayer(CBasePlayer* pPlayer) override;
 
+	// Rocket Crowbar 1.9: primary fires an impaler arrow (CImpArrow, crossbow.cpp); zoomed fire is
+	// a hitscan sniper shot that bounces off RC-cap reflectors and sprays the shooter's decal.
 	void FireBolt();
 	void FireSniperBolt();
+	void DoSniperFire();
+	void PaintDecal(edict_t* pEdict, Vector vecOrigin, Vector vecAngles);
 	void PrimaryAttack() override;
 	void SecondaryAttack() override;
 	bool Deploy() override;
@@ -703,18 +751,16 @@ public:
 	void Reload() override;
 	void WeaponIdle() override;
 
-	bool UseDecrement() override
-	{
-#if defined(CLIENT_WEAPONS)
-		return true;
-#else
-		return false;
-#endif
-	}
+	int GetBotWeight(CBot* pBot, CBaseEntity* pEnemy) override;
+	int BotFireButton(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFireSecondary(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFirePrimary(CBot* pBot, CBaseEntity* pEnemy) override;
 
-private:
-	unsigned short m_usCrossbow;
-	unsigned short m_usCrossbow2;
+
+	int m_fInZoom;			  // orig +0x8c, the SDK 2.0 name: 1 while zoomed in
+	float m_flSniperFireTime; // orig +0x90, WeaponIdle fires a held sniper shot after this. VERIFY name: only Spawn sets it
+	bool m_bSniperFiring;	  // orig +0x94, a sniper shot is held for m_flSniperFireTime. VERIFY name: nothing sets it true
+	int m_iSmoke;			  // orig +0x98, sprites/smoke.spr. VERIFY name: precached, never read
 };
 
 enum shotgun_e
@@ -804,6 +850,8 @@ enum rpg_e
 class CRpg : public CBasePlayerWeapon
 {
 public:
+	// Rocket Crowbar 1.9: the original has no CRpg save table (CBasePlayerWeapon's is used).
+	// These stay so weapons.cpp's table compiles; see reference/dossiers/w2-rpg-handgrenade.md.
 #ifndef CLIENT_DLL
 	bool Save(CSave& save) override;
 	bool Restore(CRestore& restore) override;
@@ -813,8 +861,9 @@ public:
 	void Spawn() override;
 	void Precache() override;
 	void Reload() override;
-	int iItemSlot() override { return 4; }
+	int iItemSlot() override { return 4; } // orig 0x201940
 	bool GetItemInfo(ItemInfo* p) override;
+	void AddToPlayer(CBasePlayer* pPlayer) override; // Rocket Crowbar 1.9
 
 	bool Deploy() override;
 	bool CanHolster() override;
@@ -825,30 +874,26 @@ public:
 	void WeaponIdle() override;
 
 	void UpdateSpot();
-	bool ShouldWeaponIdle() override { return true; }
+	bool ShouldWeaponIdle() override { return true; } // orig 0x201930
 
-	CLaserSpot* m_pSpot;
+	// Rocket Crowbar 1.9: the bot interface
+	int GetBotWeight(CBot* pBot, CBaseEntity* pEnemy) override;
+	void BotWeaponFrame(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFirePrimary(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFireSecondary(CBot* pBot, CBaseEntity* pEnemy) override;
+
+	// Rocket Crowbar 1.9: no laser spot. m_fSpotActive is not in the original; it stays (always
+	// false) because client.cpp and cl_dll read it.
 	bool m_fSpotActive;
-	int m_cActiveRockets; // how many missiles in flight from this launcher right now?
+	int m_cActiveRockets;	 // orig +0x8c: scientist/barney bombs and suck mines fired and not yet triggered. VERIFY name
+	float m_flBotNextFire; // orig +0x90: the bot holds fire until then (-1 on pickup). VERIFY name
 
-	bool UseDecrement() override
-	{
-#if defined(CLIENT_WEAPONS)
-		return true;
-#else
-		return false;
-#endif
-	}
-
-private:
-	unsigned short m_usRpg;
+	// Rocket Crowbar 1.9: no UseDecrement override (the original has none); timers are absolute.
 };
 
 class CRpgRocket : public CGrenade
 {
 public:
-	~CRpgRocket() override;
-
 	bool Save(CSave& save) override;
 	bool Restore(CRestore& restore) override;
 	static TYPEDESCRIPTION m_SaveData[];
@@ -859,11 +904,10 @@ public:
 	void EXPORT RocketTouch(CBaseEntity* pOther);
 	static CRpgRocket* CreateRpgRocket(Vector vecOrigin, Vector vecAngles, CBaseEntity* pOwner, CRpg* pLauncher);
 
-	CRpg* GetLauncher();
-
 	int m_iTrail;
 	float m_flIgniteTime;
-	EHANDLE m_hLauncher; // handle back to the launcher that fired me.
+	EHANDLE m_hLauncher;  // the original's m_pLauncher (FIELD_CLASSPTR, +0x288): set, never read
+	float m_flSpawnTime;  // Rocket Crowbar 1.9, orig +0x28c: set in Spawn, never read. VERIFY name
 };
 
 #define GAUSS_PRIMARY_CHARGE_VOLUME 256 // how loud gauss is while charging
@@ -886,50 +930,32 @@ class CGauss : public CBasePlayerWeapon
 {
 public:
 #ifndef CLIENT_DLL
+	// The original has no save table; weapons.cpp keeps halflife-updated's (m_fInAttack,
+	// m_fPrimaryFire), which RC's gauss never uses.
 	bool Save(CSave& save) override;
 	bool Restore(CRestore& restore) override;
 	static TYPEDESCRIPTION m_SaveData[];
 #endif
 
+	// Rocket Crowbar 1.9: a teleporter (gauss.cpp)
 	void Spawn() override;
 	void Precache() override;
-	int iItemSlot() override { return 4; }
+	int iItemSlot() override { return 4; } // orig 0x19c400
 	bool GetItemInfo(ItemInfo* p) override;
+	void AddToPlayer(CBasePlayer* pPlayer) override;
 
 	bool Deploy() override;
 	void Holster() override;
+	bool IsHornetGun() override;
 
 	void PrimaryAttack() override;
 	void SecondaryAttack() override;
+	void Reload() override;
 	void WeaponIdle() override;
 
-	void StartFire();
-	void Fire(Vector vecOrigSrc, Vector vecDirShooting, float flDamage);
-	float GetFullChargeTime();
-	int m_iBalls;
-	int m_iGlow;
-	int m_iBeam;
-	int m_iSoundState; // don't save this
+	bool RandomTeleEnt(entvars_t* pevTarget);
 
-	// was this weapon just fired primary or secondary?
-	// we need to know so we can pick the right set of effects.
-	bool m_fPrimaryFire;
-
-	bool UseDecrement() override
-	{
-#if defined(CLIENT_WEAPONS)
-		return true;
-#else
-		return false;
-#endif
-	}
-
-private:
-	void SendStopEvent(bool sendToHost);
-
-private:
-	unsigned short m_usGaussFire;
-	unsigned short m_usGaussSpin;
+	bool m_fPrimaryFire; // only for weapons.cpp's save table
 };
 
 enum egon_e
@@ -1059,6 +1085,17 @@ public:
 	bool GetItemInfo(ItemInfo* p) override;
 	void AddToPlayer(CBasePlayer* pPlayer) override;
 
+	// Rocket Crowbar 1.9: the hivehand is a freeze gun. Primary charges and fires a freezing beam
+	// that punches through thin walls, secondary charges and throws a freeze grenade
+	// (CFreezeGreande, hornetgun.cpp), reload toggles a zoom.
+	bool IsHornetGun() override;
+	bool DoFreezeStuff(TraceResult* ptr, bool bFirst, Vector vecSrc, float flDamage);
+	void FireFreeze(float flDamage);
+	void StartPrimaryFire(float flDamage);
+	void WeaponAttackIdle();
+	void FinishSecondaryAttack();
+	void ReloadAmmo();
+
 	void PrimaryAttack() override;
 	void SecondaryAttack() override;
 	bool Deploy() override;
@@ -1066,23 +1103,24 @@ public:
 	void Holster() override;
 	void Reload() override;
 	void WeaponIdle() override;
-	float m_flNextAnimTime;
 
-	float m_flRechargeTime;
+	void BotWeaponFrame(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFireSecondary(CBot* pBot, CBaseEntity* pEnemy) override;
+	bool BotFirePrimary(CBot* pBot, CBaseEntity* pEnemy) override;
 
-	int m_iFirePhase; // don't save me.
+	float m_flNextAnimTime; // orig +0x8c, next idle anim while a charge is held
 
-	bool UseDecrement() override
-	{
-#if defined(CLIENT_WEAPONS)
-		return true;
-#else
-		return false;
-#endif
-	}
+	float m_flRechargeTime; // orig +0x90, the next ammo regenerates then
 
-private:
-	unsigned short m_usHornetFire;
+	int m_iFirePhase; // orig +0x94, RC: 1 while a primary or secondary charge is held. don't save me.
+
+	float m_flNextAmmoDrain; // orig +0x98, a held primary charge eats one more ammo then; -1 when full. VERIFY name
+	float m_flChargeStart;	 // orig +0x9c, the primary charge began then. VERIFY name
+	float m_flSecondaryEnd;	 // orig +0xa0, a held secondary charge is full then; -1 when idle. VERIFY name
+	bool m_bSecondaryCharge; // orig +0xa4, the held charge is the secondary one. VERIFY name
+	int m_fInZoom;			 // orig +0xa8, reload's zoom toggle (the crossbow's name for it)
+	float m_flNextZoomTime;	 // orig +0xac, reload can toggle the zoom again after this. VERIFY name
+
 };
 
 enum handgrenade_e
@@ -1102,23 +1140,21 @@ class CHandGrenade : public CBasePlayerWeapon
 public:
 	void Spawn() override;
 	void Precache() override;
-	int iItemSlot() override { return 5; }
+	int iItemSlot() override { return 5; } // orig 0x1a7fe0
 	bool GetItemInfo(ItemInfo* p) override;
 
 	void PrimaryAttack() override;
+	void SecondaryAttack() override; // Rocket Crowbar 1.9
 	bool Deploy() override;
 	bool CanHolster() override;
 	void Holster() override;
 	void WeaponIdle() override;
 
-	bool UseDecrement() override
-	{
-#if defined(CLIENT_WEAPONS)
-		return true;
-#else
-		return false;
-#endif
-	}
+	// Rocket Crowbar 1.9, orig +0x94: the pin was pulled with secondary fire (CBubleGrenade). The
+	// original's m_flStartThrow and m_flReleaseThrow (+0x8c, +0x90) are CBaseEntity's here.
+	bool m_bBubble; // VERIFY name
+
+	// Rocket Crowbar 1.9: no UseDecrement override (the original has none); timers are absolute.
 };
 
 enum satchel_e
@@ -1149,7 +1185,7 @@ public:
 
 	void Spawn() override;
 	void Precache() override;
-	int iItemSlot() override { return 5; }
+	int iItemSlot() override { return 5; } // orig 0x203f70
 	bool GetItemInfo(ItemInfo* p) override;
 	void AddToPlayer(CBasePlayer* pPlayer) override;
 	void PrimaryAttack() override;
@@ -1162,16 +1198,6 @@ public:
 	void Holster() override;
 	void WeaponIdle() override;
 	void Throw();
-	void Detonate();
-
-	bool UseDecrement() override
-	{
-#if defined(CLIENT_WEAPONS)
-		return true;
-#else
-		return false;
-#endif
-	}
 };
 
 enum tripmine_e
@@ -1192,9 +1218,9 @@ class CTripmine : public CBasePlayerWeapon
 public:
 	void Spawn() override;
 	void Precache() override;
-	int iItemSlot() override { return 5; }
+	int iItemSlot() override { return 5; } // orig 0x22da20
 	bool GetItemInfo(ItemInfo* p) override;
-	void SetObjectCollisionBox() override
+	void SetObjectCollisionBox() override // orig 0x22d950
 	{
 		//!!!BUGBUG - fix the model!
 		pev->absmin = pev->origin + Vector(-16, -16, -5);
@@ -1202,21 +1228,10 @@ public:
 	}
 
 	void PrimaryAttack() override;
+	void SecondaryAttack() override; // Rocket Crowbar 1.9: the headcrab teather
 	bool Deploy() override;
 	void Holster() override;
 	void WeaponIdle() override;
-
-	bool UseDecrement() override
-	{
-#if defined(CLIENT_WEAPONS)
-		return true;
-#else
-		return false;
-#endif
-	}
-
-private:
-	unsigned short m_usTripFire;
 };
 
 enum squeak_e
@@ -1229,30 +1244,29 @@ enum squeak_e
 	SQUEAK_THROW
 };
 
+class CSqueakCam; // squeakgrenade.cpp
+
 class CSqueak : public CBasePlayerWeapon
 {
 public:
 	void Spawn() override;
 	void Precache() override;
-	int iItemSlot() override { return 5; }
+	int iItemSlot() override { return 5; } // orig 0x21c390
 	bool GetItemInfo(ItemInfo* p) override;
 
 	void PrimaryAttack() override;
 	void SecondaryAttack() override;
+	void Reload() override;
 	bool Deploy() override;
 	void Holster() override;
 	void WeaponIdle() override;
-	bool m_fJustThrown;
 
-	bool UseDecrement() override
-	{
-#if defined(CLIENT_WEAPONS)
-		return true;
-#else
-		return false;
-#endif
-	}
+	// Rocket Crowbar 1.9: the snark cam (squeakgrenade.cpp)
+	bool IsHornetGun() override;
+	bool BotReloadWeapon() override;
 
-private:
-	unsigned short m_usSnarkFire;
+	CSqueakCam* m_pCam;	  // orig +0x8c, the cam the player looks through. VERIFY name
+	bool m_bInCam;		  // orig +0x90, looking through m_pCam. VERIFY name
+	float m_flNextReload; // orig +0x94, Reload (cam on/off) waits until then. VERIFY name
+	bool m_fJustThrown;	  // orig +0x98
 };

@@ -53,6 +53,16 @@ public:
 
 	bool TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType) override;
 
+	// Rocket Crowbar 1.9: which RC effects move or hold a hornet. CHornet declares these itself
+	// (they are not CBaseEntity virtuals); in the original's slot order.
+	virtual bool IsGravGreandeMoveable();
+	virtual bool IsShotgunRiftMoveable();
+	virtual bool IsTractorBeamMoveable();
+	virtual bool IsImpailable();
+	virtual bool IsCrowbarReloadMoveable();
+	virtual bool IsTeatherToable();
+	virtual bool IsFreezeable();
+
 	float m_flStopAttack;
 	int m_iHornetType;
 	float m_flFlySpeed;

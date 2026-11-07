@@ -45,6 +45,23 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
   checked against its binary), so a Steam player bunny-hopping on an RC server can mispredict, as
   any old-SDK mod's would.
 
+## Weapons
+
+- **The scientist and Barney bombs speak** (`dlls/rpg.cpp`). The original builds their sentence
+  names with `"%!SC_HELLO%d"`: Windows' printf drops the unknown `%!` and gives `!SC_HELLO3`, a
+  real sentence, while glibc keeps `%!`, so the original Linux server played none of their lines.
+  Ours plays them, as Windows servers did (same reasoning as the CRLF `rc.ini`).
+- **Two out-of-bounds memory accesses are bounded** (`dlls/squeakgrenade.cpp`, `dlls/satchel.cpp`).
+  `SCamPop` writes a byte into whatever weapon is active (ours only when it is the snark), and
+  `DeactivateSatchels` reads past the end of a `CKillerRat` (ours treats a rat as unarmed).
+- **`CImpArrow`'s save table drops a duplicate `m_vecVelo` entry** that the original saves a second
+  time as an entity pointer (`dlls/crossbow.cpp`).
+- **`WeapPickup` is sent as the original sends it**: by eight weapons' own `AddToPlayer`
+  (crossbow, egon, gauss, hornetgun, mp5, python, rpg, shotgun), not by halflife-updated's
+  `AddPlayerItem` for every weapon. halflife-updated's immediate ammo HUD update in
+  `AddPlayerItem` stays (extra `AmmoX` messages the original doesn't send; nothing reads them
+  differently).
+
 ## Prefs
 
 - **`rc.ini` may use CRLF line ends** (decided 2026-11-07). The original Linux build keeps the

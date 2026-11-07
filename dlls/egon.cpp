@@ -1010,6 +1010,10 @@ bool CEgon::Deploy()
 void CEgon::AddToPlayer(CBasePlayer* pPlayer)
 {
 	CBasePlayerWeapon::AddToPlayer(pPlayer);
+	// As the original: this weapon tells the player it was picked up (AddPlayerItem doesn't)
+	MESSAGE_BEGIN(MSG_ONE, gmsgWeapPickup, NULL, pPlayer->pev);
+	WRITE_BYTE(m_iId);
+	MESSAGE_END();
 }
 
 // orig 0x186450

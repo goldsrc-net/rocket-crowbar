@@ -91,6 +91,12 @@ levelcustom.cpp FindOtherSameSpawner    can return the calling respawner itself 
 drivebm.cpp DestoryFlames               keeps dangling beam pointers (never read)             kept
 ```
 
+## Wave 2 (SDK files)
+
+Not folded into the tables above yet: each wave-2 dossier's section 8 lists the bugs found in
+its files (`reference/dossiers/w2-*.md`). They get merged here, with the crash sweep, when wave 2
+is complete.
+
 ## Dead code
 
 `VK_IsValidIp`, `BP_GetConfArgLine` (stores every token as ""), `ClientConnecting` (reads an

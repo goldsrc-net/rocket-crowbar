@@ -85,14 +85,14 @@ bool CBasePlayerWeapon::DefaultReload(int iClipSize, int iAnim, float fDelay, in
 	if (j == 0)
 		return false;
 
-	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + fDelay;
+	m_pPlayer->m_flNextAttack = gpGlobals->time + fDelay;
 
 	//!!UNDONE -- reload sound goes here !!!
 	SendWeaponAnim(iAnim, body);
 
 	m_fInReload = true;
 
-	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 3;
+	m_flTimeWeaponIdle = gpGlobals->time + 3;
 	return true;
 }
 
@@ -117,9 +117,12 @@ bool CanAttack(float attack_time, float curtime, bool isPredicted)
 	}
 }
 
+// orig 0x23a250 (weapons.cpp), the original's whole: absolute times (gpGlobals->time), the hornet
+// gun's reload key, and sv_ceasefire. halflife-updated's TabulateAmmo calls, m_flLastFireTime
+// bookkeeping and predicted-time comparisons are not in it.
 void CBasePlayerWeapon::ItemPostFrame()
 {
-	if ((m_fInReload) && (m_pPlayer->m_flNextAttack <= UTIL_WeaponTimeBase()))
+	if ((m_fInReload) && (m_pPlayer->m_flNextAttack <= gpGlobals->time))
 	{
 		// complete the reload.
 		int j = V_min(iMaxClip() - m_iClip, m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]);
@@ -128,35 +131,36 @@ void CBasePlayerWeapon::ItemPostFrame()
 		m_iClip += j;
 		m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] -= j;
 
-		m_pPlayer->TabulateAmmo();
-
 		m_fInReload = false;
 	}
 
-	if ((m_pPlayer->pev->button & IN_ATTACK) == 0)
+	// Rocket Crowbar 1.9: the hornet gun (IsHornetGun: the crowbar, egon, gauss, hornet gun)
+	// reloads on its own whenever reload is held
+	if ((m_pPlayer->pev->button & IN_RELOAD) != 0 && IsHornetGun())
 	{
-		m_flLastFireTime = 0.0f;
+		Reload();
 	}
 
-	if ((m_pPlayer->pev->button & IN_ATTACK2) != 0 && CanAttack(m_flNextSecondaryAttack, gpGlobals->time, UseDecrement()))
+	// Rocket Crowbar 1.9: sv_ceasefire stops all weapon fire
+	const bool bCanFire = CVAR_GET_FLOAT("sv_ceasefire") == 0;
+
+	if ((m_pPlayer->pev->button & IN_ATTACK2) != 0 && m_flNextSecondaryAttack <= gpGlobals->time && bCanFire)
 	{
 		if (pszAmmo2() && 0 == m_pPlayer->m_rgAmmo[SecondaryAmmoIndex()])
 		{
 			m_fFireOnEmpty = true;
 		}
 
-		m_pPlayer->TabulateAmmo();
 		SecondaryAttack();
 		m_pPlayer->pev->button &= ~IN_ATTACK2;
 	}
-	else if ((m_pPlayer->pev->button & IN_ATTACK) != 0 && CanAttack(m_flNextPrimaryAttack, gpGlobals->time, UseDecrement()))
+	else if ((m_pPlayer->pev->button & IN_ATTACK) != 0 && m_flNextPrimaryAttack <= gpGlobals->time && bCanFire)
 	{
 		if ((m_iClip == 0 && pszAmmo1()) || (iMaxClip() == -1 && 0 == m_pPlayer->m_rgAmmo[PrimaryAmmoIndex()]))
 		{
 			m_fFireOnEmpty = true;
 		}
 
-		m_pPlayer->TabulateAmmo();
 		PrimaryAttack();
 	}
 	else if ((m_pPlayer->pev->button & IN_RELOAD) != 0 && iMaxClip() != WEAPON_NOCLIP && !m_fInReload)
@@ -170,13 +174,13 @@ void CBasePlayerWeapon::ItemPostFrame()
 
 		m_fFireOnEmpty = false;
 
-		if (!IsUseable() && m_flNextPrimaryAttack < (UseDecrement() ? 0.0 : gpGlobals->time))
+		if (!IsUseable() && m_flNextPrimaryAttack < gpGlobals->time)
 		{
 #ifndef CLIENT_DLL
 			// weapon isn't useable, switch.
 			if ((iFlags() & ITEM_FLAG_NOAUTOSWITCHEMPTY) == 0 && g_pGameRules->GetNextBestWeapon(m_pPlayer, this))
 			{
-				m_flNextPrimaryAttack = (UseDecrement() ? 0.0 : gpGlobals->time) + 0.3;
+				m_flNextPrimaryAttack = gpGlobals->time + 0.3;
 				return;
 			}
 #endif
@@ -184,7 +188,7 @@ void CBasePlayerWeapon::ItemPostFrame()
 		else
 		{
 			// weapon is useable. Reload if empty and weapon has waited as long as it has to after firing
-			if (m_iClip == 0 && (iFlags() & ITEM_FLAG_NOAUTORELOAD) == 0 && m_flNextPrimaryAttack < (UseDecrement() ? 0.0 : gpGlobals->time))
+			if (m_iClip == 0 && (iFlags() & ITEM_FLAG_NOAUTORELOAD) == 0 && m_flNextPrimaryAttack < gpGlobals->time)
 			{
 				Reload();
 				return;

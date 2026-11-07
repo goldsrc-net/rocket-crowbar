@@ -47,6 +47,10 @@ void CGrenade::Explode(Vector vecSrc, Vector vecAim)
 }
 
 // UNDONE: temporary scorching for PreAlpha - find a less sleazy permenant solution.
+// Rocket Crowbar 1.9 (orig 0x19c7d0): kills beams on the grenade first, pulls out of the wall by
+// an amount that grows with the damage, scales the sprite and the scorch with it, credits the
+// grenade itself when its owner is gone, gives the owner back afterwards, and skips the sparks
+// under sv_lowlag.
 void CGrenade::Explode(TraceResult* pTrace, int bitsDamageType)
 {
 	float flRndSound; // sound randomizer
@@ -56,13 +60,31 @@ void CGrenade::Explode(TraceResult* pTrace, int bitsDamageType)
 
 	pev->takedamage = DAMAGE_NO;
 
+	MESSAGE_BEGIN(MSG_BROADCAST, SVC_TEMPENTITY);
+	WRITE_BYTE(TE_KILLBEAM);
+	WRITE_SHORT(entindex());
+	MESSAGE_END();
+
 	// Pull out of the wall a bit
 	if (pTrace->flFraction != 1.0)
 	{
-		pev->origin = pTrace->vecEndPos + (pTrace->vecPlaneNormal * 0.6);
+		float flPull = (pev->dmg - 24) * 0.6;
+		if (flPull < -512)
+			flPull = -512;
+		if (flPull > 512)
+			flPull = 512;
+		pev->origin = pTrace->vecEndPos + (pTrace->vecPlaneNormal * flPull);
 	}
 
 	int iContents = UTIL_PointContents(pev->origin);
+
+	int iScale;
+	if ((int)((pev->dmg - 50) * 0.6) < 1)
+		iScale = 1;
+	else if ((int)((pev->dmg - 50) * 0.6) < 255)
+		iScale = (int)((pev->dmg - 50) * 0.6);
+	else
+		iScale = 254;
 
 	MESSAGE_BEGIN(MSG_PAS, SVC_TEMPENTITY, pev->origin);
 	WRITE_BYTE(TE_EXPLOSION);	// This makes a dynamic light and the explosion sprites/sound
@@ -77,27 +99,30 @@ void CGrenade::Explode(TraceResult* pTrace, int bitsDamageType)
 	{
 		WRITE_SHORT(g_sModelIndexWExplosion);
 	}
-	WRITE_BYTE((pev->dmg - 50) * .60); // scale * 10
-	WRITE_BYTE(15);					   // framerate
+	WRITE_BYTE(iScale); // scale * 10
+	WRITE_BYTE(15);		// framerate
 	WRITE_BYTE(TE_EXPLFLAG_NONE);
 	MESSAGE_END();
 
 	CSoundEnt::InsertSound(bits_SOUND_COMBAT, pev->origin, NORMAL_EXPLOSION_VOLUME, 3.0);
 	entvars_t* pevOwner;
-	if (pev->owner)
+	if (pev->owner && 0 == pev->owner->free && pev->owner->pvPrivateData)
 		pevOwner = VARS(pev->owner);
 	else
-		pevOwner = NULL;
+		pevOwner = pev;
 
 	pev->owner = NULL; // can't traceline attack owner if this is set
 
-	// Counteract the + 1 in RadiusDamage.
-	Vector origin = pev->origin;
-	origin.z -= 1;
+	// the 2001 SDK's RadiusDamage, from pev->origin (halflife-updated lowers it 1 unit first)
+	RadiusDamage(pev, pevOwner, pev->dmg, CLASS_NONE, bitsDamageType);
 
-	RadiusDamage(origin, pev, pevOwner, pev->dmg, CLASS_NONE, bitsDamageType);
+	pev->owner = pevOwner->pContainingEntity;
 
-	if (RANDOM_FLOAT(0, 1) < 0.5)
+	if (iScale <= 5)
+	{
+		UTIL_DecalTrace(pTrace, DECAL_SMALLSCORCH1 + RANDOM_LONG(0, 2));
+	}
+	else if (RANDOM_FLOAT(0, 1) < 0.5)
 	{
 		UTIL_DecalTrace(pTrace, DECAL_SCORCH1);
 	}
@@ -126,7 +151,7 @@ void CGrenade::Explode(TraceResult* pTrace, int bitsDamageType)
 	pev->velocity = g_vecZero;
 	pev->nextthink = gpGlobals->time + 0.3;
 
-	if (iContents != CONTENTS_WATER)
+	if (CVAR_GET_FLOAT("sv_lowlag") != 1 && iContents != CONTENTS_WATER)
 	{
 		int sparkCount = RANDOM_LONG(0, 3);
 		for (int i = 0; i < sparkCount; i++)
@@ -149,8 +174,16 @@ void CGrenade::Smoke()
 		WRITE_COORD(pev->origin.y);
 		WRITE_COORD(pev->origin.z);
 		WRITE_SHORT(g_sModelIndexSmoke);
-		WRITE_BYTE((pev->dmg - 50) * 0.80); // scale * 10
-		WRITE_BYTE(12);						// framerate
+		// orig 0x19cd70: the scale is held to 1-254
+		int iScale;
+		if ((int)((pev->dmg - 50) * 0.80) < 1)
+			iScale = 1;
+		else if ((int)((pev->dmg - 50) * 0.80) < 255)
+			iScale = (int)((pev->dmg - 50) * 0.80);
+		else
+			iScale = 254;
+		WRITE_BYTE(iScale); // scale * 10
+		WRITE_BYTE(12);		// framerate
 		MESSAGE_END();
 	}
 	UTIL_Remove(this);
@@ -189,6 +222,18 @@ void CGrenade::Detonate()
 	Explode(&tr, DMG_BLAST);
 }
 
+// Rocket Crowbar 1.9 (orig 0x19d100): what TumbleThink detonates with; its body is Detonate's.
+void CGrenade::DetonateSnark()
+{
+	TraceResult tr;
+	Vector vecSpot; // trace starts here!
+
+	vecSpot = pev->origin + Vector(0, 0, 8);
+	UTIL_TraceLine(vecSpot, vecSpot + Vector(0, 0, -40), ignore_monsters, ENT(pev), &tr);
+
+	Explode(&tr, DMG_BLAST);
+}
+
 
 //
 // Contact grenade, explode when it touches something
@@ -197,6 +242,9 @@ void CGrenade::ExplodeTouch(CBaseEntity* pOther)
 {
 	TraceResult tr;
 	Vector vecSpot; // trace starts here!
+
+	// Rocket Crowbar 1.9 (orig 0x19d1e0): silence the grenade first
+	EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, "common/null.wav", 1.0, ATTN_NORM, 0, PITCH_NORM);
 
 	pev->enemy = pOther->edict();
 
@@ -235,6 +283,9 @@ void CGrenade::BounceTouch(CBaseEntity* pOther)
 	if (m_flNextAttack < gpGlobals->time && pev->velocity.Length() > 100)
 	{
 		entvars_t* pevOwner = VARS(pev->owner);
+		// Rocket Crowbar 1.9 (orig 0x19d500): a drive monster's grenade credits its driver
+		if (pev->dmg_inflictor)
+			pevOwner = VARS(pev->dmg_inflictor);
 		if (pevOwner)
 		{
 			TraceResult tr = UTIL_GetGlobalTrace();
@@ -271,8 +322,7 @@ void CGrenade::BounceTouch(CBaseEntity* pOther)
 		// add a bit of static friction
 		pev->velocity = pev->velocity * 0.8;
 
-		pev->sequence = RANDOM_LONG(1, 1);
-		ResetSequenceInfo();
+		pev->sequence = RANDOM_LONG(1, 1); // the original doesn't ResetSequenceInfo here
 	}
 	else
 	{
@@ -284,8 +334,7 @@ void CGrenade::BounceTouch(CBaseEntity* pOther)
 		pev->framerate = 1;
 	else if (pev->framerate < 0.5)
 	{
-		pev->framerate = 0;
-		pev->frame = 0;
+		pev->framerate = 0; // the original leaves pev->frame
 	}
 }
 
@@ -347,9 +396,12 @@ void CGrenade::TumbleThink()
 		CSoundEnt::InsertSound(bits_SOUND_DANGER, pev->origin + pev->velocity * (pev->dmgtime - gpGlobals->time), 400, 0.1);
 	}
 
+	// Rocket Crowbar 1.9 (orig 0x19d920): a drive monster's grenade goes off as its driver's
 	if (pev->dmgtime <= gpGlobals->time)
 	{
-		SetThink(&CGrenade::Detonate);
+		if (pev->dmg_inflictor)
+			pev->owner = pev->dmg_inflictor;
+		SetThink(&CGrenade::DetonateSnark);
 	}
 	if (pev->waterlevel != 0)
 	{
@@ -395,7 +447,7 @@ CGrenade* CGrenade::ShootContact(entvars_t* pevOwner, Vector vecStart, Vector ve
 	// Explode on contact
 	pGrenade->SetTouch(&CGrenade::ExplodeTouch);
 
-	pGrenade->pev->dmg = gSkillData.plrDmgM203Grenade;
+	pGrenade->pev->dmg = 250; // orig 0x19db60: not the sk_plr_9mmAR_grenade skill value
 
 	return pGrenade;
 }
@@ -425,10 +477,11 @@ CGrenade* CGrenade::ShootTimed(entvars_t* pevOwner, Vector vecStart, Vector vecV
 		pGrenade->pev->velocity = Vector(0, 0, 0);
 	}
 
-	SET_MODEL(ENT(pGrenade->pev), "models/w_grenade.mdl");
+	// orig 0x19dc60: in the original's order, without ResetSequenceInfo, and with no driver
+	// (ShootDETimed sets one after)
 	pGrenade->pev->sequence = RANDOM_LONG(3, 6);
 	pGrenade->pev->framerate = 1.0;
-	pGrenade->ResetSequenceInfo();
+	pGrenade->pev->dmg_inflictor = NULL;
 
 	// Tumble through the air
 	// pGrenade->pev->avelocity.x = -400;
@@ -436,6 +489,7 @@ CGrenade* CGrenade::ShootTimed(entvars_t* pevOwner, Vector vecStart, Vector vecV
 	pGrenade->pev->gravity = 0.5;
 	pGrenade->pev->friction = 0.8;
 
+	SET_MODEL(ENT(pGrenade->pev), "models/w_grenade.mdl");
 	pGrenade->pev->dmg = 100;
 
 	return pGrenade;

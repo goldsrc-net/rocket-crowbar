@@ -31,6 +31,7 @@
 #include "trains.h"
 #include "nodes.h"
 #include "weapons.h"
+#include "hornetgun.h"
 #include "soundent.h"
 #include "monsters.h"
 #include "shake.h"
@@ -4760,13 +4761,8 @@ bool CBasePlayer::AddPlayerItem(CBasePlayerItem* pItem)
 				SendSingleAmmoUpdate(CBasePlayer::GetAmmoIndex(weapon->pszAmmo2()));
 			}
 
-			//Don't show weapon pickup if we're spawning or if it's an exhaustible weapon (will show ammo pickup instead).
-			if (!m_bIsSpawning && (weapon->iFlags() & ITEM_FLAG_EXHAUSTIBLE) == 0)
-			{
-				MESSAGE_BEGIN(MSG_ONE, gmsgWeapPickup, NULL, pev);
-				WRITE_BYTE(weapon->m_iId);
-				MESSAGE_END();
-			}
+			// Rocket Crowbar 1.9: no WeapPickup here; the original sends it from eight weapons' own
+			// AddToPlayer (crossbow, egon, gauss, hornetgun, mp5, python, rpg, shotgun), at spawn too.
 		}
 
 		// should we switch to this item?
@@ -6079,14 +6075,4 @@ void CInfoIntermission::Think()
 
 LINK_ENTITY_TO_CLASS(info_intermission, CInfoIntermission);
 
-// TEMP STUB (w2-player-core): real one belongs in hornetgun.cpp (orig 0x1b0c60). Should remove
-// pev's freeze timer; does nothing until hornetgun.cpp is reconstructed.
-void DestroyFreezeTimer(entvars_t* pev)
-{
-}
 
-// TEMP STUB (w2-player-core): real one belongs in handgrenade.cpp (orig 0x1a3860). Should remove
-// pev's friction timer; does nothing until handgrenade.cpp is reconstructed.
-void DestroyFrictionTimer(entvars_t* pev)
-{
-}

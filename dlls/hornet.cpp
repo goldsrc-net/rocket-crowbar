@@ -29,7 +29,7 @@
 int iHornetTrail;
 int iHornetPuff;
 
-LINK_ENTITY_TO_CLASS(hornet, CHornet);
+LINK_ENTITY_TO_CLASS(hornet, CHornet); // orig 0x1af4c0
 
 //=========================================================
 // Save/Restore
@@ -41,11 +41,12 @@ TYPEDESCRIPTION CHornet::m_SaveData[] =
 		DEFINE_FIELD(CHornet, m_flFlySpeed, FIELD_FLOAT),
 };
 
-IMPLEMENT_SAVERESTORE(CHornet, CBaseMonster);
+IMPLEMENT_SAVERESTORE(CHornet, CBaseMonster); // orig 0x1af4f0, 0x1af540
 
 //=========================================================
 // don't let hornets gib, ever.
 //=========================================================
+// orig 0x1af590
 bool CHornet::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType)
 {
 	// filter these bits a little.
@@ -57,6 +58,7 @@ bool CHornet::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, float 
 
 //=========================================================
 //=========================================================
+// orig 0x1af5d0
 void CHornet::Spawn()
 {
 	Precache();
@@ -100,6 +102,21 @@ void CHornet::Spawn()
 	if (!pSoundEnt)
 		pSoundEnt = edict();
 
+	// Rocket Crowbar 1.9 keeps the SDK's fire sound here; halflife-updated moved it into
+	// CAGrunt::HandleAnimEvent, which the original agrunt doesn't play (reference/dossiers/w2-crossbow-hornet.md).
+	switch (RANDOM_LONG(0, 2))
+	{
+	case 0:
+		EMIT_SOUND(pSoundEnt, CHAN_WEAPON, "agrunt/ag_fire1.wav", 1, ATTN_NORM);
+		break;
+	case 1:
+		EMIT_SOUND(pSoundEnt, CHAN_WEAPON, "agrunt/ag_fire2.wav", 1, ATTN_NORM);
+		break;
+	case 2:
+		EMIT_SOUND(pSoundEnt, CHAN_WEAPON, "agrunt/ag_fire3.wav", 1, ATTN_NORM);
+		break;
+	}
+
 	if (!FNullEnt(pev->owner) && (pev->owner->v.flags & FL_CLIENT) != 0)
 	{
 		pev->dmg = gSkillData.plrDmgHornet;
@@ -115,6 +132,7 @@ void CHornet::Spawn()
 }
 
 
+// orig 0x1af840
 void CHornet::Precache()
 {
 	PRECACHE_MODEL("models/hornet.mdl");
@@ -138,6 +156,7 @@ void CHornet::Precache()
 //=========================================================
 // hornets will never get mad at each other, no matter who the owner is.
 //=========================================================
+// orig 0x1af950
 int CHornet::IRelationship(CBaseEntity* pTarget)
 {
 	if (pTarget->pev->modelindex == pev->modelindex)
@@ -151,6 +170,7 @@ int CHornet::IRelationship(CBaseEntity* pTarget)
 //=========================================================
 // ID's Hornet as their owner
 //=========================================================
+// orig 0x1af990
 int CHornet::Classify()
 {
 
@@ -165,6 +185,7 @@ int CHornet::Classify()
 //=========================================================
 // StartTrack - starts a hornet out tracking its target
 //=========================================================
+// orig 0x1af9c0
 void CHornet::StartTrack()
 {
 	IgniteTrail();
@@ -178,6 +199,7 @@ void CHornet::StartTrack()
 //=========================================================
 // StartDart - starts a hornet out just flying straight.
 //=========================================================
+// orig 0x1afa30
 void CHornet::StartDart()
 {
 	IgniteTrail();
@@ -188,6 +210,7 @@ void CHornet::StartDart()
 	pev->nextthink = gpGlobals->time + 4;
 }
 
+// orig 0x1afaa0
 void CHornet::IgniteTrail()
 {
 	/*
@@ -246,6 +269,7 @@ old colors
 //=========================================================
 // Hornet is flying, gently tracking target
 //=========================================================
+// orig 0x1afbf0
 void CHornet::TrackTarget()
 {
 	Vector vecFlightDir;
@@ -376,6 +400,7 @@ void CHornet::TrackTarget()
 //=========================================================
 // Tracking Hornet hit something
 //=========================================================
+// orig 0x1b0540
 void CHornet::TrackTouch(CBaseEntity* pOther)
 {
 	if (pOther->edict() == pev->owner || pOther->pev->modelindex == pev->modelindex)
@@ -402,15 +427,19 @@ void CHornet::TrackTouch(CBaseEntity* pOther)
 	DieTouch(pOther);
 }
 
+// orig 0x1b06e0
 void CHornet::DartTouch(CBaseEntity* pOther)
 {
 	DieTouch(pOther);
 }
 
+// orig 0x1b0710
 void CHornet::DieTouch(CBaseEntity* pOther)
 {
 	//Only deal damage if the owner exists in this map.
 	//Hornets that transition without their owner (e.g. Alien Grunt) will otherwise pass a null pointer down to TakeDamage.
+	// VERIFY: guard, the original crashes here (no owner check, it passes a null attacker);
+	// halflife-updated's check is that guard.
 	if (pOther && 0 != pOther->pev->takedamage && nullptr != pev->owner)
 	{ // do the damage
 
@@ -435,4 +464,49 @@ void CHornet::DieTouch(CBaseEntity* pOther)
 
 	SetThink(&CHornet::SUB_Remove);
 	pev->nextthink = gpGlobals->time + 1; // stick around long enough for the sound to finish!
+}
+
+// Rocket Crowbar 1.9: a hornet can be pulled by the grav grenade, the shotgun rift and the egon's
+// tractor beam, but not impaled, shoved by the crowbar reload, tethered or frozen.
+
+// orig 0x1b08a0
+bool CHornet::IsGravGreandeMoveable()
+{
+	return true;
+}
+
+// orig 0x1b0890
+bool CHornet::IsShotgunRiftMoveable()
+{
+	return true;
+}
+
+// orig 0x1b0880
+bool CHornet::IsTractorBeamMoveable()
+{
+	return true;
+}
+
+// orig 0x1b0870
+bool CHornet::IsImpailable()
+{
+	return false;
+}
+
+// orig 0x1b0860
+bool CHornet::IsCrowbarReloadMoveable()
+{
+	return false;
+}
+
+// orig 0x1b0850
+bool CHornet::IsTeatherToable()
+{
+	return false;
+}
+
+// orig 0x1b0840
+bool CHornet::IsFreezeable()
+{
+	return false;
 }

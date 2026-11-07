@@ -20,6 +20,7 @@
 #include "explode.h"
 
 #include "player.h"
+#include "pointexplo.h"
 
 
 #define SF_TANK_ACTIVE 0x0001
@@ -65,20 +66,11 @@ public:
 	// Bmodels don't go across transitions
 	int ObjectCaps() override { return CBaseEntity::ObjectCaps() & ~FCAP_ACROSS_TRANSITION; }
 
-	inline bool IsActive() { return (pev->spawnflags & SF_TANK_ACTIVE) != 0; }
-	inline void TankActivate()
-	{
-		pev->spawnflags |= SF_TANK_ACTIVE;
-		pev->nextthink = pev->ltime + 0.1;
-		m_fireLast = 0;
-	}
-	inline void TankDeactivate()
-	{
-		pev->spawnflags &= ~SF_TANK_ACTIVE;
-		m_fireLast = 0;
-		StopRotSound();
-	}
-	inline bool CanFire() { return (gpGlobals->time - m_lastSightTime) < m_persist; }
+	// Out of line, as in the original (bodies unchanged)
+	bool IsActive();
+	void TankActivate();
+	void TankDeactivate();
+	bool CanFire();
 	bool InRange(float range);
 
 	// Acquire a target.  pPlayer is a player in the PVS
@@ -86,12 +78,7 @@ public:
 
 	void TankTrace(const Vector& vecStart, const Vector& vecForward, const Vector& vecSpread, TraceResult& tr);
 
-	Vector BarrelPosition()
-	{
-		Vector forward, right, up;
-		UTIL_MakeVectorsPrivate(pev->angles, forward, right, up);
-		return pev->origin + (forward * m_barrelPos.x) + (right * m_barrelPos.y) + (up * m_barrelPos.z);
-	}
+	Vector BarrelPosition();
 
 	void AdjustAnglesForBarrel(Vector& angles, float distance);
 
@@ -172,6 +159,42 @@ TYPEDESCRIPTION CFuncTank::m_SaveData[] =
 };
 
 IMPLEMENT_SAVERESTORE(CFuncTank, CBaseEntity);
+
+// orig 0x191b00
+Vector CFuncTank::BarrelPosition()
+{
+	Vector forward, right, up;
+	UTIL_MakeVectorsPrivate(pev->angles, forward, right, up);
+	return pev->origin + (forward * m_barrelPos.x) + (right * m_barrelPos.y) + (up * m_barrelPos.z);
+}
+
+// orig 0x191c10
+bool CFuncTank::CanFire()
+{
+	return (gpGlobals->time - m_lastSightTime) < m_persist;
+}
+
+// orig 0x191c50
+void CFuncTank::TankDeactivate()
+{
+	pev->spawnflags &= ~SF_TANK_ACTIVE;
+	m_fireLast = 0;
+	StopRotSound();
+}
+
+// orig 0x191c80
+void CFuncTank::TankActivate()
+{
+	pev->spawnflags |= SF_TANK_ACTIVE;
+	pev->nextthink = pev->ltime + 0.1;
+	m_fireLast = 0;
+}
+
+// orig 0x191cd0
+bool CFuncTank::IsActive()
+{
+	return (pev->spawnflags & SF_TANK_ACTIVE) != 0;
+}
 
 static Vector gTankSpread[] =
 	{
@@ -952,24 +975,283 @@ bool CFuncTankMortar::KeyValue(KeyValueData* pkvd)
 }
 
 
+// orig 0x18fe90. Rocket Crowbar 1.9: the shell is a CPointExplo (pointexplo.cpp) credited to the
+// attacker, not an env_explosion.
 void CFuncTankMortar::Fire(const Vector& barrelEnd, const Vector& forward, entvars_t* pevAttacker)
 {
 	if (m_fireLast != 0)
 	{
 		int bulletCount = (gpGlobals->time - m_fireLast) * m_fireRate;
 		// Only create 1 explosion
-		if (bulletCount > 0)
+		if (bulletCount < 1)
+			return;
+
+		TraceResult tr;
+
+		// TankTrace needs gpGlobals->v_up, etc.
+		UTIL_MakeAimVectors(pev->angles);
+
+		TankTrace(barrelEnd, forward, gTankSpread[m_spread], tr);
+
+		CPointExplo::ExploCreate(pevAttacker->pContainingEntity, tr.vecEndPos, gpGlobals->v_forward, pev->impulse, MAKE_STRING("func_tankmortar"));
+	}
+
+	CFuncTank::Fire(barrelEnd, forward, pev);
+}
+
+
+// Rocket Crowbar 1.9: func_tankgib, a tank that fires gibs (func_tankgib_gib). Neither class
+// has a save table in the original.
+class CGibTankGib : public CGrenade
+{
+public:
+	void Spawn() override;
+	void Precache() override;
+	void EXPORT SquirtBlood();
+	void EXPORT DamageTouch(CBaseEntity* pOther);
+
+	// Unsaved; names chosen from use (CFuncTankGib::Fire copies its keyvalues into them)
+	int m_iDamageType;		// orig +0x280. VERIFY name
+	bool m_bPopSound;		// orig +0x284, gib_haspopsound. VERIFY name
+	bool m_bExplode;		// orig +0x285, gib_explode: explode as a contact grenade. VERIFY name
+	int m_iBloodColor;		// orig +0x288. VERIFY name
+	float m_flSquirtMinTime; // orig +0x28c. VERIFY name
+	float m_flSquirtMaxTime; // orig +0x290. VERIFY name
+	int m_iSquirtAmount;	// orig +0x294. VERIFY name
+	int m_iPopAmount;		// orig +0x298. VERIFY name
+};
+
+LINK_ENTITY_TO_CLASS(func_tankgib_gib, CGibTankGib); // orig 0x18ffa0
+
+// orig 0x18ffd0
+void CGibTankGib::Precache()
+{
+	PRECACHE_MODEL("models/hgibs.mdl");
+	PRECACHE_MODEL("models/agibs.mdl");
+	PRECACHE_SOUND("squeek/sqk_blast1.wav");
+}
+
+// orig 0x190020
+void CGibTankGib::Spawn()
+{
+	Precache();
+	pev->movetype = MOVETYPE_TOSS;
+	pev->solid = SOLID_BBOX;
+	SET_MODEL(ENT(pev), "models/hgibs.mdl");
+	pev->body = RANDOM_LONG(0, 10);
+	UTIL_SetOrigin(pev, pev->origin);
+	UTIL_SetSize(pev, Vector(-4, -4, -4), Vector(4, 4, 4));
+
+	m_iBloodColor = BLOOD_COLOR_RED;
+	m_flSquirtMinTime = 0.2;
+	m_flSquirtMaxTime = 0.4;
+	m_iSquirtAmount = 10;
+	m_iPopAmount = 40;
+	m_bPopSound = true;
+	m_bExplode = false;
+
+	SetTouch(&CGibTankGib::DamageTouch);
+	SetThink(&CGibTankGib::SquirtBlood);
+	pev->nextthink = gpGlobals->time + 0.1;
+	pev->dmg = 5;
+	m_iDamageType = DMG_ACID;
+
+	pev->avelocity = Vector(RANDOM_FLOAT(-1000, 1000), RANDOM_FLOAT(-1000, 1000), RANDOM_FLOAT(-1000, 1000));
+}
+
+// orig 0x1901f0
+void CGibTankGib::SquirtBlood()
+{
+	pev->nextthink = gpGlobals->time + RANDOM_FLOAT(m_flSquirtMinTime, m_flSquirtMaxTime);
+
+	if (m_iSquirtAmount > 0)
+		UTIL_BloodDrips(pev->origin, pev->velocity.Normalize(), m_iBloodColor, m_iSquirtAmount);
+}
+
+// orig 0x1902e0. Hurts what it hits (or leaves a blood decal), pops and goes; with gib_explode it
+// explodes like a contact grenade instead.
+void CGibTankGib::DamageTouch(CBaseEntity* pOther)
+{
+	if (!m_bExplode)
+	{
+		if (pOther->pev->takedamage == DAMAGE_NO)
 		{
 			TraceResult tr;
+			Vector vecSpot = pev->origin - pev->velocity.Normalize() * 32;
+			UTIL_TraceLine(vecSpot, vecSpot + pev->velocity.Normalize() * 64, ignore_monsters, ENT(pev), &tr);
+			UTIL_BloodDecalTrace(&tr, m_iBloodColor);
+		}
+		else
+		{
+			entvars_t* pevOwner = pev->owner ? VARS(pev->owner) : pev;
+			pOther->TakeDamage(pev, pevOwner, pev->dmg, m_iDamageType);
+		}
 
-			// TankTrace needs gpGlobals->v_up, etc.
-			UTIL_MakeAimVectors(pev->angles);
+		pev->effects |= EF_NODRAW;
+		SetThink(&CGibTankGib::SUB_Remove);
+		pev->nextthink = gpGlobals->time + 0.01;
+	}
+	else
+	{
+		CGrenade::ExplodeTouch(pOther);
+	}
 
-			TankTrace(barrelEnd, forward, gTankSpread[m_spread], tr);
+	if (m_bPopSound)
+		EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, "squeek/sqk_blast1.wav", 0.8, ATTN_NORM, 0, PITCH_NORM);
 
-			ExplosionCreate(tr.vecEndPos, pev->angles, edict(), pev->impulse, true);
+	if (m_iPopAmount > 0)
+		UTIL_BloodDrips(pev->origin, g_vecZero, m_iBloodColor, m_iPopAmount);
 
-			CFuncTank::Fire(barrelEnd, forward, pev);
+	SetTouch(NULL);
+}
+
+
+class CFuncTankGib : public CFuncTank
+{
+public:
+	bool KeyValue(KeyValueData* pkvd) override;
+	void Precache() override;
+	void Fire(const Vector& barrelEnd, const Vector& forward, entvars_t* pevAttacker) override;
+
+	// Unsaved; names from their keyvalues
+	float m_flGibDamage = 0;	   // orig +0xb4, gib_damage
+	int m_iGibDamageType = 0;	   // orig +0xb8, gib_damagetype. Original bug: read and never used
+	float m_flGibGravity = 0;	   // orig +0xbc, gib_gravity
+	bool m_bGibPopSound = false;   // orig +0xc0, gib_haspopsound
+	bool m_bGibExplode = false;	   // orig +0xc1, gib_explode
+	float m_flSquirtMinTime = 0;   // orig +0xc4, gib_squirtmintime
+	float m_flSquirtMaxTime = 0;   // orig +0xc8, gib_squirtmaxtime
+	int m_iSquirtAmount = 0;	   // orig +0xcc, gib_squirtamount
+	int m_iPopAmount = 0;		   // orig +0xd0, gib_popamount
+	float m_flGibVelocity = 0;	   // orig +0xd4, gib_velocity
+	bool m_bGibsAreHuman = false;  // orig +0xd8, gib_arehuman
+	string_t m_iszFiringSound = 0; // orig +0xdc, firingsound
+};
+
+LINK_ENTITY_TO_CLASS(func_tankgib, CFuncTankGib); // orig 0x1905d0
+
+// orig 0x190600
+bool CFuncTankGib::KeyValue(KeyValueData* pkvd)
+{
+	if (FStrEq(pkvd->szKeyName, "gib_damage"))
+	{
+		m_flGibDamage = atof(pkvd->szValue);
+		return true;
+	}
+	else if (FStrEq(pkvd->szKeyName, "gib_damagetype"))
+	{
+		m_iGibDamageType = atoi(pkvd->szValue);
+		return true;
+	}
+	else if (FStrEq(pkvd->szKeyName, "gib_gravity"))
+	{
+		m_flGibGravity = atof(pkvd->szValue);
+		return true;
+	}
+	else if (FStrEq(pkvd->szKeyName, "gib_velocity"))
+	{
+		m_flGibVelocity = atof(pkvd->szValue);
+		return true;
+	}
+	else if (FStrEq(pkvd->szKeyName, "gib_explode"))
+	{
+		m_bGibExplode = atoi(pkvd->szValue) != 0;
+		return true;
+	}
+	else if (FStrEq(pkvd->szKeyName, "gib_haspopsound"))
+	{
+		m_bGibPopSound = atoi(pkvd->szValue) != 0;
+		return true;
+	}
+	else if (FStrEq(pkvd->szKeyName, "gib_squirtmintime"))
+	{
+		m_flSquirtMinTime = atof(pkvd->szValue);
+		return true;
+	}
+	else if (FStrEq(pkvd->szKeyName, "gib_squirtmaxtime"))
+	{
+		m_flSquirtMaxTime = atof(pkvd->szValue);
+		return true;
+	}
+	else if (FStrEq(pkvd->szKeyName, "gib_squirtamount"))
+	{
+		m_iSquirtAmount = atoi(pkvd->szValue);
+		return true;
+	}
+	else if (FStrEq(pkvd->szKeyName, "gib_popamount"))
+	{
+		m_iPopAmount = atoi(pkvd->szValue);
+		return true;
+	}
+	else if (FStrEq(pkvd->szKeyName, "firingsound"))
+	{
+		m_iszFiringSound = ALLOC_STRING(pkvd->szValue);
+		return true;
+	}
+	else if (FStrEq(pkvd->szKeyName, "gib_arehuman"))
+	{
+		m_bGibsAreHuman = atoi(pkvd->szValue) != 0;
+		return true;
+	}
+
+	return CFuncTank::KeyValue(pkvd);
+}
+
+// orig 0x191290
+void CFuncTankGib::Precache()
+{
+	if (!FStringNull(m_iszFiringSound))
+		PRECACHE_SOUND(STRING(m_iszFiringSound));
+
+	UTIL_PrecacheOther("func_tankgib_gib");
+	CFuncTank::Precache();
+}
+
+// orig 0x1912f0
+void CFuncTankGib::Fire(const Vector& barrelEnd, const Vector& forward, entvars_t* pevAttacker)
+{
+	if (m_fireLast != 0)
+	{
+		int bulletCount = (gpGlobals->time - m_fireLast) * m_fireRate;
+		if (bulletCount > 0)
+		{
+			if (!FStringNull(m_iszFiringSound))
+				EMIT_SOUND_DYN(ENT(pev), CHAN_STATIC, STRING(m_iszFiringSound), 0.85, ATTN_NORM, 0, PITCH_NORM);
+
+			for (int i = 0; i < bulletCount; i++)
+			{
+				CGibTankGib* pGib = static_cast<CGibTankGib*>(CBaseEntity::Create("func_tankgib_gib", barrelEnd, pev->angles, pevAttacker->pContainingEntity));
+				if (!pGib) // VERIFY: guard, the original crashes here (no free edict)
+				{
+					CFuncTank::Fire(barrelEnd, forward, pev);
+					continue;
+				}
+				UTIL_MakeVectors(pev->angles);
+				pGib->pev->velocity = gpGlobals->v_forward * m_flGibVelocity;
+				pGib->m_bPopSound = m_bGibPopSound;
+				pGib->m_bExplode = m_bGibExplode;
+				pGib->m_flSquirtMinTime = m_flSquirtMinTime;
+				pGib->m_flSquirtMaxTime = m_flSquirtMaxTime;
+				pGib->m_iSquirtAmount = m_iSquirtAmount;
+				pGib->m_iPopAmount = m_iPopAmount;
+				pGib->pev->gravity = m_flGibGravity;
+				pGib->pev->dmg = m_flGibDamage;
+
+				if (!m_bGibsAreHuman)
+				{
+					pGib->m_iBloodColor = BLOOD_COLOR_YELLOW;
+					SET_MODEL(pGib->edict(), "models/agibs.mdl");
+					pGib->pev->body = RANDOM_LONG(0, 3);
+				}
+				else
+				{
+					pGib->m_iBloodColor = BLOOD_COLOR_RED;
+					SET_MODEL(pGib->edict(), "models/hgibs.mdl");
+					pGib->pev->body = RANDOM_LONG(0, 10);
+				}
+
+				CFuncTank::Fire(barrelEnd, forward, pev);
+			}
 		}
 	}
 	else
