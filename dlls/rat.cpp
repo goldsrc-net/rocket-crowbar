@@ -33,6 +33,9 @@ public:
 	void Precache() override;
 	void SetYawSpeed() override;
 	int Classify() override;
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x7fe3d5f; } // orig 0x1fb1f0
 };
 LINK_ENTITY_TO_CLASS(monster_rat, CRat);
 

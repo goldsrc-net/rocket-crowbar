@@ -121,6 +121,11 @@ public:
 	float m_flNextSpeakTime;
 	float m_flNextWordTime;
 	int m_iLastWord;
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x1aa2dfd; } // orig 0xe6b50
+	int GetGuassDistOut() override { return 60; } // orig 0xe6b60
+	int GetGuassHull() override { return large_hull; } // orig 0xe6b70
 };
 LINK_ENTITY_TO_CLASS(monster_alien_grunt, CAGrunt);
 
@@ -471,18 +476,7 @@ void CAGrunt::HandleAnimEvent(MonsterEvent_t* pEvent)
 
 
 
-		switch (RANDOM_LONG(0, 2))
-		{
-		case 0:
-			EMIT_SOUND_DYN(ENT(pev), CHAN_WEAPON, "agrunt/ag_fire1.wav", 1.0, ATTN_NORM, 0, 100);
-			break;
-		case 1:
-			EMIT_SOUND_DYN(ENT(pev), CHAN_WEAPON, "agrunt/ag_fire2.wav", 1.0, ATTN_NORM, 0, 100);
-			break;
-		case 2:
-			EMIT_SOUND_DYN(ENT(pev), CHAN_WEAPON, "agrunt/ag_fire3.wav", 1.0, ATTN_NORM, 0, 100);
-			break;
-		}
+		// orig 0xe56d0: no ag_fire sound here; the original's CHornet::Spawn plays it
 
 		CBaseMonster* pHornetMonster = pHornet->MyMonsterPointer();
 

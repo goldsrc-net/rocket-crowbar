@@ -23,6 +23,8 @@
 #include "schedule.h"
 #include "game.h"
 #include "headcrab.h"
+#include "animation.h"
+#include "weapons.h"
 
 //=========================================================
 // Monster's Anim Events Go Here
@@ -251,6 +253,7 @@ void CHeadCrab::Spawn()
 	pev->yaw_speed = 5;				  //!!! should we put this in the monster's changeanim function since turn rates may vary with state/anim?
 	m_flFieldOfView = 0.5;			  // indicates the width of this monster's forward view cone ( as a dotproduct result )
 	m_MonsterState = MONSTERSTATE_NONE;
+	pev->dmg = 0; // Rocket Crowbar 1.9 (orig 0x1a9cb0)
 
 	MonsterInit();
 }
@@ -512,4 +515,220 @@ Schedule_t* CBabyCrab::GetScheduleOfType(int Type)
 	}
 
 	return CHeadCrab::GetScheduleOfType(Type);
+}
+
+
+//=========================================================
+// Rocket Crowbar 1.9: the killer babycrab. A red, translucent baby crab that explodes when it
+// dies or after 30 seconds, and renames itself "tripmine". Nothing in the game library creates
+// one by name; only its entity factory knows "monster_killerbabycrab".
+//=========================================================
+class CKillerBabyCrab : public CHeadCrab
+{
+public:
+	void Spawn() override;
+	void Precache() override;
+	void SetYawSpeed() override;
+	void StartTask(Task_t* pTask) override;
+	void EXPORT LeapyTouch(CBaseEntity* pOther);
+	bool CheckRangeAttack1(float flDot, float flDist) override;
+	void Killed(entvars_t* pevAttacker, int iGib) override;
+	void MonsterThink() override;
+
+	float GetDamageAmount() override { return 20; }						  // orig 0x1aaf30
+	int GetVoicePitch() override { return PITCH_NORM + RANDOM_LONG(40, 50); } // orig 0x1aaf00
+	float GetSoundVolue() override { return 1; }						  // orig 0x1aaef0
+
+	entvars_t* m_pevOwner; // orig +0x27c: whose kill the explosion and bite are. VERIFY name; nothing in the original sets it
+	float m_flDieTime;	   // orig +0x280: when it blows up on its own. VERIFY name
+};
+
+LINK_ENTITY_TO_CLASS(monster_killerbabycrab, CKillerBabyCrab);
+
+// orig 0x1aa6a0
+void CKillerBabyCrab::Spawn()
+{
+	pev->spawnflags |= SF_MONSTER_FALL_TO_GROUND;
+	CHeadCrab::Spawn();
+	SET_MODEL(ENT(pev), "models/baby_headcrab.mdl");
+	pev->rendermode = kRenderTransTexture;
+	pev->renderamt = 192;
+	pev->rendercolor = Vector(180, 60, 50);
+	UTIL_SetSize(pev, Vector(-12, -12, 0), Vector(12, 12, 24));
+	m_flFieldOfView = -1;
+	pev->classname = MAKE_STRING("tripmine");
+	pev->dmg = 70;
+	pev->health = 40;
+	m_flDieTime = gpGlobals->time + 30;
+}
+
+// orig 0x1aa7d0
+void CKillerBabyCrab::StartTask(Task_t* pTask)
+{
+	m_iTaskStatus = TASKSTATUS_RUNNING;
+
+	switch (pTask->iTask)
+	{
+	case TASK_RANGE_ATTACK1:
+	{
+		EMIT_SOUND_DYN(edict(), CHAN_WEAPON, pAttackSounds[0], GetSoundVolue(), ATTN_IDLE, 0, GetVoicePitch());
+		m_IdealActivity = ACT_RANGE_ATTACK1;
+		SetTouch(&CKillerBabyCrab::LeapyTouch);
+		break;
+	}
+	default:
+	{
+		CBaseMonster::StartTask(pTask);
+	}
+	}
+}
+
+// orig 0x1aa870: CHeadCrab::LeapTouch, with the owner as the attacker
+void CKillerBabyCrab::LeapyTouch(CBaseEntity* pOther)
+{
+	if (0 == pOther->pev->takedamage)
+	{
+		return;
+	}
+
+	if (pOther->Classify() == Classify())
+	{
+		return;
+	}
+
+	// Don't hit if back on ground
+	if (!FBitSet(pev->flags, FL_ONGROUND))
+	{
+		EMIT_SOUND_DYN(edict(), CHAN_WEAPON, RANDOM_SOUND_ARRAY(pBiteSounds), GetSoundVolue(), ATTN_IDLE, 0, GetVoicePitch());
+
+		if (m_pevOwner)
+			pOther->TakeDamage(pev, m_pevOwner, GetDamageAmount(), DMG_SLASH);
+		else
+			pOther->TakeDamage(pev, pev, GetDamageAmount(), DMG_SLASH);
+	}
+
+	SetTouch(NULL);
+}
+
+// orig 0x1aa9c0
+void CKillerBabyCrab::Precache()
+{
+	PRECACHE_MODEL("models/baby_headcrab.mdl");
+	CHeadCrab::Precache();
+}
+
+// orig 0x1aaa00
+void CKillerBabyCrab::SetYawSpeed()
+{
+	pev->yaw_speed = 120;
+}
+
+// orig 0x1aaa20: CBabyCrab's test, jumping from farther and only when facing straighter
+bool CKillerBabyCrab::CheckRangeAttack1(float flDot, float flDist)
+{
+	if ((pev->flags & FL_ONGROUND) != 0)
+	{
+		if (pev->groundentity && (pev->groundentity->v.flags & (FL_CLIENT | FL_MONSTER)) != 0)
+			return true;
+
+		if (flDist <= 384 && flDot >= 0.85)
+			return true;
+	}
+
+	return false;
+}
+
+// orig 0x1aaa90: explodes like a grenade
+void CKillerBabyCrab::Killed(entvars_t* pevAttacker, int iGib)
+{
+	pev->takedamage = DAMAGE_NO;
+	pev->deadflag = DEAD_DEAD;
+	pev->model = iStringNull;
+	pev->solid = SOLID_NOT;
+
+	int iContents = UTIL_PointContents(pev->origin);
+
+	MESSAGE_BEGIN(MSG_PAS, SVC_TEMPENTITY, pev->origin);
+	WRITE_BYTE(TE_EXPLOSION);
+	WRITE_COORD(pev->origin.x);
+	WRITE_COORD(pev->origin.y);
+	WRITE_COORD(pev->origin.z);
+	if (iContents != CONTENTS_WATER)
+		WRITE_SHORT(g_sModelIndexFireball);
+	else
+		WRITE_SHORT(g_sModelIndexWExplosion);
+	WRITE_BYTE(17); // scale * 10
+	WRITE_BYTE(15); // framerate
+	WRITE_BYTE(TE_EXPLFLAG_NONE);
+	MESSAGE_END();
+
+	entvars_t* pevOwner = m_pevOwner ? m_pevOwner : NULL;
+
+	pev->owner = NULL; // can't traceline attack owner if this is set
+
+	RadiusDamage(pev, pevOwner, pev->dmg, CLASS_NONE, DMG_BLAST);
+
+	// VERIFY: guard, the original crashes here (it reads pevOwner->pContainingEntity with no NULL
+	// test, and nothing sets m_pevOwner, so every killer babycrab crashed the server when it died)
+	if (pevOwner)
+		pev->owner = pevOwner->pContainingEntity;
+
+	switch (RANDOM_LONG(0, 2))
+	{
+	case 0:
+		EMIT_SOUND(ENT(pev), CHAN_VOICE, "weapons/debris1.wav", 0.55, ATTN_NORM);
+		break;
+	case 1:
+		EMIT_SOUND(ENT(pev), CHAN_VOICE, "weapons/debris2.wav", 0.55, ATTN_NORM);
+		break;
+	case 2:
+		EMIT_SOUND(ENT(pev), CHAN_VOICE, "weapons/debris3.wav", 0.55, ATTN_NORM);
+		break;
+	}
+
+	pev->effects |= EF_NODRAW;
+	SetThink(&CBaseEntity::SUB_Remove);
+	pev->nextthink = gpGlobals->time + 0.1;
+	pev->effects |= EF_NODRAW;
+}
+
+// orig 0x1aace0: CBaseMonster::MonsterThink with the 30 second fuse, and without the pev->fuser4 reset
+void CKillerBabyCrab::MonsterThink()
+{
+	pev->nextthink = gpGlobals->time + 0.1;
+
+	if (m_flDieTime < gpGlobals->time)
+		Killed(pev, GIB_NEVER);
+
+	if (FBitSet(pev->flags, FL_FROZEN))
+	{
+		ClearSchedule();
+		RouteClear();
+		pev->animtime = gpGlobals->time;
+		return;
+	}
+
+	RunAI();
+
+	float flInterval = StudioFrameAdvance();
+	if (m_MonsterState != MONSTERSTATE_SCRIPT && m_MonsterState != MONSTERSTATE_DEAD && m_Activity == ACT_IDLE && m_fSequenceFinished)
+	{
+		int iSequence;
+
+		if (m_fSequenceLoops)
+			iSequence = LookupActivity(m_Activity);
+		else
+			iSequence = LookupActivityHeaviest(m_Activity);
+
+		if (iSequence != ACTIVITY_NOT_AVAILABLE)
+		{
+			pev->sequence = iSequence;
+			ResetSequenceInfo();
+		}
+	}
+
+	DispatchAnimEvents(flInterval);
+
+	if (!MovementIsComplete())
+		Move(flInterval);
 }

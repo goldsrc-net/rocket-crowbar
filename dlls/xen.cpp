@@ -27,7 +27,7 @@ class CActAnimating : public CBaseAnimating
 {
 public:
 	void SetActivity(Activity act);
-	inline Activity GetActivity() { return m_Activity; }
+	Activity GetActivity();
 
 	int ObjectCaps() override { return CBaseAnimating::ObjectCaps() & ~FCAP_ACROSS_TRANSITION; }
 
@@ -38,6 +38,12 @@ public:
 private:
 	Activity m_Activity;
 };
+
+// orig 0x2423e0
+Activity CActAnimating::GetActivity()
+{
+	return m_Activity;
+}
 
 TYPEDESCRIPTION CActAnimating::m_SaveData[] =
 	{
@@ -441,7 +447,7 @@ public:
 		return false;
 	}
 	//	void		HandleAnimEvent( MonsterEvent_t *pEvent );
-	void Attack() {}
+	void Attack();
 
 	static const char* pModelNames[];
 };
@@ -489,6 +495,11 @@ CXenHull* CXenHull::CreateHull(CBaseEntity* source, const Vector& mins, const Ve
 	return pHull;
 }
 
+
+// orig 0x2421c0
+void CXenSpore::Attack()
+{
+}
 
 LINK_ENTITY_TO_CLASS(xen_spore_small, CXenSporeSmall);
 LINK_ENTITY_TO_CLASS(xen_spore_medium, CXenSporeMed);

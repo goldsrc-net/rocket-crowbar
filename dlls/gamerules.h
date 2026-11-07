@@ -272,6 +272,7 @@ public:
 	bool FAllowFlashlight() override;
 
 	bool FShouldSwitchWeapon(CBasePlayer* pPlayer, CBasePlayerItem* pWeapon) override;
+	bool GetNextBestWeapon(CBasePlayer* pPlayer, CBasePlayerItem* pCurrentWeapon, bool alwaysSearch = false) override;
 
 	// Functions to verify the single/multiplayer status of a game
 	bool IsMultiplayer() override;
@@ -363,7 +364,9 @@ protected:
 	float m_flIntermissionStartTime = 0;
 	float m_flIntermissionEndTime = 0;
 	bool m_iEndIntermissionButtonHit;
-	void SendMOTDToClient(edict_t* client);
+
+public:
+	void SendMOTDToClient(edict_t* client); // public: ClientCommand's showmotd/serverhelp call it
 };
 
 //=========================================================

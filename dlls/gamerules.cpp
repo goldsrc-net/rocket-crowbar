@@ -107,6 +107,7 @@ bool CGameRules::GetNextBestWeapon(CBasePlayer* pPlayer, CBasePlayerItem* pCurre
 
 //=========================================================
 //=========================================================
+// orig 0x193790
 bool CGameRules::CanHaveAmmo(CBasePlayer* pPlayer, const char* pszAmmoName, int iMaxCarry)
 {
 	int iAmmoIndex;
@@ -130,6 +131,7 @@ bool CGameRules::CanHaveAmmo(CBasePlayer* pPlayer, const char* pszAmmoName, int 
 
 //=========================================================
 //=========================================================
+// orig 0x1937e0
 edict_t* CGameRules::GetPlayerSpawnSpot(CBasePlayer* pPlayer)
 {
 	edict_t* pentSpawnSpot = EntSelectSpawnPoint(pPlayer);
@@ -146,6 +148,7 @@ edict_t* CGameRules::GetPlayerSpawnSpot(CBasePlayer* pPlayer)
 
 //=========================================================
 //=========================================================
+// orig 0x1938e0
 bool CGameRules::CanHavePlayerItem(CBasePlayer* pPlayer, CBasePlayerItem* pWeapon)
 {
 	// only living players can have items
@@ -180,6 +183,7 @@ bool CGameRules::CanHavePlayerItem(CBasePlayer* pPlayer, CBasePlayerItem* pWeapo
 //=========================================================
 // load the SkillData struct with the proper values based on the skill level.
 //=========================================================
+// orig 0x193a40
 void CGameRules::RefreshSkillData()
 {
 	int iSkill;
@@ -373,9 +377,11 @@ void CGameRules::RefreshSkillData()
 // instantiate the proper game rules object
 //=========================================================
 
+// orig 0x1a4260. The original runs game.cfg from CWorld::Precache (once), and in teamplay calls
+// SendCTFInitMSG first (CHalfLifeTeamplay's constructor then decides CTF again). halflife-updated's
+// sv_busters mode is kept (off by default).
 CGameRules* InstallGameRules()
 {
-	SERVER_COMMAND("exec game.cfg\n");
 	SERVER_EXECUTE();
 
 	if (1 == sv_busters.value)
@@ -396,6 +402,7 @@ CGameRules* InstallGameRules()
 			// teamplay
 
 			g_teamplay = true;
+			SendCTFInitMSG();
 			return new CHalfLifeTeamplay;
 		}
 		if ((int)gpGlobals->deathmatch == 1)
@@ -415,6 +422,7 @@ CGameRules* InstallGameRules()
 
 // Rocket Crowbar 1.9. Original @ 0x193970 (gamerules.cpp): with mp_teamannoy 1 anyone may annoy
 // anyone; otherwise only someone who could also damage the victim.
+// orig 0x193970
 bool CGameRules::CanPlayerAnnoy(entvars_t* pevAnnoyer, entvars_t* pevVictim)
 {
 	if (CVAR_GET_FLOAT("mp_teamannoy") == 1)

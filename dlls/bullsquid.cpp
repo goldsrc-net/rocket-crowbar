@@ -70,6 +70,9 @@ public:
 	static TYPEDESCRIPTION m_SaveData[];
 
 	int m_maxFrame;
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x6080001c; } // orig 0xf6890
 };
 
 LINK_ENTITY_TO_CLASS(squidspit, CSquidSpit);
@@ -224,6 +227,11 @@ public:
 
 	float m_flLastHurtTime; // we keep track of this, because if something hurts a squid, it will forget about its love of headcrabs for a while.
 	float m_flNextSpitTime; // last time the bullsquid used the spit attack.
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x1aa2dfd; } // orig 0xf6810
+	int GetGuassDistOut() override { return 56; } // orig 0xf6820
+	int GetGuassHull() override { return large_hull; } // orig 0xf6830
 };
 LINK_ENTITY_TO_CLASS(monster_bullchicken, CBullsquid);
 
@@ -538,6 +546,7 @@ void CBullsquid::HandleAnimEvent(MonsterEvent_t* pEvent)
 	{
 	case BSQUID_AE_SPIT:
 	{
+		// VERIFY: guard, the original crashes here (no NULL test; halflife-updated added this one)
 		if (m_hEnemy)
 		{
 			Vector vecSpitOffset;

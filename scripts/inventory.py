@@ -27,7 +27,7 @@ ORIG = os.path.join(ROOT, "reference", "rc_i386.so")
 TEXT_NDX = "17"   # .text's section index in rc_i386.so
 RUNTIME = {"crtstuff.c", "initfini.c", "libgcc2.c", "frame.c", "exception.cc",
            "new.cc", "new1.cc", "new2.cc", "tinfo.cc", "tinfo2.cc"}
-GENERATED = re.compile(r"^(__tf|__ti|_GLOBAL_[.$]|__thunk_|__\w+__F|_init$|_fini$|GetClassPtr__H)")
+GENERATED = re.compile(r"^(__tf|__ti|_GLOBAL_[.$]|__thunk_|__\w+__F|_init$|_fini$|GetClassPtr__H|__default_terminate$|__terminate$|__throw_type_match$|__empty$)")
 RUNTIME_SYM = re.compile(r"^(_init|_fini|__do_global_\w+|__libc_csu\w*|frame_dummy|call_\w+)$")
 
 

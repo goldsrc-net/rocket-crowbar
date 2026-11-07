@@ -33,10 +33,39 @@
 #include "weapons.h"
 #include "gamerules.h"
 #include "teamplay_gamerules.h"
+#include "Preff.h"
+#include "vote.h"
+#include "curses.h"
+#include "deathballs.h"
+#include "levelcustom.h"
+#include "wog.h"
+#include "driveapache.h"
+#include "drivegarg.h"
+#include "driveassassin.h"
+#include "drivepanth.h"
+#include "drivehoundeye.h"
+#include "driveturret.h"
+#include "drivebm.h"
+#include "driveagrunt.h"
+#include "drivebullsquid.h"
 
 CGlobalState gGlobalState;
 
 extern void W_Precache();
+
+// Rocket Crowbar 1.9 spawners and lists made or reset at map start, declared in no header
+extern void CreateDrvIckySpawner();		  // driveicky.cpp
+extern void CreateDrvSlaveSpawner();	  // driveaslave.cpp
+extern void CreateDrvControllerSpawner(); // drivecontroll.cpp
+extern void CreateSciSpawner();			  // scientist.cpp
+extern int g_iCntFakeClassnames;		  // cbase.cpp
+extern bool g_bUnsafeCreate;			  // cbase.cpp
+
+// Rocket Crowbar 1.9: world.cpp's own globals
+float g_flWeaponCheat;			   // orig 0x31b6f8, sv_cheats at map start, then the "fcheats" command's value
+short g_iHGibModel;				   // orig 0x31b6fc, models/hgibs.mdl (or germangibs), for combat.cpp's ThrowFakeGibs
+short g_iAGibModel;				   // orig 0x31b6fe, models/agibs.mdl (or germangibs)
+bool g_bHaveExecedGamecfg = false; // orig 0x2aa9b4, game.cfg and the server config run once
 
 //
 // This must match the list in util.h
@@ -108,6 +137,7 @@ public:
 LINK_ENTITY_TO_CLASS(infodecal, CDecal);
 
 // UNDONE:  These won't get sent to joining players in multi-player
+// orig 0x23e2a0
 void CDecal::Spawn()
 {
 	if (pev->skin < 0 || (0 != gpGlobals->deathmatch && FBitSet(pev->spawnflags, SF_DECAL_NOTINDEATHMATCH)))
@@ -130,6 +160,7 @@ void CDecal::Spawn()
 	}
 }
 
+// orig 0x23e370
 void CDecal::TriggerDecal(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE useType, float value)
 {
 	// this is set up as a USE function for infodecals that have targetnames, so that the
@@ -156,6 +187,7 @@ void CDecal::TriggerDecal(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYP
 }
 
 
+// orig 0x23e530
 void CDecal::StaticDecal()
 {
 	TraceResult trace;
@@ -175,6 +207,7 @@ void CDecal::StaticDecal()
 }
 
 
+// orig 0x23e620
 bool CDecal::KeyValue(KeyValueData* pkvd)
 {
 	if (FStrEq(pkvd->szKeyName, "texture"))
@@ -201,7 +234,138 @@ class CCorpse : public CBaseEntity
 
 LINK_ENTITY_TO_CLASS(bodyque, CCorpse);
 
-static void InitBodyQue()
+// Rocket Crowbar 1.9: a copy of a dead body that drops, settles and fades out. Nothing in the
+// original makes one (CreateFadingBodyCopy has no caller).
+class CFaderCorpse : public CBaseMonster
+{
+public:
+	void Spawn() override;
+	int ObjectCaps() override { return FCAP_DONT_SAVE; } // orig 0x2409c0
+	void CopyFromEnt(entvars_t* pevFrom, bool bPlayer);
+	void EXPORT WaitToLand();
+	void EXPORT MyFadeOut();
+};
+
+LINK_ENTITY_TO_CLASS(fading_corpse, CFaderCorpse);
+
+// orig 0x23e6e0
+void CFaderCorpse::Spawn()
+{
+	pev->classname = MAKE_STRING("fading_corpse");
+	UTIL_SetOrigin(pev, pev->origin);
+	UTIL_SetSize(pev, g_vecZero, g_vecZero);
+	pev->solid = SOLID_TRIGGER;
+	pev->movetype = MOVETYPE_TOSS;
+	pev->takedamage = DAMAGE_NO;
+	pev->deadflag = DEAD_DEAD;
+	pev->frame = 0;
+	pev->framerate = 1.0;
+}
+
+// orig 0x23e780: take the body's look, then wait up to 7 seconds for it to land; it fades after
+// at least 3. A player's copy is drawn as that player (kRenderFxDeadPlayer).
+void CFaderCorpse::CopyFromEnt(entvars_t* pevFrom, bool bPlayer)
+{
+	UTIL_SetOrigin(pev, pevFrom->origin);
+	UTIL_SetSize(pev, pevFrom->mins, pevFrom->maxs);
+	SET_MODEL(ENT(pev), STRING(pev->model)); // VERIFY: the corpse's own (empty) model, as in the original; the next lines copy the body's
+	pev->modelindex = pevFrom->modelindex;
+	pev->model = pevFrom->model;
+	pev->angles = pevFrom->angles;
+	pev->colormap = pevFrom->colormap;
+	pev->effects = pevFrom->effects;
+	pev->sequence = pevFrom->sequence;
+	ResetSequenceInfo();
+	pev->frame = 0;
+	SetThink(&CFaderCorpse::WaitToLand);
+	pev->nextthink = gpGlobals->time + 0.1;
+	pev->dmgtime = gpGlobals->time + 7.0; // give up waiting to land
+	pev->dmg = gpGlobals->time + 3.0;	  // fade no sooner than this
+	if (bPlayer)
+	{
+		pev->renderfx = kRenderFxDeadPlayer;
+		pev->renderamt = ENTINDEX(pevFrom->pContainingEntity);
+	}
+	else
+	{
+		pev->renderfx = kRenderFxNone;
+	}
+}
+
+// orig 0x23e920
+void CFaderCorpse::WaitToLand()
+{
+	pev->nextthink = gpGlobals->time + 0.1;
+	if (gpGlobals->time < pev->dmgtime)
+	{
+		if (!m_fSequenceFinished)
+		{
+			StudioFrameAdvance(0);
+			return;
+		}
+		if ((pev->flags & FL_ONGROUND) == 0)
+			return;
+		if (pev->velocity.Length() > 32)
+			return;
+	}
+
+	pev->frame = 255;
+	if (pev->dmg <= gpGlobals->time)
+	{
+		SetThink(&CFaderCorpse::MyFadeOut);
+		pev->dmg = 3.0; // now the fade's length
+		pev->dmgtime = gpGlobals->time + pev->dmg;
+		if ((pev->flags & FL_ONGROUND) != 0)
+		{
+			// on the ground, it sinks as it fades
+			pev->dmg_take = pev->origin.z;
+			pev->dmg_save = 1;
+			pev->movetype = MOVETYPE_NONE;
+		}
+		else
+		{
+			pev->dmg_save = 0;
+		}
+	}
+}
+
+// orig 0x23ea70
+void CFaderCorpse::MyFadeOut()
+{
+	pev->nextthink = gpGlobals->time + 0.1;
+	SetThink(&CFaderCorpse::MyFadeOut);
+
+	float flFrac = (pev->dmgtime - gpGlobals->time) / pev->dmg;
+	if (flFrac > 0.01)
+	{
+		if (pev->renderfx != kRenderFxDeadPlayer)
+		{
+			pev->rendermode = kRenderTransTexture;
+			pev->renderamt = flFrac * 255;
+		}
+		// VERIFY: the original drops it 24 units at once at half faded, then sinks it 12 more
+		if (pev->dmg_save == 1 && flFrac < 0.5)
+		{
+			pev->origin.z = pev->dmg_take - ((1.0 - flFrac) + 0.5) * 24;
+			UTIL_SetOrigin(pev, pev->origin);
+		}
+	}
+	else
+	{
+		SetThink(&CFaderCorpse::SUB_Remove);
+	}
+}
+
+// Rocket Crowbar 1.9. orig 0x23eb90: a fading copy of a dead body, owned by it.
+void CreateFadingBodyCopy(entvars_t* pev)
+{
+	CFaderCorpse* pCorpse = (CFaderCorpse*)CBaseEntity::Create("fading_corpse", pev->origin, pev->angles, pev->pContainingEntity);
+	if (pCorpse)
+		pCorpse->CopyFromEnt(pev, (pev->flags & FL_CLIENT) != 0);
+}
+
+// orig 0x23ec20
+void InitBodyQue()
 {
 	string_t istrClassname = MAKE_STRING("bodyque");
 
@@ -224,9 +388,11 @@ static void InitBodyQue()
 //
 // GLOBALS ASSUMED SET:  g_eoBodyQueueHead
 //
+// orig 0x23ecd0. The original copies any drawn body (halflife-updated also skips modelless ones)
+// and always shows the copy at its last frame (halflife-updated keeps the body's frame).
 void CopyToBodyQue(entvars_t* pev)
 {
-	if ((pev->effects & EF_NODRAW) != 0 || pev->modelindex == 0)
+	if ((pev->effects & EF_NODRAW) != 0)
 		return;
 
 	entvars_t* pevHead = VARS(g_pBodyQueueHead);
@@ -234,7 +400,7 @@ void CopyToBodyQue(entvars_t* pev)
 	pevHead->angles = pev->angles;
 	pevHead->model = pev->model;
 	pevHead->modelindex = pev->modelindex;
-	pevHead->frame = pev->frame;
+	pevHead->frame = 255;
 	pevHead->colormap = pev->colormap;
 	pevHead->movetype = MOVETYPE_TOSS;
 	pevHead->velocity = pev->velocity;
@@ -262,12 +428,14 @@ CGlobalState::CGlobalState()
 	Reset();
 }
 
+// orig 0x23ee40
 void CGlobalState::Reset()
 {
 	m_pList = NULL;
 	m_listCount = 0;
 }
 
+// orig 0x23ee60
 globalentity_t* CGlobalState::Find(string_t globalname)
 {
 	if (FStringNull(globalname))
@@ -292,6 +460,7 @@ globalentity_t* CGlobalState::Find(string_t globalname)
 
 // This is available all the time now on impulse 104, remove later
 //#ifdef _DEBUG
+// orig 0x23eed0
 void CGlobalState::DumpGlobals()
 {
 	static const char* estates[] = {"Off", "On", "Dead"};
@@ -308,6 +477,7 @@ void CGlobalState::DumpGlobals()
 //#endif
 
 
+// orig 0x23ef50
 void CGlobalState::EntityAdd(string_t globalname, string_t mapName, GLOBALESTATE state)
 {
 	ASSERT(!Find(globalname));
@@ -323,6 +493,7 @@ void CGlobalState::EntityAdd(string_t globalname, string_t mapName, GLOBALESTATE
 }
 
 
+// orig 0x23efd0
 void CGlobalState::EntitySetState(string_t globalname, GLOBALESTATE state)
 {
 	globalentity_t* pEnt = Find(globalname);
@@ -332,6 +503,7 @@ void CGlobalState::EntitySetState(string_t globalname, GLOBALESTATE state)
 }
 
 
+// orig 0x23f000
 const globalentity_t* CGlobalState::EntityFromTable(string_t globalname)
 {
 	globalentity_t* pEnt = Find(globalname);
@@ -340,6 +512,7 @@ const globalentity_t* CGlobalState::EntityFromTable(string_t globalname)
 }
 
 
+// orig 0x23f030
 GLOBALESTATE CGlobalState::EntityGetState(string_t globalname)
 {
 	globalentity_t* pEnt = Find(globalname);
@@ -365,6 +538,7 @@ TYPEDESCRIPTION gGlobalEntitySaveData[] =
 };
 
 
+// orig 0x23f060
 bool CGlobalState::Save(CSave& save)
 {
 	int i;
@@ -385,6 +559,7 @@ bool CGlobalState::Save(CSave& save)
 	return true;
 }
 
+// orig 0x23f0f0
 bool CGlobalState::Restore(CRestore& restore)
 {
 	int i, listCount;
@@ -407,6 +582,7 @@ bool CGlobalState::Restore(CRestore& restore)
 	return true;
 }
 
+// orig 0x23f1c0
 void CGlobalState::EntityUpdate(string_t globalname, string_t mapname)
 {
 	globalentity_t* pEnt = Find(globalname);
@@ -416,6 +592,7 @@ void CGlobalState::EntityUpdate(string_t globalname, string_t mapname)
 }
 
 
+// orig 0x23f210
 void CGlobalState::ClearStates()
 {
 	globalentity_t* pFree = m_pList;
@@ -429,6 +606,7 @@ void CGlobalState::ClearStates()
 }
 
 
+// orig 0x23f260
 void SaveGlobalState(SAVERESTOREDATA* pSaveData)
 {
 	if (!CSaveRestoreBuffer::IsValidSaveRestoreData(pSaveData))
@@ -441,6 +619,7 @@ void SaveGlobalState(SAVERESTOREDATA* pSaveData)
 }
 
 
+// orig 0x23f2f0
 void RestoreGlobalState(SAVERESTOREDATA* pSaveData)
 {
 	if (!CSaveRestoreBuffer::IsValidSaveRestoreData(pSaveData))
@@ -453,6 +632,7 @@ void RestoreGlobalState(SAVERESTOREDATA* pSaveData)
 }
 
 
+// orig 0x23f390
 void ResetGlobalState()
 {
 	gGlobalState.ClearStates();
@@ -493,12 +673,17 @@ CWorld::~CWorld()
 	World = nullptr;
 }
 
+// orig 0x23f3f0
 void CWorld::Spawn()
 {
 	g_fGameOver = false;
 	Precache();
+	g_flWeaponCheat = CVAR_GET_FLOAT("sv_cheats");
+	g_iCntFakeClassnames = 0;
 }
 
+// orig 0x23f450. Rocket Crowbar resets its per-map state, runs the configs, loads rc.ini,
+// precaches its entities and makes its spawners.
 void CWorld::Precache()
 {
 	// Flag this entity for removal if it's not the actual world entity.
@@ -508,7 +693,12 @@ void CWorld::Precache()
 		return;
 	}
 
+	// Rocket Crowbar: reset the per-map state
+	g_bUnsafeCreate = false;
 	g_pLastSpawn = NULL;
+	ResetPrecachedList(); // g_iCntPrecached = 0 in the original
+	g_iEMCountUsedPCs = 0;
+	g_iEMCountUsedSCStrs = 0;
 
 #if 1
 	CVAR_SET_STRING("sv_gravity", "800"); // 67ft/sec
@@ -520,10 +710,55 @@ void CWorld::Precache()
 
 	CVAR_SET_STRING("room_type", "0"); // clear DSP
 
+	g_blInVoteMap = false;
+	g_flVMEndTime = -1;
+	g_flVMChangeTime = -1;
+	g_blInVoteKick = false;
+	g_flVKEndTime = -1;
+
+	// The original runs game.cfg and the server config here, once, in deathmatch (halflife-updated
+	// runs game.cfg from InstallGameRules and the listen server config from CHalfLifeMultiplay,
+	// every map). On a dedicated server the original also runs servercfgfile here; the current
+	// engine runs server.cfg itself, so ours leaves that out. VERIFY at run time.
+	if (!g_bHaveExecedGamecfg && gpGlobals->deathmatch != 0)
+	{
+		SERVER_COMMAND("exec game.cfg\n");
+		g_bHaveExecedGamecfg = true;
+		if (!IS_DEDICATED_SERVER())
+		{
+			const char* lservercfgfile = CVAR_GET_STRING("lservercfgfile");
+			if (lservercfgfile && '\0' != lservercfgfile[0])
+			{
+				char szCommand[256];
+				ALERT(at_console, "Executing listen server config file\n");
+				snprintf(szCommand, sizeof(szCommand), "exec %s\n", lservercfgfile);
+				SERVER_COMMAND(szCommand);
+			}
+		}
+	}
+
+	// sv_mapcfg: run changelevel.cfg, then <map>.cfg
+	if (CVAR_GET_FLOAT("sv_mapcfg") != 0 && gpGlobals->deathmatch != 0)
+	{
+		char szCommand[256];
+		SERVER_COMMAND("exec changelevel.cfg\n");
+		snprintf(szCommand, sizeof(szCommand), "exec %s.cfg\n", STRING(gpGlobals->mapname));
+		SERVER_COMMAND(szCommand);
+	}
+
 	// Set up game rules
 	delete g_pGameRules;
 
 	g_pGameRules = InstallGameRules();
+
+	// rc.ini (sv_prefsfile in the game directory)
+	{
+		char szGameDir[512];
+		char szPrefs[512];
+		GET_GAME_DIR(szGameDir);
+		snprintf(szPrefs, sizeof(szPrefs), "%s/%s", szGameDir, CVAR_GET_STRING("sv_prefsfile"));
+		PREFS_LoadFile(szPrefs);
+	}
 
 	//!!!UNDONE why is there so much Spawn code in the Precache function? I'll just keep it here
 
@@ -565,15 +800,84 @@ void CWorld::Precache()
 	PRECACHE_SOUND("common/bodydrop3.wav"); // dead bodies hitting the ground (animation events)
 	PRECACHE_SOUND("common/bodydrop4.wav");
 
+	// Rocket Crowbar
+	PRECACHE_SOUND("weapons/rocketfire1.wav");
+	PRECACHE_SOUND("weapons/rocket1.wav");
+	PRECACHE_SOUND("weapons/glauncher.wav");
+	PRECACHE_MODEL("sprites/smoke.spr");
+
+	// sv_pcall / sv_pcstuff: precache monsters a .lec or a spawner may make mid-game
+	if ((int)CVAR_GET_FLOAT("sv_pcall") == 1)
+	{
+		UTIL_PrecacheOther("monster_human_grunt");
+		UTIL_PrecacheOther("monster_alien_grunt");
+		UTIL_PrecacheOther("monster_apache");
+		UTIL_PrecacheOther("monster_bullchicken");
+		UTIL_PrecacheOther("monster_alien_controller");
+		UTIL_PrecacheOther("monster_gargantua");
+		UTIL_PrecacheOther("monster_headcrab");
+		UTIL_PrecacheOther("monster_houndeye");
+		UTIL_PrecacheOther("monster_alien_slave");
+		UTIL_PrecacheOther("monster_zombie");
+		UTIL_PrecacheOther("monster_ichthyosaur");
+		UTIL_PrecacheOther("monster_barney");
+		UTIL_PrecacheOther("monster_scientist");
+		UTIL_PrecacheOther("monster_human_assassin");
+		UTIL_PrecacheOther("monster_tentacle");
+	}
+	if ((int)CVAR_GET_FLOAT("sv_pcstuff") == 1)
+	{
+		UTIL_PrecacheOther("monster_human_grunt");
+		UTIL_PrecacheOther("monster_alien_grunt");
+		UTIL_PrecacheOther("monster_alien_controller");
+		UTIL_PrecacheOther("monster_gargantua");
+		UTIL_PrecacheOther("monster_houndeye");
+		UTIL_PrecacheOther("monster_ichthyosaur");
+		UTIL_PrecacheOther("monster_barney");
+		UTIL_PrecacheOther("monster_scientist");
+		UTIL_PrecacheOther("monster_human_assassin");
+	}
+	UTIL_PrecacheOther("monster_headcrab");
+	UTIL_PrecacheOther("deathball");
+	UTIL_PrecacheOther("drive_apache");
+	UTIL_PrecacheOther("pickup_drive_apache");
+	UTIL_PrecacheOther("drive_garg");
+	UTIL_PrecacheOther("pickup_drive_garg");
+	UTIL_PrecacheOther("drive_assassin");
+	UTIL_PrecacheOther("pickup_drive_assassin");
+	UTIL_PrecacheOther("drive_turret");
+	UTIL_PrecacheOther("pickup_drive_turret");
+	UTIL_PrecacheOther("drive_icky");
+	UTIL_PrecacheOther("pickup_drive_icky");
+	UTIL_PrecacheOther("drive_houndeye");
+	UTIL_PrecacheOther("pickup_drive_houndeye");
+	UTIL_PrecacheOther("drive_asl");
+	UTIL_PrecacheOther("pickup_drive_slave");
+	UTIL_PrecacheOther("drive_panth");
+	UTIL_PrecacheOther("pickup_drive_panth");
+	UTIL_PrecacheOther("drive_bm");
+	UTIL_PrecacheOther("drive_headcrab");
+	UTIL_PrecacheOther("pickup_drive_bm");
+	UTIL_PrecacheOther("drive_agrunt");
+	UTIL_PrecacheOther("pickup_drive_agrunt");
+	UTIL_PrecacheOther("drive_controller");
+	UTIL_PrecacheOther("pickup_drive_controller");
+	UTIL_PrecacheOther("drive_bullsquid");
+	UTIL_PrecacheOther("drive_chumtoad");
+	UTIL_PrecacheOther("pickup_drive_bullsquid");
+	UTIL_PrecacheOther("nuke_rocket");
+	WOGPrecache();
+
 	g_Language = (int)CVAR_GET_FLOAT("sv_language");
 	if (g_Language == LANGUAGE_GERMAN)
 	{
-		PRECACHE_MODEL("models/germangibs.mdl");
+		g_iHGibModel = PRECACHE_MODEL("models/germangibs.mdl");
+		g_iAGibModel = g_iHGibModel;
 	}
 	else
 	{
-		PRECACHE_MODEL("models/hgibs.mdl");
-		PRECACHE_MODEL("models/agibs.mdl");
+		g_iHGibModel = PRECACHE_MODEL("models/hgibs.mdl");
+		g_iAGibModel = PRECACHE_MODEL("models/agibs.mdl");
 	}
 
 	PRECACHE_SOUND("weapons/ric1.wav");
@@ -689,12 +993,32 @@ void CWorld::Precache()
 	{
 		CVAR_SET_FLOAT("mp_defaultteam", 0);
 	}
+
+	// Rocket Crowbar: the curse, scientist, deathball and drive-monster spawners, and the map's .lec
+	CreateCurseSpawner();
+	CreateSciSpawner();
+	CreateDBSpawner();
+	CreateDrvApachSpawner();
+	CreateDrvGargSpawner();
+	CreateDrvAssassinSpawner();
+	CreateDrvIckySpawner();
+	CreateDrvPanthSpawner();
+	CreateDrvSlaveSpawner();
+	CreateDrvHESpawner();
+	CreateDrvTurretSpawner();
+	CreateDrvBMSpawner();
+	CreateDrvAGruntSpawner();
+	CreateDrvControllerSpawner();
+	CreateDrvBullsquidSpawner();
+	CreateLCEnt();
+	g_iCntFakeClassnames = 0;
 }
 
 
 //
 // Just to ignore the "wad" field.
 //
+// orig 0x2400c0
 bool CWorld::KeyValue(KeyValueData* pkvd)
 {
 	if (FStrEq(pkvd->szKeyName, "skyname"))
@@ -764,3 +1088,5 @@ bool CWorld::KeyValue(KeyValueData* pkvd)
 
 	return CBaseEntity::KeyValue(pkvd);
 }
+
+

@@ -479,16 +479,22 @@ void CTalkMonster::RunTask(Task_t* pTask)
 	case TASK_TLK_CLIENT_STARE:
 	case TASK_TLK_LOOK_AT_CLIENT:
 	{
-		// Get edict for one player
-		CBaseEntity* pPlayer = UTIL_GetLocalPlayer();
+		// orig 0x21e5e0: the original's edict 1 lookup, inside the test (halflife-updated moved it
+		// out and fails the task when there's no player)
+		edict_t* pPlayer = NULL;
 
 		// track head to the client for a while.
-		if (pPlayer &&
-			m_MonsterState == MONSTERSTATE_IDLE &&
+		if (m_MonsterState == MONSTERSTATE_IDLE &&
 			!IsMoving() &&
 			!IsTalking())
 		{
-			IdleHeadTurn(pPlayer->pev->origin);
+			// Get edict for one player
+			pPlayer = g_engfuncs.pfnPEntityOfEntIndex(1);
+
+			if (pPlayer)
+			{
+				IdleHeadTurn(pPlayer->v.origin);
+			}
 		}
 		else
 		{
@@ -497,17 +503,18 @@ void CTalkMonster::RunTask(Task_t* pTask)
 			return;
 		}
 
-		if (pTask->iTask == TASK_TLK_CLIENT_STARE)
+		// VERIFY: guard, the original crashes here (STARE with no edict 1 reads a NULL player)
+		if (pTask->iTask == TASK_TLK_CLIENT_STARE && pPlayer)
 		{
 			// fail out if the player looks away or moves away.
-			if ((pPlayer->pev->origin - pev->origin).Length2D() > TLK_STARE_DIST)
+			if ((pPlayer->v.origin - pev->origin).Length2D() > TLK_STARE_DIST)
 			{
 				// player moved away.
 				TaskFail();
 			}
 
-			UTIL_MakeVectors(pPlayer->pev->angles);
-			if (UTIL_DotPoints(pPlayer->pev->origin, pev->origin, gpGlobals->v_forward) < m_flFieldOfView)
+			UTIL_MakeVectors(pPlayer->v.angles);
+			if (UTIL_DotPoints(pPlayer->v.origin, pev->origin, gpGlobals->v_forward) < m_flFieldOfView)
 			{
 				// player looked away
 				TaskFail();
@@ -524,13 +531,13 @@ void CTalkMonster::RunTask(Task_t* pTask)
 	case TASK_FACE_PLAYER:
 	{
 		// Get edict for one player
-		CBaseEntity* pPlayer = UTIL_GetLocalPlayer();
+		edict_t* pPlayer = g_engfuncs.pfnPEntityOfEntIndex(1);
 
 		if (pPlayer)
 		{
-			MakeIdealYaw(pPlayer->pev->origin);
+			MakeIdealYaw(pPlayer->v.origin);
 			ChangeYaw(pev->yaw_speed);
-			IdleHeadTurn(pPlayer->pev->origin);
+			IdleHeadTurn(pPlayer->v.origin);
 			if (gpGlobals->time > m_flWaitFinished && FlYawDiff() < 10)
 			{
 				TaskComplete();
@@ -867,12 +874,9 @@ void CTalkMonster::Touch(CBaseEntity* pOther)
 		float speed = fabs(pOther->pev->velocity.x) + fabs(pOther->pev->velocity.y);
 		if (speed > 50)
 		{
-			// From https://github.com/FreeSlave/halflife-updated/wiki/Fix-potential-incorrect-facing-in-scripted-sequence
-			if (m_pSchedule != NULL && (m_pSchedule->iInterruptMask & bits_COND_CLIENT_PUSH) != 0)
-			{
-				SetConditions(bits_COND_CLIENT_PUSH);
-				MakeIdealYaw(pOther->pev->origin);
-			}
+			// orig 0x21f190: no interrupt-mask test (halflife-updated's scripted sequence facing fix)
+			SetConditions(bits_COND_CLIENT_PUSH);
+			MakeIdealYaw(pOther->pev->origin);
 		}
 	}
 }
@@ -1130,8 +1134,12 @@ void CTalkMonster::PlayScriptedSentence(const char* pszSentence, float duration,
 	m_hTalkTarget = pListener;
 }
 
-void CTalkMonster::PlaySentenceCore(const char* pszSentence, float duration, float volume, float attenuation)
+// orig 0x21fae0: no IsAlive() test, a dying talker still speaks
+void CTalkMonster::PlaySentence(const char* pszSentence, float duration, float volume, float attenuation)
 {
+	if (!pszSentence)
+		return;
+
 	Talk(duration);
 
 	CTalkMonster::g_talkWaitTime = gpGlobals->time + duration + 2.0;
@@ -1178,7 +1186,7 @@ bool CTalkMonster::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, f
 		{
 			CBaseEntity* pFriend = FindNearestFriend(false);
 
-			if (pFriend && pFriend->IsAlive() && pFriend->pev->deadflag == DEAD_NO)
+			if (pFriend && pFriend->IsAlive())
 			{
 				// only if not dead or dying!
 				CTalkMonster* pTalkMonster = (CTalkMonster*)pFriend;
@@ -1247,14 +1255,14 @@ Schedule_t* CTalkMonster::GetScheduleOfType(int Type)
 
 		if (!IsTalking() && HasConditions(bits_COND_SEE_CLIENT) && RANDOM_LONG(0, 6) == 0)
 		{
-			CBaseEntity* pPlayer = UTIL_GetLocalPlayer();
+			edict_t* pPlayer = g_engfuncs.pfnPEntityOfEntIndex(1);
 
 			if (pPlayer)
 			{
 				// watch the client.
-				UTIL_MakeVectors(pPlayer->pev->angles);
-				if ((pPlayer->pev->origin - pev->origin).Length2D() < TLK_STARE_DIST &&
-					UTIL_DotPoints(pPlayer->pev->origin, pev->origin, gpGlobals->v_forward) >= m_flFieldOfView)
+				UTIL_MakeVectors(pPlayer->v.angles);
+				if ((pPlayer->v.origin - pev->origin).Length2D() < TLK_STARE_DIST &&
+					UTIL_DotPoints(pPlayer->v.origin, pev->origin, gpGlobals->v_forward) >= m_flFieldOfView)
 				{
 					// go into the special STARE schedule if the player is close, and looking at me too.
 					return &slTlkIdleWatchClient[1];
@@ -1379,11 +1387,10 @@ void CTalkMonster::StartFollowing(CBaseEntity* pLeader)
 
 bool CTalkMonster::CanFollow()
 {
-	if (m_MonsterState == MONSTERSTATE_SCRIPT || m_IdealMonsterState == MONSTERSTATE_SCRIPT)
+	// orig 0x2203f0: the SDK's test (halflife-updated also checks the ideal state)
+	if (m_MonsterState == MONSTERSTATE_SCRIPT)
 	{
-		// It's possible for m_MonsterState to still be MONSTERSTATE_SCRIPT when the script has already ended.
-		// We'll treat a null pointer as an uninterruptable script and wait for the NPC to change states
-		// before allowing players to make them follow them again.
+		// VERIFY: guard, the original crashes here (m_pCine is NULL just after a script ends)
 		if (!m_pCine || !m_pCine->CanInterrupt())
 			return false;
 	}

@@ -56,6 +56,9 @@ public:
 	bool m_fLightHacked;
 	int m_iMode;
 	// -----------------------------
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x7fe3d5f; } // orig 0x1fc050
 };
 LINK_ENTITY_TO_CLASS(monster_cockroach, CRoach);
 

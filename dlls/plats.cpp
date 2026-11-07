@@ -377,6 +377,7 @@ void CPlatTrigger::SpawnInsideTrigger(CFuncPlat* pPlatform)
 //
 // When the platform's trigger field is touched, the platform ???
 //
+// orig 0x1e44f0
 void CPlatTrigger::Touch(CBaseEntity* pOther)
 {
 	//Platform was removed, remove trigger
@@ -386,9 +387,9 @@ void CPlatTrigger::Touch(CBaseEntity* pOther)
 		return;
 	}
 
-	// Ignore touches by non-players
+	// Ignore touches by non-players (Rocket Crowbar: or a driven monster)
 	entvars_t* pevToucher = pOther->pev;
-	if (!FClassnameIs(pevToucher, "player"))
+	if (!FClassnameIs(pevToucher, "player") && !pOther->IsDriveent())
 		return;
 
 	// Ignore touches by corpses
@@ -1080,7 +1081,7 @@ void CFuncTrackTrain::Use(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYP
 }
 
 
-static float Fix(float angle)
+float Fix(float angle) // orig 0x1e6650 (not static in the original)
 {
 	while (angle < 0)
 		angle += 360;
@@ -1091,7 +1092,7 @@ static float Fix(float angle)
 }
 
 
-static void FixupAngles(Vector& v)
+void FixupAngles(Vector& v) // orig 0x1e66c0 (not static in the original)
 {
 	v.x = Fix(v.x);
 	v.y = Fix(v.y);

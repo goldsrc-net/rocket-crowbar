@@ -1717,10 +1717,7 @@ void CDriveHE::DEClientLeave()
 
 	SET_VIEW(m_pOwner->pev->pContainingEntity, m_pOwner->pev->pContainingEntity);
 
-	// VERIFY: the original passes NULL for both; RC's SetupVisibility (client.cpp) skips the
-	// stores when they are NULL, the SDK's writes through them. Same effect on the engine.
-	unsigned char *pvs, *pas;
-	SetupVisibility(m_pOwner->pev->pContainingEntity, m_pOwner->pev->pContainingEntity, &pvs, &pas);
+	SetupVisibility(m_pOwner->pev->pContainingEntity, m_pOwner->pev->pContainingEntity, NULL, NULL);
 }
 
 // orig 0x166ba0: the eject command: jump out, and the houndeye gibs

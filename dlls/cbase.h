@@ -94,6 +94,7 @@ extern void AddToPrecachedList(const char* pszClassname);
 extern char g_pFakeConstClassnames[256][128]; // Create's classname table
 extern int g_iCntFakeClassnames;
 extern bool g_bUnsafeCreate;
+extern void ResetPrecachedList(); // w2-client-rules-world: CWorld::Precache empties the list (orig g_iCntPrecached = 0)
 
 typedef enum
 {

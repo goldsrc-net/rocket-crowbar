@@ -106,6 +106,9 @@ public:
 	static const char* pHitSilo[];
 	static const char* pHitDirt[];
 	static const char* pHitWater[];
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x3c800; } // orig 0x2243e0
 };
 
 
@@ -256,9 +259,6 @@ void CTentacle::Spawn()
 	pev->effects = 0;
 	pev->health = 75;
 	pev->sequence = 0;
-
-	//Always interpolate tentacles since they don't actually move.
-	m_EFlags |= EFLAG_SLERP;
 
 	SET_MODEL(ENT(pev), "models/tentacle2.mdl");
 	UTIL_SetSize(pev, Vector(-32, -32, 0), Vector(32, 32, 64));
@@ -464,6 +464,14 @@ void CTentacle::Cycle()
 	pev->nextthink = gpGlobals->time + 0.1;
 
 	// ALERT( at_console, "%s %d %d %d %f %f\n", STRING( pev->targetname ), pev->sequence, m_iGoalAnim, m_iDir, pev->framerate, pev->health );
+
+	// Rocket Crowbar 1.9 (orig 0x222df0): a frozen tentacle drops its schedule and does nothing
+	if (FBitSet(pev->flags, FL_FROZEN))
+	{
+		ClearSchedule();
+		RouteClear();
+		return;
+	}
 
 	if (m_MonsterState == MONSTERSTATE_SCRIPT || m_IdealMonsterState == MONSTERSTATE_SCRIPT)
 	{

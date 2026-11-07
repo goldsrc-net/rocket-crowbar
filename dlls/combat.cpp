@@ -1832,7 +1832,3 @@ void ThrowFakeGibs(entvars_t* pevVictim, bool bHuman)
 	}
 }
 
-// TEMP STUB (w2-player-core): real ones belong in world.cpp (orig 0x31b6fc / 0x31b6fe, set in
-// CWorld::Precache 0x23f450).
-short g_iHGibModel = 0;
-short g_iAGibModel = 0;

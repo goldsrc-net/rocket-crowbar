@@ -98,6 +98,11 @@ public:
 
 	Vector m_velocity;
 	bool m_fInCombat;
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x7fe3dff; } // orig 0x10de10
+	int GetGuassDistOut() override { return 56; } // orig 0x10de20
+	int GetGuassHull() override { return human_hull; } // orig 0x10de30
 };
 
 LINK_ENTITY_TO_CLASS(monster_alien_controller, CController);
@@ -665,11 +670,9 @@ void CController::RunTask(Task_t* pTask)
 	case TASK_WAIT:
 	case TASK_WAIT_FACE_ENEMY:
 	case TASK_WAIT_PVS:
-		if (m_hEnemy != 0)
-		{
-			MakeIdealYaw(m_vecEnemyLKP);
-			ChangeYaw(pev->yaw_speed);
-		}
+		// orig 0x10b590: faces m_vecEnemyLKP with or without an enemy (halflife-updated tests m_hEnemy)
+		MakeIdealYaw(m_vecEnemyLKP);
+		ChangeYaw(pev->yaw_speed);
 
 		if (m_fSequenceFinished)
 		{
@@ -1104,6 +1107,8 @@ int CController::CheckLocalMove(const Vector& vecStart, const Vector& vecEnd, CB
 }
 
 
+// orig 0x10c830: Rocket Crowbar stores the distance moved per second in pev->fuser4, as
+// CBaseMonster::MoveExecute does
 void CController::MoveExecute(CBaseEntity* pTargetEnt, const Vector& vecDir, float flInterval)
 {
 	if (m_IdealActivity != m_movementActivity)
@@ -1116,7 +1121,10 @@ void CController::MoveExecute(CBaseEntity* pTargetEnt, const Vector& vecDir, flo
 
 	m_velocity = m_velocity * 0.8 + m_flGroundSpeed * vecDir * 0.2;
 
+	const Vector vecStart = pev->origin;
 	UTIL_MoveToOrigin(ENT(pev), pev->origin + m_velocity, m_velocity.Length() * flInterval, MOVE_STRAFE);
+	if (flInterval != 0)
+		pev->fuser4 = (pev->origin - vecStart).Length() / flInterval;
 }
 
 

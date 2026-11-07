@@ -86,9 +86,33 @@ public:
 	float m_flPlayerDamage; // how much pain has the player inflicted on me?
 
 	CUSTOM_SCHEDULES;
+
+	// Rocket Crowbar 1.9
+	bool BotTargetRealseable(CBaseEntity* pBot) override { return true; } // orig 0xee290
+	int GetBotTargetWeight(CBaseEntity* pBot) override;
+	int GetRCCaps() override { return 0x7fe3fff; }		 // orig 0xee2f0
+	int GetGuassDistOut() override { return 56; }		 // orig 0xee300
+	int GetGuassHull() override { return human_hull; } // orig 0xee310
 };
 
 LINK_ENTITY_TO_CLASS(monster_barney, CBarney);
+
+// The RC bot's own object (rcbot.dll's CBot, a player) has a bool at +0x69c that the bot target
+// weights read; only meaningful for that i386 bot (reference/DEVIATIONS.md, "Bot interface").
+// VERIFY name: what the flag means isn't visible from the game library.
+static bool BotHuntsMonsters(CBaseEntity* pBot)
+{
+	return *(reinterpret_cast<const byte*>(pBot) + 0x69c) != 0;
+}
+
+// orig 0xee2a0
+int CBarney::GetBotTargetWeight(CBaseEntity* pBot)
+{
+	if (BotHuntsMonsters(pBot))
+		return 8;
+
+	return IsEntEnemy(pBot) ? 6 : -1;
+}
 
 TYPEDESCRIPTION CBarney::m_SaveData[] =
 	{
@@ -476,6 +500,8 @@ void CBarney::TalkInit()
 	m_voicePitch = 100;
 }
 
+// orig 0xed7b0: Rocket Crowbar ignores an invisible (EF_NODRAW) attacker, and with sv_loyalnpcs 1 a
+// barney only ever gets suspicious
 bool CBarney::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType)
 {
 	// make sure friends talk about it if player hurts talkmonsters...
@@ -483,7 +509,7 @@ bool CBarney::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, float 
 	if (!IsAlive() || pev->deadflag == DEAD_DYING)
 		return ret;
 
-	if (m_MonsterState != MONSTERSTATE_PRONE && (pevAttacker->flags & FL_CLIENT) != 0)
+	if (m_MonsterState != MONSTERSTATE_PRONE && (pevAttacker->flags & FL_CLIENT) != 0 && (pevAttacker->effects & EF_NODRAW) == 0)
 	{
 		m_flPlayerDamage += flDamage;
 
@@ -492,7 +518,7 @@ bool CBarney::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, float 
 		if (m_hEnemy == NULL)
 		{
 			// If the player was facing directly at me, or I'm already suspicious, get mad
-			if ((m_afMemory & bits_MEMORY_SUSPICIOUS) != 0 || IsFacing(pevAttacker, pev->origin))
+			if (((m_afMemory & bits_MEMORY_SUSPICIOUS) != 0 || IsFacing(pevAttacker, pev->origin)) && CVAR_GET_FLOAT("sv_loyalnpcs") != 1)
 			{
 				// Alright, now I'm pissed!
 				PlaySentence("BA_MAD", 4, VOL_NORM, ATTN_NORM);

@@ -41,7 +41,6 @@ public:
 
 	// Don't treat as a live target
 	bool IsAlive() override { return false; }
-	bool IsAllowedToSpeak() { return true; }
 
 	bool Save(CSave& save) override;
 	bool Restore(CRestore& restore) override;
@@ -223,13 +222,19 @@ public:
 	bool Restore(CRestore& restore) override;
 	static TYPEDESCRIPTION m_SaveData[];
 
-	inline bool ShouldAnimate() { return m_animate && m_maxFrame > 1.0; }
+	bool ShouldAnimate();
 	bool m_animate;
 	float m_lastTime;
 	float m_maxFrame;
 };
 
 LINK_ENTITY_TO_CLASS(cycler_sprite, CCyclerSprite);
+
+// orig 0x1a33a0
+bool CCyclerSprite::ShouldAnimate()
+{
+	return m_animate && m_maxFrame > 1.0;
+}
 
 TYPEDESCRIPTION CCyclerSprite::m_SaveData[] =
 	{
@@ -392,7 +397,7 @@ class CWreckage : public CBaseMonster
 	void Precache() override;
 	void Think() override;
 
-	float m_flStartTime;
+	int m_flStartTime; // the original keeps this time in an int (halflife-updated made it a float)
 };
 TYPEDESCRIPTION CWreckage::m_SaveData[] =
 	{

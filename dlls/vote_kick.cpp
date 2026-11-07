@@ -357,9 +357,3 @@ void VK_RegisterVote(CBaseEntity* pVoter, bool bFor)
 	else
 		CLIENT_PRINTF(pVoter->edict(), print_console, "Vote NOT to kick registered\n");
 }
-
-// TEMP STUB (prefs-votes): real one belongs in client.cpp (orig 0xfe080).
-bool IsClientListenServer(edict_t* pEntity)
-{
-	return false;
-}

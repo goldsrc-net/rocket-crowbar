@@ -923,6 +923,13 @@ void AddToPrecachedList(const char* pszClassname)
 	g_iCntPrecached = std::min(g_iCntPrecached + 1, 256);
 }
 
+// w2-client-rules-world: the original's CWorld::Precache sets g_iCntPrecached = 0 directly (an
+// exported global there); ours is file static, so the world calls this.
+void ResetPrecachedList()
+{
+	g_iCntPrecached = 0;
+}
+
 // Compiled out in the original (an empty body, @ 0xfc390).
 void DispatchRemoveEnt(edict_t* pEdict)
 {

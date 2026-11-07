@@ -1520,7 +1520,8 @@ void CTestHull::Spawn(entvars_t* pevMasterNode)
 //=========================================================
 void CTestHull::DropDelay()
 {
-	//	UTIL_CenterPrintAll( "Node Graph out of Date. Rebuilding..." );
+	// Rocket Crowbar 1.9 (orig 0x1dae90): tells everyone
+	UTIL_ClientPrintAll(HUD_PRINTCENTER, "Node Graph out of Date. Rebuilding...");
 
 	UTIL_SetOrigin(pev, WorldGraph.m_pNodes[0].m_vecOrigin);
 

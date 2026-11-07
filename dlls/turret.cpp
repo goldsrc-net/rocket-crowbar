@@ -132,6 +132,9 @@ public:
 
 	float m_flPingTime;	  // Time until the next ping, used when searching
 	float m_flSpinUpTime; // Amount of time until the barrel should spin down when searching
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x2882; } // orig 0x231490
 };
 
 

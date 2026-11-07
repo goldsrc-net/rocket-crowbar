@@ -51,6 +51,11 @@ public:
 	EHANDLE m_hPlayer;
 	EHANDLE m_hTalkTarget;
 	float m_flTalkTime;
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x6dfddfd; } // orig 0x1a07d0
+	int GetGuassDistOut() override { return 56; } // orig 0x1a07e0
+	int GetGuassHull() override { return human_hull; } // orig 0x1a07f0
 };
 LINK_ENTITY_TO_CLASS(monster_gman, CGMan);
 

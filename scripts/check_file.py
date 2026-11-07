@@ -9,7 +9,7 @@ factory (LINK_ENTITY_TO_CLASS) in the original's .dynsym, the same export in our
   scripts/check_file.py drivegarg.cpp --missing  # only what's missing
 
 Compiler-generated functions (typeinfo, static init, ctors/dtors) are skipped. A method with no
-symbol but an inline body in our headers prints "inl" (by name only: confirm it's the right class).
+symbol but an inline body in our headers (or in the file itself) prints "inl" (by name only: confirm it's the right class).
 Exit status 1 when anything is missing.
 """
 import argparse, csv, glob, os, re, subprocess, sys
@@ -39,6 +39,10 @@ def main():
     headers = ""
     for h in glob.glob(os.path.join(ROOT, "dlls", "*.h")) + glob.glob(os.path.join(ROOT, "game_shared", "*.h")):
         headers += open(h, errors="replace").read()
+    # and classes declared in the file itself (the SDK declares many in their .cpp)
+    for src in (os.path.join(ROOT, "dlls", a.file), os.path.join(ROOT, "pm_shared", a.file)):
+        if os.path.exists(src):
+            headers += open(src, errors="replace").read()
 
     def inline(meth):
         return re.search(r"\b" + re.escape(meth) + r"\s*\([^;{]*\)\s*(const\s*)?(override\s*)?\{", headers) is not None

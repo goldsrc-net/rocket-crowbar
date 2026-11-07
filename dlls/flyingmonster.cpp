@@ -84,17 +84,14 @@ void CFlyingMonster::Stop()
 }
 
 
+// orig 0x1898b0: rolls by gpGlobals->frametime, as the SDK did (halflife-updated measures
+// the time since the last roll, m_flLastZYawTime)
 float CFlyingMonster::ChangeYaw(int yawSpeed)
 {
 	if (pev->movetype == MOVETYPE_FLY)
 	{
 		float diff = FlYawDiff();
 		float target = 0;
-
-		if (m_flLastZYawTime == 0.0f)
-		{
-			m_flLastZYawTime = gpGlobals->time - gpGlobals->frametime;
-		}
 
 		if (m_IdealActivity != GetStoppedActivity())
 		{
@@ -104,15 +101,7 @@ float CFlyingMonster::ChangeYaw(int yawSpeed)
 				target = -90;
 		}
 
-		float delta = gpGlobals->time - m_flLastZYawTime;
-		m_flLastZYawTime = gpGlobals->time;
-
-		// Clamp delta like the engine does with frametime
-		if (delta > 0.25f)
-			delta = 0.25f;
-
-		float speed = 220.0f * delta;
-		pev->angles.z = UTIL_Approach(target, pev->angles.z, 220.0 * speed);
+		pev->angles.z = UTIL_Approach(target, pev->angles.z, 220.0 * gpGlobals->frametime);
 	}
 	return CBaseMonster::ChangeYaw(yawSpeed);
 }
@@ -169,6 +158,8 @@ bool CFlyingMonster::ShouldAdvanceRoute(float flWaypointDist)
 }
 
 
+// orig 0x189b40: Rocket Crowbar stores the distance moved per second in pev->fuser4, as
+// CBaseMonster::MoveExecute does
 void CFlyingMonster::MoveExecute(CBaseEntity* pTargetEnt, const Vector& vecDir, float flInterval)
 {
 	if (pev->movetype == MOVETYPE_FLY)
@@ -196,7 +187,10 @@ void CFlyingMonster::MoveExecute(CBaseEntity* pTargetEnt, const Vector& vecDir, 
 		{
 			m_vecTravel = (vecMove - pev->origin);
 			m_vecTravel = m_vecTravel.Normalize();
+			const Vector vecStart = pev->origin;
 			UTIL_MoveToOrigin(ENT(pev), vecMove, (m_flGroundSpeed * flInterval), MOVE_STRAFE);
+			if (flInterval != 0)
+				pev->fuser4 = (pev->origin - vecStart).Length() / flInterval;
 		}
 		else
 		{

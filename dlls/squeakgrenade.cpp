@@ -41,13 +41,10 @@ enum w_squeak_e
 	WSQUEAK_RUN,
 };
 
-// The original passes NULL for the PVS and PAS; RC's SetupVisibility (client.cpp) skips the
-// stores when they are NULL, the SDK's writes through them. Same effect on the engine.
-// VERIFY against the client.cpp reconstruction.
+// The original passes NULL for the PVS and PAS, which RC's SetupVisibility (client.cpp) accepts.
 static void SnarkSetupVisibility(edict_t* pViewEntity, edict_t* pClient)
 {
-	unsigned char *pvs, *pas;
-	SetupVisibility(pViewEntity, pClient, &pvs, &pas);
+	SetupVisibility(pViewEntity, pClient, NULL, NULL);
 }
 
 //=========================================================

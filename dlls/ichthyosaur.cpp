@@ -77,7 +77,6 @@ public:
 
 	float ChangeYaw(int yawSpeed) override;
 	Activity GetStoppedActivity() override;
-	void SetActivity(Activity NewActivity) override;
 
 	void Move(float flInterval) override;
 	void MoveExecute(CBaseEntity* pTargetEnt, const Vector& vecDir, float flInterval) override;
@@ -106,8 +105,8 @@ public:
 
 	float m_flNextAlert;
 
-	float m_flLastPitchTime; // Last frame time pitch was changed
-	float m_flLastZYawTime;	 // Last frame time Z was changed when yaw was changed
+	float m_flDeathTime; // orig +0x2c0, Rocket Crowbar 1.9: when TASK_DIE finished. Not saved. VERIFY name
+
 
 	static const char* pIdleSounds[];
 	static const char* pAlertSounds[];
@@ -122,6 +121,16 @@ public:
 	void BiteSound();
 	void DeathSound() override;
 	void PainSound() override;
+
+	// Rocket Crowbar 1.9
+	// RC's own virtuals, in the original's slot order (150-156)
+	virtual bool IsGravGreandeMoveable() { return false; }	// orig 0x1b9860
+	virtual bool IsShotgunRiftMoveable() { return false; }	// orig 0x1b9850
+	virtual bool IsTractorBeamMoveable() { return true; }	// orig 0x1b9840
+	virtual bool IsImpailable() { return false; }			// orig 0x1b9830
+	virtual bool IsCrowbarReloadMoveable() { return false; } // orig 0x1b9820
+	virtual bool IsTeatherToable() { return true; }		// orig 0x1b9810
+	virtual bool IsFreezeable() { return true; }			// orig 0x1b9800
 };
 
 LINK_ENTITY_TO_CLASS(monster_ichthyosaur, CIchthyosaur);
@@ -291,6 +300,7 @@ Task_t tlTwitchDie[] =
 		{TASK_STOP_MOVING, 0},
 		{TASK_SOUND_DIE, (float)0},
 		{TASK_DIE, (float)0},
+		{TASK_ICHTHYOSAUR_FLOAT, (float)0}, // the original floats here (halflife-updated split it into slFloat)
 };
 
 Schedule_t slTwitchDie[] =
@@ -302,26 +312,11 @@ Schedule_t slTwitchDie[] =
 			"Die"},
 };
 
-Task_t tlFloat[] =
-	{
-		{TASK_ICHTHYOSAUR_FLOAT, (float)0},
-};
-
-Schedule_t slFloat[] =
-	{
-		{tlFloat,
-			ARRAYSIZE(tlFloat),
-			0,
-			0,
-			"Float"},
-};
-
 DEFINE_CUSTOM_SCHEDULES(CIchthyosaur){
 	slSwimAround,
 	slSwimAgitated,
 	slCircleEnemy,
 	slTwitchDie,
-	slFloat,
 };
 IMPLEMENT_CUSTOM_SCHEDULES(CIchthyosaur, CFlyingMonster);
 
@@ -579,12 +574,6 @@ Schedule_t* CIchthyosaur::GetScheduleOfType(int Type)
 	case SCHED_FAIL:
 		return slSwimAgitated;
 	case SCHED_DIE:
-		if (pev->deadflag == DEAD_DEAD)
-		{
-			//Already dead, immediately switch to float.
-			return slFloat;
-		}
-
 		return slTwitchDie;
 	case SCHED_CHASE_ENEMY:
 		AttackSound();
@@ -622,17 +611,9 @@ void CIchthyosaur::StartTask(Task_t* pTask)
 		break;
 
 	case TASK_ICHTHYOSAUR_FLOAT:
-	{
-		const int sequenceIndex = LookupSequence("bellyup");
-
-		//Don't restart the animation if we're restoring.
-		if (pev->sequence != sequenceIndex)
-		{
-			pev->skin = EYE_BASE;
-			SetSequenceByName("bellyup");
-		}
+		pev->skin = EYE_BASE;
+		SetSequenceByName("bellyup");
 		break;
-	}
 
 	default:
 		CFlyingMonster::StartTask(pTask);
@@ -733,6 +714,7 @@ void CIchthyosaur::RunTask(Task_t* pTask)
 		if (m_fSequenceFinished)
 		{
 			pev->deadflag = DEAD_DEAD;
+			m_flDeathTime = gpGlobals->time; // Rocket Crowbar 1.9 (orig 0x1b7c50)
 
 			TaskComplete();
 		}
@@ -750,6 +732,10 @@ void CIchthyosaur::RunTask(Task_t* pTask)
 			pev->velocity.z -= 8;
 		}
 		// ALERT( at_console, "%f\n", pev->velocity.z );
+
+		// Rocket Crowbar 1.9: the floating corpse fades out 10 seconds after it died
+		if (pev->rendermode == kRenderNormal && m_flDeathTime < gpGlobals->time - 10)
+			FadeMonster();
 		break;
 
 	default:
@@ -814,11 +800,6 @@ float CIchthyosaur::ChangePitch(int pitchSpeed)
 		float diff = FlPitchDiff();
 		float target = 0;
 
-		if (m_flLastPitchTime == 0.0f)
-		{
-			m_flLastPitchTime = gpGlobals->time - gpGlobals->frametime;
-		}
-
 		if (m_IdealActivity != GetStoppedActivity())
 		{
 			if (diff < -20)
@@ -827,15 +808,8 @@ float CIchthyosaur::ChangePitch(int pitchSpeed)
 				target = -45;
 		}
 
-		float delta = gpGlobals->time - m_flLastPitchTime;
-		m_flLastPitchTime = gpGlobals->time;
-
-		// Clamp delta like the engine does with frametime
-		if (delta > 0.25f)
-			delta = 0.25f;
-
-		float speed = 220.0f * delta;
-		pev->angles.x = UTIL_Approach(target, pev->angles.x, speed);
+		// the original's fixed step (halflife-updated scales by the time since the last change)
+		pev->angles.x = UTIL_Approach(target, pev->angles.x, 220.0 * 0.1);
 	}
 	return 0;
 }
@@ -847,11 +821,6 @@ float CIchthyosaur::ChangeYaw(int yawSpeed)
 		float diff = FlYawDiff();
 		float target = 0;
 
-		if (m_flLastZYawTime == 0.0f)
-		{
-			m_flLastZYawTime = gpGlobals->time - gpGlobals->frametime;
-		}
-
 		if (m_IdealActivity != GetStoppedActivity())
 		{
 			if (diff < -20)
@@ -860,15 +829,8 @@ float CIchthyosaur::ChangeYaw(int yawSpeed)
 				target = -20;
 		}
 
-		float delta = gpGlobals->time - m_flLastZYawTime;
-		m_flLastZYawTime = gpGlobals->time;
-
-		// Clamp delta like the engine does with frametime
-		if (delta > 0.25f)
-			delta = 0.25f;
-
-		float speed = 220.f * delta;
-		pev->angles.z = UTIL_Approach(target, pev->angles.z, speed);
+		// the original's fixed step (halflife-updated scales by the time since the last change)
+		pev->angles.z = UTIL_Approach(target, pev->angles.z, 220.0 * 0.1);
 	}
 	return CFlyingMonster::ChangeYaw(yawSpeed);
 }
@@ -881,20 +843,6 @@ Activity CIchthyosaur::GetStoppedActivity()
 	return ACT_WALK;
 }
 
-void CIchthyosaur::SetActivity(Activity NewActivity)
-{
-	const float frame = pev->frame;
-
-	CFlyingMonster::SetActivity(NewActivity);
-
-	//Restore belly up state.
-	if (pev->deadflag == DEAD_DEAD)
-	{
-		SetSequenceByName("bellyup");
-		pev->frame = frame;
-	}
-}
-
 void CIchthyosaur::MoveExecute(CBaseEntity* pTargetEnt, const Vector& vecDir, float flInterval)
 {
 	m_SaveVelocity = vecDir * m_flightSpeed;
@@ -905,7 +853,8 @@ void CIchthyosaur::MonsterThink()
 {
 	CFlyingMonster::MonsterThink();
 
-	if (pev->deadflag == DEAD_NO)
+	// Rocket Crowbar 1.9 (orig 0x1b87a0): a frozen ichthyosaur doesn't swim
+	if (!FBitSet(pev->flags, FL_FROZEN) && pev->deadflag == DEAD_NO)
 	{
 		if (m_MonsterState != MONSTERSTATE_SCRIPT)
 		{

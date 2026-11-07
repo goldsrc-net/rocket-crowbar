@@ -1925,6 +1925,16 @@ private:
 
 LINK_ENTITY_TO_CLASS(env_fade, CFade);
 
+// Rocket Crowbar 1.9: env_fade that only ever fades its activator (CFade's "only one" use, with
+// no spawnflag needed).
+class CFadeOne : public CFade
+{
+public:
+	void Use(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE useType, float value) override;
+};
+
+LINK_ENTITY_TO_CLASS(env_fadeone, CFadeOne);
+
 // pev->dmg_take is duration
 // pev->dmg_save is hold duration
 #define SF_FADE_IN 0x0001		// Fade in, not out
@@ -2264,6 +2274,53 @@ void CItemSoda::CanTouch(CBaseEntity* pOther)
 	SetTouch(NULL);
 	SetThink(&CItemSoda::SUB_Remove);
 	pev->nextthink = gpGlobals->time;
+}
+
+// Rocket Crowbar 1.9. orig 0x17a660: a beam whose entity is removed goes with it (its start
+// entity for BEAM_ENTS, its end entity for BEAM_ENTS and BEAM_ENTPOINT).
+void CBeam::EntIsBeingRemoved(edict_t* pEdict)
+{
+	if (GetType() == BEAM_ENTS && INDEXENT(pev->sequence & 0xFFF) == pEdict)
+		UTIL_Remove(this);
+	if ((GetType() == BEAM_ENTPOINT || GetType() == BEAM_ENTS) && INDEXENT(pev->skin & 0xFFF) == pEdict)
+		UTIL_Remove(this);
+}
+
+// Rocket Crowbar 1.9. orig 0x181400
+void CBeam::StartFade(float flRate, int bTwoPhase, float flRate2, float flInterval)
+{
+	pev->armorvalue = flRate;
+	pev->teleport_time = gpGlobals->time;
+	pev->armortype = flInterval;
+	if (0 == bTwoPhase)
+	{
+		pev->team = 0;
+	}
+	else
+	{
+		pev->team = 1;
+		pev->max_health = flRate2;
+	}
+	SetThink(&CBeam::FadeThink);
+	pev->nextthink = gpGlobals->time + 0.01;
+}
+
+// Rocket Crowbar 1.9. orig 0x180120
+void CFadeOne::Use(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE useType, float value)
+{
+	int fadeFlags = 0;
+
+	if ((pev->spawnflags & SF_FADE_IN) == 0)
+		fadeFlags |= FFADE_OUT;
+
+	if ((pev->spawnflags & SF_FADE_MODULATE) != 0)
+		fadeFlags |= FFADE_MODULATE;
+
+	// VERIFY: guard, the original crashes here (IsNetClient through a NULL activator)
+	if (pActivator && pActivator->IsNetClient())
+		UTIL_ScreenFade(pActivator, pev->rendercolor, Duration(), HoldTime(), (int)pev->renderamt, fadeFlags);
+
+	SUB_UseTargets(this, USE_TOGGLE, 0);
 }
 
 // Rocket Crowbar 1.9. Original @ 0x17a540 (effects.cpp): a two-phase fade. Each think moves

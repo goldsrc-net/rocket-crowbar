@@ -723,10 +723,11 @@ CBaseButton::BUTTON_CODE CBaseButton::ButtonResponseToTouch()
 //
 // Touching a button simply "activates" it.
 //
+// orig 0xf85e0. Rocket Crowbar: a driven monster presses buttons too
 void CBaseButton::ButtonTouch(CBaseEntity* pOther)
 {
 	// Ignore touches by anything but players
-	if (!FClassnameIs(pOther->pev, "player"))
+	if (!FClassnameIs(pOther->pev, "player") && !pOther->IsDriveent())
 		return;
 
 	m_hActivator = pOther;

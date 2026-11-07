@@ -24,12 +24,20 @@
 #include "teamplay_gamerules.h"
 #include "game.h"
 #include "UserMessages.h"
+#include "flag.h"
 
 //TODO: these should be members of CHalfLifeTeamplay
 static char team_names[MAX_TEAMS][MAX_TEAMNAME_LENGTH];
 static int team_scores[MAX_TEAMS];
 static int num_teams = 0;
 
+// Rocket Crowbar 1.9 CTF state
+int m_blCTF;
+float m_flInitCTF;
+int num_flags = 0;
+
+// orig 0x220760. Rocket Crowbar turns CTF on here (mp_ctf 1, a team list of 2-6 teams); Think
+// places the flags half a second later.
 CHalfLifeTeamplay::CHalfLifeTeamplay()
 {
 	m_DisableDeathMessages = false;
@@ -64,11 +72,19 @@ CHalfLifeTeamplay::CHalfLifeTeamplay()
 		m_teamLimit = false;
 
 	RecountTeams();
+
+	if (CVAR_GET_FLOAT("mp_ctf") == 1 && m_teamLimit && num_teams < 7)
+	{
+		m_blCTF = 1;
+		m_flInitCTF = gpGlobals->time + 0.5;
+	}
 }
 
 #include "voice_gamemgr.h"
 extern CVoiceGameMgr g_VoiceGameMgr;
 
+// orig 0x220910. Rocket Crowbar places the CTF flags once m_flInitCTF passes. halflife-updated's
+// voice manager update and mp_fragsleft/mp_timeleft cvars are kept (the original has neither).
 void CHalfLifeTeamplay::Think()
 {
 	///// Check game rules /////
@@ -120,6 +136,19 @@ void CHalfLifeTeamplay::Think()
 		frags_remaining = bestfrags;
 	}
 
+	// place the flags, at the spawns SetFlagSpawns picks; it can turn CTF back off
+	if (m_flInitCTF < gpGlobals->time && m_flInitCTF != 0 && m_blCTF == 1)
+	{
+		RecountTeams();
+		SetFlagSpawns(num_flags);
+		if (0 != m_blCTF)
+		{
+			for (int i = 1; i <= num_flags; i++)
+				CBaseFlag::CreateFlag(m_vecFlagOrigin[i - 1], m_vecFlagAngles[i - 1], i);
+			m_flInitCTF = 0;
+		}
+	}
+
 	// Updates when frags change
 	if (frags_remaining != last_frags)
 	{
@@ -141,8 +170,10 @@ void CHalfLifeTeamplay::Think()
 // the user has typed a command which is unrecognized by everything else;
 // this check to see if the gamerules knows anything about the command
 //=========================================================
+// orig 0x220ac0. Rocket Crowbar adds "flagstatus" in CTF.
 bool CHalfLifeTeamplay::ClientCommand(CBasePlayer* pPlayer, const char* pcmd)
 {
+	// halflife-updated: the voice manager's commands (vban, VModEnable)
 	if (g_VoiceGameMgr.ClientCommand(pPlayer, pcmd))
 		return true;
 
@@ -157,10 +188,16 @@ bool CHalfLifeTeamplay::ClientCommand(CBasePlayer* pPlayer, const char* pcmd)
 
 		return true;
 	}
+	else if (FStrEq(pcmd, "flagstatus") && 0 != m_blCTF)
+	{
+		ReportFlagStatus(pPlayer);
+		return true;
+	}
 
 	return false;
 }
 
+// orig 0x220c40
 void CHalfLifeTeamplay::UpdateGameMode(CBasePlayer* pPlayer)
 {
 	MESSAGE_BEGIN(MSG_ONE, gmsgGameMode, NULL, pPlayer->edict());
@@ -169,6 +206,7 @@ void CHalfLifeTeamplay::UpdateGameMode(CBasePlayer* pPlayer)
 }
 
 
+// orig 0x220ca0
 const char* CHalfLifeTeamplay::SetDefaultPlayerTeam(CBasePlayer* pPlayer)
 {
 	// copy out the team name from the model
@@ -200,21 +238,14 @@ const char* CHalfLifeTeamplay::SetDefaultPlayerTeam(CBasePlayer* pPlayer)
 //=========================================================
 // InitHUD
 //=========================================================
+// orig 0x220d90. The original sends no TeamNames message (halflife-updated does); Rocket
+// Crowbar names the team's flag colour in CTF and sends the CTF scores.
 void CHalfLifeTeamplay::InitHUD(CBasePlayer* pPlayer)
 {
 	int i;
 
 	SetDefaultPlayerTeam(pPlayer);
 	CHalfLifeMultiplay::InitHUD(pPlayer);
-
-	// Send down the team names
-	MESSAGE_BEGIN(MSG_ONE, gmsgTeamNames, NULL, pPlayer->edict());
-	WRITE_BYTE(num_teams);
-	for (i = 0; i < num_teams; i++)
-	{
-		WRITE_STRING(team_names[i]);
-	}
-	MESSAGE_END();
 
 	RecountTeams();
 
@@ -223,11 +254,17 @@ void CHalfLifeTeamplay::InitHUD(CBasePlayer* pPlayer)
 	char text[1024];
 	if (0 == strcmp(mdls, pPlayer->m_szTeamName))
 	{
-		sprintf(text, "* you are on team \'%s\'\n", pPlayer->m_szTeamName);
+		if (0 != m_blCTF)
+			sprintf(text, "* you are on team \'%s\' (%s)\n", pPlayer->m_szTeamName, GetFlagTeamColor(GetTeamIndex(pPlayer->m_szTeamName) + 1));
+		else
+			sprintf(text, "* you are on team \'%s\'\n", pPlayer->m_szTeamName);
 	}
 	else
 	{
-		sprintf(text, "* assigned to team %s\n", pPlayer->m_szTeamName);
+		if (0 != m_blCTF)
+			sprintf(text, "* assigned to team %s (%s)\n", pPlayer->m_szTeamName, GetFlagTeamColor(GetTeamIndex(pPlayer->m_szTeamName) + 1));
+		else
+			sprintf(text, "* assigned to team %s\n", pPlayer->m_szTeamName);
 	}
 
 	ChangePlayerTeam(pPlayer, pPlayer->m_szTeamName, false, false);
@@ -247,9 +284,13 @@ void CHalfLifeTeamplay::InitHUD(CBasePlayer* pPlayer)
 			MESSAGE_END();
 		}
 	}
+
+	if (0 != m_blCTF)
+		UpdateTeamScores();
 }
 
 
+// orig 0x221020. The original sends no ScoreInfo here (halflife-updated does).
 void CHalfLifeTeamplay::ChangePlayerTeam(CBasePlayer* pPlayer, const char* pTeamName, bool bKill, bool bGib)
 {
 	int damageFlags = DMG_GENERIC;
@@ -270,7 +311,7 @@ void CHalfLifeTeamplay::ChangePlayerTeam(CBasePlayer* pPlayer, const char* pTeam
 		m_DisableDeathMessages = true;
 		m_DisableDeathPenalty = true;
 
-		pPlayer->TakeDamage(CWorld::World->pev, CWorld::World->pev, 900, damageFlags);
+		pPlayer->TakeDamage(VARS(INDEXENT(0)), VARS(INDEXENT(0)), 900, damageFlags);
 
 		m_DisableDeathMessages = false;
 		m_DisableDeathPenalty = false;
@@ -287,20 +328,13 @@ void CHalfLifeTeamplay::ChangePlayerTeam(CBasePlayer* pPlayer, const char* pTeam
 	WRITE_BYTE(clientIndex);
 	WRITE_STRING(pPlayer->m_szTeamName);
 	MESSAGE_END();
-
-	MESSAGE_BEGIN(MSG_ALL, gmsgScoreInfo);
-	WRITE_BYTE(clientIndex);
-	WRITE_SHORT(pPlayer->pev->frags);
-	WRITE_SHORT(pPlayer->m_iDeaths);
-	WRITE_SHORT(0);
-	WRITE_SHORT(g_pGameRules->GetTeamIndex(pPlayer->m_szTeamName) + 1);
-	MESSAGE_END();
 }
 
 
 //=========================================================
 // ClientUserInfoChanged
 //=========================================================
+// orig 0x2211b0. Rocket Crowbar names the flag colour in CTF and logs in its own format.
 void CHalfLifeTeamplay::ClientUserInfoChanged(CBasePlayer* pPlayer, char* infobuffer)
 {
 	char text[1024];
@@ -334,24 +368,26 @@ void CHalfLifeTeamplay::ClientUserInfoChanged(CBasePlayer* pPlayer, char* infobu
 		return;
 	}
 	// notify everyone of the team change
-	sprintf(text, "* %s has changed to team \'%s\'\n", STRING(pPlayer->pev->netname), mdls);
+	if (0 != m_blCTF)
+		sprintf(text, "* %s has changed to team \'%s\' (%s)\n", STRING(pPlayer->pev->netname), mdls, GetFlagTeamColor(GetTeamIndex(mdls) + 1));
+	else
+		sprintf(text, "* %s has changed to team \'%s\'\n", STRING(pPlayer->pev->netname), mdls);
 	UTIL_SayTextAll(text, pPlayer);
 
-	UTIL_LogPrintf("\"%s<%i><%s><%s>\" joined team \"%s\"\n",
-		STRING(pPlayer->pev->netname),
-		GETPLAYERUSERID(pPlayer->edict()),
-		GETPLAYERAUTHID(pPlayer->edict()),
-		pPlayer->m_szTeamName,
-		mdls);
+	if (0 != m_blCTF)
+		UTIL_LogPrintf("\"%s<%i>\" changed to team %s (%s)\n", STRING(pPlayer->pev->netname), GETPLAYERUSERID(pPlayer->edict()), mdls, GetFlagTeamColor(GetTeamIndex(mdls) + 1));
+	else
+		UTIL_LogPrintf("\"%s<%i>\" changed to team %s\n", STRING(pPlayer->pev->netname), GETPLAYERUSERID(pPlayer->edict()), mdls);
 
 	ChangePlayerTeam(pPlayer, mdls, true, true);
 	// recound stuff
-	RecountTeams(true);
+	RecountTeams();
 }
 
 //=========================================================
 // Deathnotice.
 //=========================================================
+// orig 0x2215b0
 void CHalfLifeTeamplay::DeathNotice(CBasePlayer* pVictim, entvars_t* pKiller, entvars_t* pevInflictor)
 {
 	if (m_DisableDeathMessages)
@@ -380,6 +416,7 @@ void CHalfLifeTeamplay::DeathNotice(CBasePlayer* pVictim, entvars_t* pKiller, en
 
 //=========================================================
 //=========================================================
+// orig 0x2216f0
 void CHalfLifeTeamplay::PlayerKilled(CBasePlayer* pVictim, entvars_t* pKiller, entvars_t* pInflictor)
 {
 	if (!m_DisableDeathPenalty)
@@ -393,11 +430,13 @@ void CHalfLifeTeamplay::PlayerKilled(CBasePlayer* pVictim, entvars_t* pKiller, e
 //=========================================================
 // IsTeamplay
 //=========================================================
+// orig 0x221730
 bool CHalfLifeTeamplay::IsTeamplay()
 {
 	return true;
 }
 
+// orig 0x221740
 bool CHalfLifeTeamplay::FPlayerCanTakeDamage(CBasePlayer* pPlayer, CBaseEntity* pAttacker)
 {
 	if (pAttacker && PlayerRelationship(pPlayer, pAttacker) == GR_TEAMMATE)
@@ -415,6 +454,7 @@ bool CHalfLifeTeamplay::FPlayerCanTakeDamage(CBasePlayer* pPlayer, CBaseEntity* 
 
 //=========================================================
 //=========================================================
+// orig 0x2217d0
 int CHalfLifeTeamplay::PlayerRelationship(CBaseEntity* pPlayer, CBaseEntity* pTarget)
 {
 	// half life multiplay has a simple concept of Player Relationships.
@@ -432,6 +472,7 @@ int CHalfLifeTeamplay::PlayerRelationship(CBaseEntity* pPlayer, CBaseEntity* pTa
 
 //=========================================================
 //=========================================================
+// orig 0x221870
 bool CHalfLifeTeamplay::ShouldAutoAim(CBasePlayer* pPlayer, edict_t* target)
 {
 	// always autoaim, unless target is a teammate
@@ -447,6 +488,7 @@ bool CHalfLifeTeamplay::ShouldAutoAim(CBasePlayer* pPlayer, edict_t* target)
 
 //=========================================================
 //=========================================================
+// orig 0x2218f0
 int CHalfLifeTeamplay::IPointsForKill(CBasePlayer* pAttacker, CBasePlayer* pKilled)
 {
 	if (!pKilled)
@@ -463,6 +505,7 @@ int CHalfLifeTeamplay::IPointsForKill(CBasePlayer* pAttacker, CBasePlayer* pKill
 
 //=========================================================
 //=========================================================
+// orig 0x221950
 const char* CHalfLifeTeamplay::GetTeamID(CBaseEntity* pEntity)
 {
 	if (pEntity == NULL || pEntity->pev == NULL)
@@ -473,6 +516,7 @@ const char* CHalfLifeTeamplay::GetTeamID(CBaseEntity* pEntity)
 }
 
 
+// orig 0x221990
 int CHalfLifeTeamplay::GetTeamIndex(const char* pTeamName)
 {
 	if (pTeamName && *pTeamName != 0)
@@ -489,6 +533,7 @@ int CHalfLifeTeamplay::GetTeamIndex(const char* pTeamName)
 }
 
 
+// orig 0x2219f0
 const char* CHalfLifeTeamplay::GetIndexedTeamName(int teamIndex)
 {
 	if (teamIndex < 0 || teamIndex >= num_teams)
@@ -498,6 +543,7 @@ const char* CHalfLifeTeamplay::GetIndexedTeamName(int teamIndex)
 }
 
 
+// orig 0x221a30
 bool CHalfLifeTeamplay::IsValidTeam(const char* pTeamName)
 {
 	if (!m_teamLimit) // Any team is valid if the teamlist isn't set
@@ -506,6 +552,7 @@ bool CHalfLifeTeamplay::IsValidTeam(const char* pTeamName)
 	return (GetTeamIndex(pTeamName) != -1) ? true : false;
 }
 
+// orig 0x221a80
 const char* CHalfLifeTeamplay::TeamWithFewestPlayers()
 {
 	int i;
@@ -544,13 +591,17 @@ const char* CHalfLifeTeamplay::TeamWithFewestPlayers()
 
 //=========================================================
 //=========================================================
-void CHalfLifeTeamplay::RecountTeams(bool bResendInfo)
+// orig 0x221b70. Rocket Crowbar counts a flag for each listed team, and keeps the team scores
+// in CTF (where they are flag captures, not frags). The original has no bResendInfo (TeamInfo
+// re-send); halflife-updated's ClientUserInfoChanged asked for one.
+void CHalfLifeTeamplay::RecountTeams()
 {
 	char* pName;
 	char teamlist[TEAMPLAY_TEAMLISTLENGTH];
 
 	// loop through all teams, recounting everything
 	num_teams = 0;
+	num_flags = 0;
 
 	// Copy all of the teams from the teamlist
 	// make a copy because strtok is destructive
@@ -563,6 +614,7 @@ void CHalfLifeTeamplay::RecountTeams(bool bResendInfo)
 		{
 			strcpy(team_names[num_teams], pName);
 			num_teams++;
+			num_flags++;
 		}
 		pName = strtok(NULL, ";");
 	}
@@ -570,11 +622,13 @@ void CHalfLifeTeamplay::RecountTeams(bool bResendInfo)
 	if (num_teams < 2)
 	{
 		num_teams = 0;
+		num_flags = 0;
 		m_teamLimit = false;
 	}
 
 	// Sanity check
-	memset(team_scores, 0, sizeof(team_scores));
+	if (0 == m_blCTF)
+		memset(team_scores, 0, sizeof(team_scores));
 
 	// loop through all clients
 	for (int i = 1; i <= gpGlobals->maxClients; i++)
@@ -594,26 +648,182 @@ void CHalfLifeTeamplay::RecountTeams(bool bResendInfo)
 					// add to new team
 					tm = num_teams;
 					num_teams++;
-					team_scores[tm] = 0;
+					if (0 == m_blCTF)
+						team_scores[tm] = 0;
 					strncpy(team_names[tm], pTeamName, MAX_TEAMNAME_LENGTH);
 				}
 			}
 
-			if (tm >= 0)
+			if (0 == m_blCTF && tm >= 0)
 			{
 				team_scores[tm] += plr->pev->frags;
 			}
+		}
+	}
+}
 
-			if (bResendInfo) //Someone's info changed, let's send the team info again.
+// orig 0x221da0
+const char* CHalfLifeTeamplay::GetGameDescription()
+{
+	if (0 == m_blCTF)
+		return "Rocket Crowbar Teamplay";
+	return "Rocket Crowbar CTF";
+}
+
+// Rocket Crowbar 1.9. orig 0x221dd0: where flags 1..iFlags start. Each info_flagspawn whose
+// "button" is 1..iFlags+1 sets flag "button"'s base, if there are at least iFlags of them.
+// Otherwise flag 1 takes a random deathmatch spawn and each next one the unused deathmatch spawn
+// farthest on average from the flags placed so far; each spawn used is removed. Too few
+// deathmatch spawns (iFlags or fewer) turn CTF off.
+// orig 0x221dd0
+void CHalfLifeTeamplay::SetFlagSpawns(int iFlags)
+{
+	CBaseEntity* pSpot = NULL;
+	int iCount = 0;
+	while ((pSpot = UTIL_FindEntityByClassname(pSpot, "info_flagspawn")) != NULL)
+		iCount++;
+
+	if (iCount >= iFlags)
+	{
+		pSpot = NULL;
+		while ((pSpot = UTIL_FindEntityByClassname(pSpot, "info_flagspawn")) != NULL)
+		{
+			// the original takes button iFlags+1 too, one past the flags (see m_vecFlagSpawns)
+			int iButton = pSpot->pev->button;
+			if (iButton > 0 && iButton <= iFlags + 1)
 			{
-				if (plr && IsValidTeam(plr->TeamID()))
-				{
-					MESSAGE_BEGIN(MSG_ALL, gmsgTeamInfo, NULL);
-					WRITE_BYTE(plr->entindex());
-					WRITE_STRING(plr->TeamID());
-					MESSAGE_END();
-				}
+				m_vecFlagOrigin[iButton - 1] = pSpot->pev->origin;
+				m_vecFlagAngles[iButton - 1] = pSpot->pev->angles;
+				pSpot->pev->classname = MAKE_STRING("flag_start");
 			}
 		}
+		return;
+	}
+
+	iCount = 0;
+	pSpot = NULL;
+	while ((pSpot = UTIL_FindEntityByClassname(pSpot, "info_player_deathmatch")) != NULL)
+		iCount++;
+
+	if (iCount < iFlags + 1)
+	{
+		m_blCTF = 0;
+		return;
+	}
+
+	// a random spawn for the first flag (the random number is drawn again each step, as in the original)
+	pSpot = NULL;
+	for (int i = 1; i < RANDOM_LONG(2, iCount - 1); i++)
+		pSpot = UTIL_FindEntityByClassname(pSpot, "info_player_deathmatch");
+
+	if (!pSpot)
+	{
+		m_blCTF = 0;
+		return;
+	}
+
+	m_vecFlagOrigin[0] = pSpot->pev->origin;
+	m_vecFlagAngles[0] = pSpot->pev->angles;
+	pSpot->SUB_Remove();
+
+	for (int iFlag = 1; iFlag <= iFlags - 1; iFlag++)
+	{
+		// VERIFY: guard, the original crashes here: it keeps the best spawn from the last flag when
+		// it finds none this time (a removed entity, or NULL for the second flag) and reads through it.
+		CBaseEntity* pBest = NULL;
+		float flBest = 0;
+		pSpot = NULL;
+		while ((pSpot = UTIL_FindEntityByClassname(pSpot, "info_player_deathmatch")) != NULL)
+		{
+			Vector vecSpot = pSpot->Center();
+
+			bool bUsed = false;
+			for (int j = 0; j <= iFlag - 1; j++)
+			{
+				if (m_vecFlagOrigin[j].x == vecSpot.x && m_vecFlagOrigin[j].y == vecSpot.y && m_vecFlagOrigin[j].z == vecSpot.z)
+					bUsed = true;
+			}
+			if (bUsed)
+				continue;
+
+			float flTotal = 0;
+			for (int j = 0; j <= iFlag - 1; j++)
+				flTotal += (vecSpot - m_vecFlagOrigin[j]).Length();
+
+			float flAverage = flTotal / iFlag;
+			if (flAverage > flBest)
+			{
+				pBest = pSpot;
+				flBest = flAverage;
+			}
+		}
+
+		if (!pBest)
+			return;
+
+		m_vecFlagOrigin[iFlag] = pBest->pev->origin;
+		m_vecFlagAngles[iFlag] = pBest->pev->angles;
+		pBest->pev->classname = MAKE_STRING("flag_start");
+		pBest->SUB_Remove();
+	}
+}
+
+// Rocket Crowbar 1.9. orig 0x222180: team iTeam's name (1-based).
+const char* GetTeamNameForIndex(int iTeam)
+{
+	// VERIFY: guard, the original crashes here: it strncpy's into a "" string literal (read-only)
+	// and returns that; ours uses a static buffer.
+	static char szTeamName[MAX_TEAMNAME_LENGTH + 1];
+	// VERIFY: no range check, as in the original; iTeam outside 1..MAX_TEAMS reads past team_names
+	strncpy(szTeamName, team_names[iTeam - 1], MAX_TEAMNAME_LENGTH);
+	szTeamName[MAX_TEAMNAME_LENGTH] = 0;
+	return szTeamName;
+}
+
+// Rocket Crowbar 1.9. orig 0x2221c0: add to team iTeam's (1-based) CTF score and tell everyone.
+void AddTeamScore(int iTeam, int iScore)
+{
+	if (0 == m_blCTF)
+		return;
+
+	char szName[MAX_TEAMNAME_LENGTH + 1]; // the original sprintf's into 16 bytes
+	snprintf(szName, sizeof(szName), "%s", GetTeamNameForIndex(iTeam));
+	team_scores[iTeam - 1] += iScore;
+
+	MESSAGE_BEGIN(MSG_ALL, gmsgTeamScore);
+	WRITE_STRING(szName);
+	WRITE_SHORT(team_scores[iTeam - 1]);
+	WRITE_SHORT(0);
+	MESSAGE_END();
+}
+
+// Rocket Crowbar 1.9. orig 0x222290: send every team's CTF score.
+void UpdateTeamScores()
+{
+	if (0 == m_blCTF)
+		return;
+
+	for (int i = 0; i < num_teams; i++)
+	{
+		char szName[MAX_TEAMNAME_LENGTH + 1]; // the original sprintf's into 16 bytes
+		snprintf(szName, sizeof(szName), "%s", GetTeamNameForIndex(i + 1));
+
+		MESSAGE_BEGIN(MSG_ALL, gmsgTeamScore);
+		WRITE_STRING(szName);
+		WRITE_SHORT(team_scores[i]);
+		WRITE_SHORT(0);
+		MESSAGE_END();
+	}
+}
+
+// Rocket Crowbar 1.9. orig 0x222370: called as the game rules are made (InstallGameRules): turn
+// CTF on with mp_ctf 1 and 2-6 teams, and clear the scores.
+void SendCTFInitMSG()
+{
+	if (CVAR_GET_FLOAT("mp_ctf") == 1 && num_teams <= 6 && num_teams > 1)
+	{
+		m_blCTF = 1;
+		m_flInitCTF = gpGlobals->time + 0.5;
+		memset(team_scores, 0, sizeof(team_scores));
 	}
 }

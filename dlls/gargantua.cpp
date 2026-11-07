@@ -81,25 +81,12 @@ public:
 	void Think() override;
 	static CStomp* StompCreate(const Vector& origin, const Vector& end, float speed);
 
-	bool Save(CSave& save) override;
-	bool Restore(CRestore& restore) override;
-	static TYPEDESCRIPTION m_SaveData[];
-
-	float m_flLastThinkTime;
-
 private:
 	// UNDONE: re-use this sprite list instead of creating new ones all the time
 	//	CSprite		*m_pSprites[ STOMP_SPRITE_COUNT ];
 };
 
 LINK_ENTITY_TO_CLASS(garg_stomp, CStomp);
-
-TYPEDESCRIPTION CStomp::m_SaveData[] =
-	{
-		DEFINE_FIELD(CStomp, m_flLastThinkTime, FIELD_TIME),
-};
-
-IMPLEMENT_SAVERESTORE(CStomp, CBaseEntity);
 
 CStomp* CStomp::StompCreate(const Vector& origin, const Vector& end, float speed)
 {
@@ -131,17 +118,11 @@ void CStomp::Spawn()
 
 #define STOMP_INTERVAL 0.025
 
+// orig 0x1947b0: steps by gpGlobals->frametime, as the SDK did (halflife-updated measures the time
+// between thinks to make it framerate independent)
 void CStomp::Think()
 {
-	if (m_flLastThinkTime == 0)
-	{
-		m_flLastThinkTime = gpGlobals->time - gpGlobals->frametime;
-	}
-
-	//Use 1/4th the delta time to match the original behavior more closely
-	const float deltaTime = (gpGlobals->time - m_flLastThinkTime) / 4;
-
-	m_flLastThinkTime = gpGlobals->time;
+	const float deltaTime = gpGlobals->frametime;
 
 	TraceResult tr;
 
@@ -256,7 +237,7 @@ public:
 	void FlameUpdate();
 	void FlameControls(float angleX, float angleY);
 	void FlameDestroy();
-	inline bool FlameIsOn() { return m_pFlame[0] != NULL; }
+	bool FlameIsOn();
 
 	void FlameDamage(Vector vecStart, Vector vecEnd, entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int iClassIgnore, int bitsDamageType);
 
@@ -291,9 +272,20 @@ private:
 	float m_streakTime;	   // streak timer (don't send too many)
 	float m_flameX;		   // Flame thrower aim
 	float m_flameY;
+
+	// Rocket Crowbar 1.9
+	float VeryHeavyDamageFract() override { return 0.4; } // orig 0x197c00
+	float ExtreemeDamageFract() override { return 0.05; } // orig 0x197c20
+	int GetRCCaps() override { return 0x2c888; } // orig 0x197c60
 };
 
 LINK_ENTITY_TO_CLASS(monster_gargantua, CGargantua);
+
+// orig 0x197c40
+bool CGargantua::FlameIsOn()
+{
+	return m_pFlame[0] != NULL;
+}
 
 TYPEDESCRIPTION CGargantua::m_SaveData[] =
 	{
@@ -866,6 +858,10 @@ bool CGargantua::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, flo
 		if ((bitsDamageType & DMG_BLAST) != 0)
 			SetConditions(bits_COND_LIGHT_DAMAGE);
 	}
+
+	// Rocket Crowbar 1.9 (orig 0x1964e0): bullets from an assassin_gun do half
+	if ((bitsDamageType & DMG_BULLET) != 0 && FStrEq(STRING(pevInflictor->classname), "assassin_gun"))
+		flDamage *= 0.5;
 
 	return CBaseMonster::TakeDamage(pevInflictor, pevAttacker, flDamage, bitsDamageType);
 }

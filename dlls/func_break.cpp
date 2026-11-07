@@ -591,6 +591,7 @@ bool CBreakable::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, flo
 }
 
 
+// orig 0x18b440
 void CBreakable::Die()
 {
 	// Don't allow explosives to damage this again to prevent spawning multiple copies of items and gibs.

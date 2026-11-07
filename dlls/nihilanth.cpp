@@ -128,6 +128,9 @@ public:
 	float m_flShootTime;
 
 	EHANDLE m_hFriend[3];
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x20880; } // orig 0x1d6350
 };
 
 LINK_ENTITY_TO_CLASS(monster_nihilanth, CNihilanth);
@@ -287,7 +290,7 @@ void CNihilanth::Spawn()
 	UTIL_SetSize(pev, Vector(-32, -32, 0), Vector(32, 32, 64));
 	UTIL_SetOrigin(pev, pev->origin);
 
-	pev->flags |= FL_MONSTER | FL_FLY;
+	pev->flags |= FL_MONSTER;
 	pev->takedamage = DAMAGE_AIM;
 	pev->health = gSkillData.nihilanthHealth;
 	pev->view_ofs = Vector(0, 0, 300);

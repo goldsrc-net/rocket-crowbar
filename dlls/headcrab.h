@@ -49,6 +49,12 @@ public:
 	virtual float GetSoundVolue() { return 1.0; }
 	Schedule_t* GetScheduleOfType(int Type) override;
 
+	// Rocket Crowbar 1.9
+	Vector GetBotShootOrg() override { return pev->origin - Vector(0, 0, 16); } // orig 0x1aafa0
+	int GetRCCaps() override { return 0x6fe3d5f; }								// orig 0x1ab000
+	int GetGuassDistOut() override { return 32; }								// orig 0x1ab010
+	int GetGuassHull() override { return head_hull; }							// orig 0x1ab020
+
 	CUSTOM_SCHEDULES;
 
 	static const char* pIdleSounds[];

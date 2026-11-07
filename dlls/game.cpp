@@ -518,6 +518,7 @@ static bool SV_InitServer()
 
 // Register your console variables here
 // This gets called one time when the game is initialied
+// orig 0x191d90
 void GameDLLInit()
 {
 	// Register cvars here:

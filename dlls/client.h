@@ -62,3 +62,35 @@ extern void CreateInstancedBaselines();
 extern int InconsistentFile(const edict_t* player, const char* filename, char* disconnect_message);
 
 extern int AllowLagCompensation();
+
+// Rocket Crowbar 1.9 (client.cpp)
+
+// A name/value pair the entity-manipulation commands look up (orig 8 bytes). VERIFY name.
+struct sEManipEnum
+{
+	const char* szName; // orig +0x0
+	int iValue;			// orig +0x4
+};
+
+extern int g_iPlayerShockwave; // sprites/shockwave.spr, precached in ClientPrecache
+extern int g_iEMCountUsedPCs;
+extern int g_iEMCountUsedSCStrs;
+
+void Host_Say(edict_t* pEntity, bool teamonly);
+void SayPrivate(edict_t* pEntity);
+bool IsClientListenServer(edict_t* pEntity);
+bool IsClientServer(edict_t* pEntity);
+bool IsClientAllowedToUse(edict_t* pEntity);
+void LogClientServerCommand(edict_t* pEntity);
+edict_t* LCSFindEntityForward(entvars_t* pev, Vector& vecEnd);
+CBaseEntity* EManipFindEntForward(entvars_t* pev);
+edict_t* EManipGetTempEntWithClassName(char* szClassname);
+int EManipGetEnumArrayValue(char* szName, sEManipEnum* pEnums, int iCount);
+void EManipPrintBits(int iBits, sEManipEnum* pEnums, int iCount, edict_t* pEntity);
+void EManipSetBits(int& iBits, char* szName, sEManipEnum* pEnums, int iCount);
+int EManipMakeSCStrConst(const char* szString);
+int EManipSCGetEqualTok(char* szString);
+char* EManipSCGetEqualTokTemp(char* szString);
+void SendTextAsMOTD(const char* szText, edict_t* pEntity);
+bool CheckItemStrEqu(char* szItem, char* szPrefix);
+float GetEntHoundeyeVel(edict_t* pEdict);

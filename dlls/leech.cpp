@@ -139,6 +139,9 @@ private:
 	CBeam* m_pb;
 	CBeam* m_pt;
 #endif
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x7fe3d5f; } // orig 0x1bd680
 };
 
 

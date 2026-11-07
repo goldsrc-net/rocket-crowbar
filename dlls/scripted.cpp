@@ -1114,12 +1114,8 @@ bool CScriptedSentence::AcceptableSpeaker(CBaseToggle* pTarget)
 		if (pMonster->CanPlaySentence(override))
 			return true;
 	}
-	else
-	{
-		// targeting something other than a monster, sure it can speak
-		if (pTarget && pTarget->IsAllowedToSpeak())
-			return true;
-	}
+	// Rocket Crowbar 1.9 (orig 0x21b670): only monsters speak scripted sentences; halflife-updated's
+	// non-monster speakers (HL25's speakable targets) aren't in the original.
 
 	return false;
 }

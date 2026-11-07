@@ -90,6 +90,11 @@ public:
 	static const char* pAttackMissSounds[];
 	static const char* pPainSounds[];
 	static const char* pDeathSounds[];
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x7fe3dff; } // orig 0x1bb450
+	int GetGuassDistOut() override { return 56; } // orig 0x1bb460
+	int GetGuassHull() override { return human_hull; } // orig 0x1bb470
 };
 LINK_ENTITY_TO_CLASS(monster_alien_slave, CISlave);
 LINK_ENTITY_TO_CLASS(monster_vortigaunt, CISlave);
@@ -744,7 +749,6 @@ void CISlave::ArmBeam(int side)
 	m_pBeam[m_iBeams]->SetColor(96, 128, 16);
 	m_pBeam[m_iBeams]->SetBrightness(64);
 	m_pBeam[m_iBeams]->SetNoise(80);
-	m_pBeam[m_iBeams]->pev->spawnflags |= SF_BEAM_TEMPORARY; // Flag these to be destroyed on save/restore or level transition
 	m_iBeams++;
 }
 
@@ -791,7 +795,6 @@ void CISlave::WackBeam(int side, CBaseEntity* pEntity)
 	m_pBeam[m_iBeams]->SetColor(180, 255, 96);
 	m_pBeam[m_iBeams]->SetBrightness(255);
 	m_pBeam[m_iBeams]->SetNoise(80);
-	m_pBeam[m_iBeams]->pev->spawnflags |= SF_BEAM_TEMPORARY; // Flag these to be destroyed on save/restore or level transition
 	m_iBeams++;
 }
 
@@ -822,7 +825,6 @@ void CISlave::ZapBeam(int side)
 	m_pBeam[m_iBeams]->SetColor(180, 255, 96);
 	m_pBeam[m_iBeams]->SetBrightness(255);
 	m_pBeam[m_iBeams]->SetNoise(20);
-	m_pBeam[m_iBeams]->pev->spawnflags |= SF_BEAM_TEMPORARY; // Flag these to be destroyed on save/restore or level transition
 	m_iBeams++;
 
 	pEntity = CBaseEntity::Instance(tr.pHit);

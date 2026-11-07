@@ -45,6 +45,21 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
   checked against its binary), so a Steam player bunny-hopping on an RC server can mispredict, as
   any old-SDK mod's would.
 
+## Clients, rules and world
+
+- **`ScoreInfo` is the 9-byte message everywhere**, including `CScientist::Killed`'s
+  `mp_scikill` frag (the original writes its 5-byte form). `PlayerKilled`/`InitHUD` likewise.
+- **The voice manager stays, set so everyone hears everyone.** The original has none, which
+  meant no voice restrictions; halflife-updated's limited teamplay voice to teammates.
+- **`servercfgfile` isn't run from `CWorld::Precache`** on a dedicated server, as the original
+  does; the current engine runs `server.cfg` itself.
+- **`UpdateClientData` sends `cd->fov = pev->fov`**, as the original does (always 0 in RC). Kept;
+  check a current client's field of view in the first engine run.
+- **Scripted sentences only go to monsters** (`CScriptedSentence::AcceptableSpeaker`), as in the
+  original; halflife-updated's non-monster speakers (HL25) are left out.
+- **`GetTeamNameForIndex` returns a static buffer.** The original copies into a read-only `""`
+  literal, which crashed every CTF message on Linux.
+
 ## Weapons
 
 - **The scientist and Barney bombs speak** (`dlls/rpg.cpp`). The original builds their sentence

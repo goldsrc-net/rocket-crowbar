@@ -118,6 +118,10 @@ public:
 
 	void EXPORT TriggerTouch(CBaseEntity* pOther);
 	void EXPORT FadeThink(); // Rocket Crowbar 1.9
+	// Rocket Crowbar 1.9: fade renderamt by flRate a second, every flInterval seconds; with
+	// bTwoPhase, switch to flRate2 at full or zero (FadeThink)
+	void StartFade(float flRate, int bTwoPhase, float flRate2, float flInterval);
+	void EntIsBeingRemoved(edict_t* pEdict) override; // Rocket Crowbar 1.9: die with an end entity
 
 	// These functions are here to show the way beams are encoded as entities.
 	// Encoding beams as entities simplifies their management in the client/server architecture

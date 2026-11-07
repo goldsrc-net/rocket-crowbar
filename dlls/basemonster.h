@@ -109,7 +109,6 @@ public:
 
 	float m_flLastYawTime;
 
-	bool m_AllowItemDropping = true;
 
 	bool Save(CSave& save) override;
 	bool Restore(CRestore& restore) override;
@@ -193,8 +192,13 @@ public:
 	virtual void ScheduleChange() {}
 	// virtual bool CanPlaySequence() { return ((m_pCine == NULL) && (m_MonsterState == MONSTERSTATE_NONE || m_MonsterState == MONSTERSTATE_IDLE || m_IdealMonsterState == MONSTERSTATE_IDLE)); }
 	virtual bool CanPlaySequence(bool fDisregardState, int interruptLevel);
-	virtual bool CanPlaySentence(bool fDisregardState) { return IsAllowedToSpeak(); }
-	virtual bool IsAllowedToSpeak() { return IsAlive() && (m_MonsterState == MONSTERSTATE_SCRIPT || pev->deadflag == DEAD_NO); }
+	// The original's sentence code lives in CBaseMonster (halflife-updated moved it to CBaseToggle and
+	// stopped dying monsters from speaking); these overrides are the original's bodies.
+	virtual bool CanPlaySentence(bool fDisregardState) { return IsAlive(); } // orig 0x1cab20
+	bool IsAllowedToSpeak() override { return IsAlive(); }
+	void PlaySentence(const char* pszSentence, float duration, float volume, float attenuation) override;
+	void PlayScriptedSentence(const char* pszSentence, float duration, float volume, float attenuation, bool bConcurrent, CBaseEntity* pListener) override;
+	void SentenceStop() override;
 
 	Task_t* GetTask();
 	virtual MONSTERSTATE GetIdealState();
@@ -340,6 +344,9 @@ public:
 	// Rocket Crowbar 1.9
 	virtual bool IsBot() { return false; }
 	virtual bool IsEntEnemy(CBaseEntity* pEntity) { return pEntity && m_hEnemy != NULL && pEntity->pev == m_hEnemy->pev; }
+	Vector GetBotShootOrg() override { return Center() - Vector(0, 0, 24); }				 // orig 0x1ca700
+	int GetBotTargetWeight(CBaseEntity* pBot) override { return IsEntEnemy(pBot) ? 5 : 3; } // orig 0x1ca660
+	bool BotTargetRealseable(CBaseEntity* pBot) override { return true; }					 // orig 0x1ca650
 
 	inline void Remember(int iMemory) { m_afMemory |= iMemory; }
 	inline void Forget(int iMemory) { m_afMemory &= ~iMemory; }
@@ -359,9 +366,6 @@ public:
 	bool ExitScriptedSequence();
 	bool CineCleanup();
 
-	/**
-	*	@brief Drop an item.
-	*	Will return @c nullptr if item dropping is disabled for this NPC.
-	*/
+	// Drop an item (nothing in multiplayer).
 	CBaseEntity* DropItem(const char* pszItemName, const Vector& vecPos, const Vector& vecAng);
 };

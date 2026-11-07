@@ -62,6 +62,11 @@ public:
 	bool CheckRangeAttack1(float flDot, float flDist) override { return false; }
 	bool CheckRangeAttack2(float flDot, float flDist) override { return false; }
 	bool TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType) override;
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x7fe3dff; } // orig 0x242e00
+	int GetGuassDistOut() override { return 56; } // orig 0x242e10
+	int GetGuassHull() override { return human_hull; } // orig 0x242e20
 };
 
 LINK_ENTITY_TO_CLASS(monster_zombie, CZombie);
@@ -167,20 +172,21 @@ void CZombie::AlertSound()
 	EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, RANDOM_SOUND_ARRAY(pAlertSounds), 1.0, ATTN_NORM, 0, pitch);
 }
 
+// orig 0x242750: the SDK's pitch, 100 +/- 5; the unused 95-104 roll is the original's too
+// (halflife-updated uses that roll as the pitch)
 void CZombie::IdleSound()
 {
-	int pitch = 95 + RANDOM_LONG(0, 9);
+	[[maybe_unused]] int pitch = 95 + RANDOM_LONG(0, 9);
 
 	// Play a random idle sound
-	EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, RANDOM_SOUND_ARRAY(pIdleSounds), 1.0, ATTN_NORM, 0, pitch);
+	EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, RANDOM_SOUND_ARRAY(pIdleSounds), 1.0, ATTN_NORM, 0, 100 + RANDOM_LONG(-5, 5));
 }
 
+// orig 0x2427e0: pitch 100 +/- 5, as the SDK had it
 void CZombie::AttackSound()
 {
-	int pitch = 95 + RANDOM_LONG(0, 9);
-
 	// Play a random attack sound
-	EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, RANDOM_SOUND_ARRAY(pAttackSounds), 1.0, ATTN_NORM, 0, pitch);
+	EMIT_SOUND_DYN(ENT(pev), CHAN_VOICE, RANDOM_SOUND_ARRAY(pAttackSounds), 1.0, ATTN_NORM, 0, 100 + RANDOM_LONG(-5, 5));
 }
 
 

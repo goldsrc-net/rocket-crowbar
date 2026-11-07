@@ -183,6 +183,11 @@ public:
 	int m_iSentence;
 
 	static const char* pGruntSentences[];
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x7fe3fff; } // orig 0x1af440
+	int GetGuassDistOut() override { return 56; } // orig 0x1af450
+	int GetGuassHull() override { return human_hull; } // orig 0x1af460
 };
 
 LINK_ENTITY_TO_CLASS(monster_human_grunt, CHGrunt);
@@ -417,6 +422,8 @@ bool CHGrunt::CheckMeleeAttack1(float flDot, float flDist)
 		pEnemy = m_hEnemy->MyMonsterPointer();
 	}
 
+	// VERIFY: guard, the original crashes here (with no enemy it calls Classify() through an
+	// uninitialized pointer; halflife-updated's fix, kept as the guard)
 	if (!pEnemy)
 	{
 		return false;
@@ -846,29 +853,27 @@ void CHGrunt::HandleAnimEvent(MonsterEvent_t* pEvent)
 	{
 	case HGRUNT_AE_DROP_GUN:
 	{
-		if (GetBodygroup(GUN_GROUP) != GUN_NONE)
+		// orig 0x1ad4b0: no GetBodygroup test (halflife-updated's save/load fix)
+		Vector vecGunPos;
+		Vector vecGunAngles;
+
+		GetAttachment(0, vecGunPos, vecGunAngles);
+
+		// switch to body group with no gun.
+		SetBodygroup(GUN_GROUP, GUN_NONE);
+
+		// now spawn a gun.
+		if (FBitSet(pev->weapons, HGRUNT_SHOTGUN))
 		{
-			Vector vecGunPos;
-			Vector vecGunAngles;
-
-			GetAttachment(0, vecGunPos, vecGunAngles);
-
-			// switch to body group with no gun.
-			SetBodygroup(GUN_GROUP, GUN_NONE);
-
-			// now spawn a gun.
-			if (FBitSet(pev->weapons, HGRUNT_SHOTGUN))
-			{
-				DropItem("weapon_shotgun", vecGunPos, vecGunAngles);
-			}
-			else
-			{
-				DropItem("weapon_9mmAR", vecGunPos, vecGunAngles);
-			}
-			if (FBitSet(pev->weapons, HGRUNT_GRENADELAUNCHER))
-			{
-				DropItem("ammo_ARgrenades", BodyTarget(pev->origin), vecGunAngles);
-			}
+			DropItem("weapon_shotgun", vecGunPos, vecGunAngles);
+		}
+		else
+		{
+			DropItem("weapon_9mmAR", vecGunPos, vecGunAngles);
+		}
+		if (FBitSet(pev->weapons, HGRUNT_GRENADELAUNCHER))
+		{
+			DropItem("ammo_ARgrenades", BodyTarget(pev->origin), vecGunAngles);
 		}
 	}
 	break;
@@ -1271,8 +1276,7 @@ Schedule_t slGruntCombatFail[] =
 Task_t tlGruntVictoryDance[] =
 	{
 		{TASK_STOP_MOVING, (float)0},
-		{TASK_SET_ACTIVITY, (float)ACT_IDLE},
-		{TASK_FACE_ENEMY, (float)0},
+		{TASK_FACE_ENEMY, (float)0}, // the original has no TASK_SET_ACTIVITY ACT_IDLE before this
 		{TASK_WAIT, (float)1.5},
 		{TASK_GET_PATH_TO_ENEMY_CORPSE, (float)0},
 		{TASK_WALK_PATH, (float)0},

@@ -33,8 +33,7 @@
 #define HOUNDEYE_MAX_ATTACK_RADIUS 384
 #define HOUNDEYE_SQUAD_BONUS (float)1.1
 
-// Marphy Fact Files Fix - Fix various instances of Houndeye not correctly blinking/closing eyes
-#define HOUNDEYE_EYE_FRAMES 3 // how many different switchable maps for the eye
+#define HOUNDEYE_EYE_FRAMES 4 // how many different switchable maps for the eye (the original's 4; halflife-updated uses 3)
 
 #define HOUNDEYE_SOUND_STARTLE_VOLUME 128 // how loud a sound has to be to badly scare a sleeping houndeye
 
@@ -108,6 +107,11 @@ public:
 	bool m_fAsleep;			// some houndeyes sleep in idle mode if this is set, the houndeye is lying down
 	bool m_fDontBlink;		// don't try to open/close eye if this bit is set!
 	Vector m_vecPackCenter; // the center of the pack. The leader maintains this by averaging the origins of all pack members.
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x7fe3dff; } // orig 0x1b6c30
+	int GetGuassDistOut() override { return 32; } // orig 0x1b6c40
+	int GetGuassHull() override { return head_hull; } // orig 0x1b6c50
 };
 LINK_ENTITY_TO_CLASS(monster_houndeye, CHoundeye);
 
@@ -623,7 +627,8 @@ void CHoundeye::SonicAttack()
 	{
 		if (pEntity->pev->takedamage != DAMAGE_NO)
 		{
-			if (!FClassnameIs(pEntity->pev, "monster_houndeye"))
+			// orig 0x1b5bd0: Rocket Crowbar spares drive_houndeye too
+			if (!FClassnameIs(pEntity->pev, "monster_houndeye") && !FClassnameIs(pEntity->pev, "drive_houndeye"))
 			{ // houndeyes don't hurt other houndeyes with their attack
 
 				// houndeyes do FULL damage if the ent in question is visible. Half damage otherwise.
@@ -895,11 +900,10 @@ void CHoundeye::PrescheduleThink()
 //=========================================================
 // AI Schedules Specific to this monster
 //=========================================================
-// Marphy Fact Files Fix - Fix freeze stutter after leaderlook sequence
 Task_t tlHoundGuardPack[] =
 	{
 		{TASK_STOP_MOVING, (float)0},
-		{TASK_PLAY_SEQUENCE, (float)ACT_GUARD},
+		{TASK_GUARD, (float)0}, // the original's (halflife-updated plays ACT_GUARD instead)
 };
 
 Schedule_t slHoundGuardPack[] =
@@ -1177,13 +1181,9 @@ Schedule_t* CHoundeye::GetScheduleOfType(int Type)
 		{
 			return &slHoundSleep[0];
 		}
-		// Marphy Fact Files Fix - Restore squad leader leaderlook animation
-		if (InSquad() && IsLeader() && !m_fAsleep && RANDOM_LONG(0, 14) < 1)
-		{
-			return &slHoundGuardPack[0];
-		}
 		else
 		{
+			// the original has no random leader look here (halflife-updated restored one)
 			return CSquadMonster::GetScheduleOfType(Type);
 		}
 	}

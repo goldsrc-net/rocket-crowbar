@@ -100,7 +100,6 @@ TYPEDESCRIPTION CBaseMonster::m_SaveData[] =
 
 		DEFINE_FIELD(CBaseMonster, m_scriptState, FIELD_INTEGER),
 		DEFINE_FIELD(CBaseMonster, m_pCine, FIELD_CLASSPTR),
-		DEFINE_FIELD(CBaseMonster, m_AllowItemDropping, FIELD_BOOLEAN),
 };
 
 //IMPLEMENT_SAVERESTORE( CBaseMonster, CBaseToggle );
@@ -295,6 +294,7 @@ bool CBaseMonster::FValidateHintType(short sHint)
 // (linked via each ent's m_pLink field)
 //
 //=========================================================
+// orig 0x1c4790
 void CBaseMonster::Look(int iDistance)
 {
 	int iSighted = 0;
@@ -329,6 +329,10 @@ void CBaseMonster::Look(int iDistance)
 				{
 					if (pSightEnt->IsPlayer())
 					{
+						// Rocket Crowbar 1.9: sv_ignoreplayer makes monsters blind to players
+						if (CVAR_GET_FLOAT("sv_ignoreplayer") != 0)
+							continue;
+
 						if ((pev->spawnflags & SF_MONSTER_WAIT_TILL_SEEN) != 0)
 						{
 							CBaseMonster* pClient;
@@ -511,10 +515,20 @@ CSound* CBaseMonster::PBestScent()
 // Monster Think - calls out to core AI functions and handles this
 // monster's specific animation events
 //=========================================================
+// orig 0x1c4ce0: Rocket Crowbar clears pev->fuser4 (MoveExecute's speed) each think, and a frozen
+// monster (FL_FROZEN, RC's freeze effects) drops its schedule and route instead of thinking.
 void CBaseMonster::MonsterThink()
 {
 	pev->nextthink = gpGlobals->time + 0.1; // keep monster thinking.
+	pev->fuser4 = 0;
 
+	if (FBitSet(pev->flags, FL_FROZEN))
+	{
+		ClearSchedule();
+		RouteClear();
+		pev->animtime = gpGlobals->time;
+		return;
+	}
 
 	RunAI();
 
@@ -566,8 +580,9 @@ void CBaseMonster::MonsterThink()
 //=========================================================
 void CBaseMonster::MonsterUse(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE useType, float value)
 {
-	//Don't do this because it can resurrect dying monsters
-	//m_IdealMonsterState = MONSTERSTATE_ALERT;
+	// orig 0x1c4e00: the original sets this (halflife-updated comments it out because it can
+	// resurrect a dying monster)
+	m_IdealMonsterState = MONSTERSTATE_ALERT;
 }
 
 //=========================================================
@@ -1214,15 +1229,9 @@ bool CBaseMonster::PopEnemy()
 //=========================================================
 // SetActivity
 //=========================================================
+// orig 0x1c6080: the original's order (halflife-updated sets m_Activity before SetYawSpeed)
 void CBaseMonster::SetActivity(Activity NewActivity)
 {
-	const Activity oldActivity = NewActivity;
-
-	m_Activity = NewActivity; // Go ahead and set this so it doesn't keep trying when the anim is not present
-
-	// In case someone calls this with something other than the ideal activity
-	m_IdealActivity = m_Activity;
-
 	const int iSequence = LookupActivity(NewActivity);
 
 	// Set to the desired anim, or default anim if the desired is not present
@@ -1231,7 +1240,7 @@ void CBaseMonster::SetActivity(Activity NewActivity)
 		if (pev->sequence != iSequence || !m_fSequenceLoops)
 		{
 			// don't reset frame between walk and run
-			if (!(oldActivity == ACT_WALK || oldActivity == ACT_RUN) || !(NewActivity == ACT_WALK || NewActivity == ACT_RUN))
+			if (!(m_Activity == ACT_WALK || m_Activity == ACT_RUN) || !(NewActivity == ACT_WALK || NewActivity == ACT_RUN))
 				pev->frame = 0;
 		}
 
@@ -1245,6 +1254,11 @@ void CBaseMonster::SetActivity(Activity NewActivity)
 		ALERT(at_aiconsole, "%s has no sequence for act:%d\n", STRING(pev->classname), NewActivity);
 		pev->sequence = 0; // Set to the reset anim (if it's there)
 	}
+
+	m_Activity = NewActivity; // Go ahead and set this so it doesn't keep trying when the anim is not present
+
+	// In case someone calls this with something other than the ideal activity
+	m_IdealActivity = m_Activity;
 }
 
 //=========================================================
@@ -1968,6 +1982,8 @@ bool CBaseMonster::ShouldAdvanceRoute(float flWaypointDist)
 }
 
 
+// orig 0x1c7730: Rocket Crowbar stores the distance moved per second in pev->fuser4 (MonsterThink
+// clears it each think).
 void CBaseMonster::MoveExecute(CBaseEntity* pTargetEnt, const Vector& vecDir, float flInterval)
 {
 	//	float flYaw = UTIL_VecToYaw ( m_Route[ m_iRouteIndex ].vecLocation - pev->origin );// build a yaw that points to the goal.
@@ -1975,6 +1991,7 @@ void CBaseMonster::MoveExecute(CBaseEntity* pTargetEnt, const Vector& vecDir, fl
 	if (m_IdealActivity != m_movementActivity)
 		m_IdealActivity = m_movementActivity;
 
+	const Vector vecStart = pev->origin;
 	float flTotal = m_flGroundSpeed * pev->framerate * flInterval;
 	float flStep;
 	while (flTotal > 0.001)
@@ -1985,6 +2002,9 @@ void CBaseMonster::MoveExecute(CBaseEntity* pTargetEnt, const Vector& vecDir, fl
 		flTotal -= flStep;
 	}
 	// ALERT( at_console, "dist %f\n", m_flGroundSpeed * pev->framerate * flInterval );
+
+	if (flInterval != 0)
+		pev->fuser4 = (pev->origin - vecStart).Length() / flInterval;
 }
 
 
@@ -1996,15 +2016,10 @@ void CBaseMonster::MoveExecute(CBaseEntity* pTargetEnt, const Vector& vecDir, fl
 // initialization that should take place for all monsters
 // goes here.
 //=========================================================
+// orig 0x1c7870: Rocket Crowbar drops the stock g_pGameRules->FAllowMonsters() check (monsters spawn in
+// deathmatch) and adds the classname to the precache list at the end.
 void CBaseMonster::MonsterInit()
 {
-	if (!g_pGameRules->FAllowMonsters())
-	{
-		pev->flags |= FL_KILLME; // Post this because some monster code modifies class data after calling this function
-								 //		REMOVE_ENTITY(ENT(pev));
-		return;
-	}
-
 	// Set fields common to all monsters
 	pev->effects = 0;
 	pev->takedamage = DAMAGE_AIM;
@@ -2038,6 +2053,8 @@ void CBaseMonster::MonsterInit()
 	SetThink(&CBaseMonster::MonsterInitThink);
 	pev->nextthink = gpGlobals->time + 0.1;
 	SetUse(&CBaseMonster::MonsterUse);
+
+	AddToPrecachedList(STRING(pev->classname));
 }
 
 //=========================================================
@@ -2053,8 +2070,24 @@ void CBaseMonster::MonsterInitThink()
 // StartMonster - final bit of initization before a monster
 // is turned over to the AI.
 //=========================================================
+// orig 0x1c79e0
 void CBaseMonster::StartMonster()
 {
+	// Rocket Crowbar 1.9: with sv_monspawn 1, each monster the map placed (RC's own spawns set
+	// SF_MONSTER_FALL_TO_GROUND) leaves a deathmatch spawn point where it stands, if that spot is out of
+	// water and a human fits there.
+	if ((int)CVAR_GET_FLOAT("sv_monspawn") == 1 && !FBitSet(pev->spawnflags, SF_MONSTER_FALL_TO_GROUND))
+	{
+		if (UTIL_PointContents(Center()) != CONTENTS_WATER)
+		{
+			TraceResult tr;
+			const Vector vecCenter = Center();
+			UTIL_TraceHull(vecCenter, vecCenter, ignore_monsters, human_hull, edict(), &tr);
+			if (tr.flFraction == 1.0 && 0 == tr.fAllSolid)
+				CBaseEntity::Create("info_player_deathmatch", vecCenter, pev->angles, edict());
+		}
+	}
+
 	// update capabilities
 	if (LookupActivity(ACT_RANGE_ATTACK1) != ACTIVITY_NOT_AVAILABLE)
 	{
@@ -2187,14 +2220,18 @@ bool CBaseMonster::TaskIsRunning()
 // IRelationship - returns an integer that describes the
 // relationship between two types of monster.
 //=========================================================
+// orig 0x1c7e30, table iEnemy.925 read from the original's .data. Rocket Crowbar's PLAYER row makes
+// players nemeses of each other and allies of scientists and player allies. The HUMANPASSIVE row
+// is the SDK's (halflife-updated made scientists hate alien grunts and bullsquids instead of fear
+// them).
 int CBaseMonster::IRelationship(CBaseEntity* pTarget)
 {
 	static int iEnemy[14][14] =
 		{//   NONE	 MACH	 PLYR	 HPASS	 HMIL	 AMIL	 APASS	 AMONST	APREY	 APRED	 INSECT	PLRALY	PBWPN	ABWPN
 			/*NONE*/ {R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO},
 			/*MACHINE*/ {R_NO, R_NO, R_DL, R_DL, R_NO, R_DL, R_DL, R_DL, R_DL, R_DL, R_NO, R_DL, R_DL, R_DL},
-			/*PLAYER*/ {R_NO, R_DL, R_NO, R_NO, R_DL, R_DL, R_DL, R_DL, R_DL, R_DL, R_NO, R_NO, R_DL, R_DL},
-			/*HUMANPASSIVE*/ {R_NO, R_NO, R_AL, R_AL, R_HT, R_HT, R_NO, R_HT, R_DL, R_DL, R_NO, R_AL, R_NO, R_NO},
+			/*PLAYER*/ {R_NO, R_DL, R_NM, R_AL, R_DL, R_DL, R_DL, R_DL, R_DL, R_DL, R_NO, R_AL, R_DL, R_DL},
+			/*HUMANPASSIVE*/ {R_NO, R_NO, R_AL, R_AL, R_HT, R_FR, R_NO, R_HT, R_DL, R_FR, R_NO, R_AL, R_NO, R_NO},
 			/*HUMANMILITAR*/ {R_NO, R_NO, R_HT, R_DL, R_NO, R_HT, R_DL, R_DL, R_DL, R_DL, R_NO, R_HT, R_NO, R_NO},
 			/*ALIENMILITAR*/ {R_NO, R_DL, R_HT, R_DL, R_HT, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_DL, R_NO, R_NO},
 			/*ALIENPASSIVE*/ {R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO, R_NO},
@@ -2205,6 +2242,10 @@ int CBaseMonster::IRelationship(CBaseEntity* pTarget)
 			/*PLAYERALLY*/ {R_NO, R_DL, R_AL, R_AL, R_DL, R_DL, R_DL, R_DL, R_DL, R_DL, R_NO, R_NO, R_NO, R_NO},
 			/*PBIOWEAPON*/ {R_NO, R_NO, R_DL, R_DL, R_DL, R_DL, R_DL, R_DL, R_DL, R_DL, R_NO, R_DL, R_NO, R_DL},
 			/*ABIOWEAPON*/ {R_NO, R_NO, R_DL, R_DL, R_DL, R_AL, R_NO, R_DL, R_DL, R_NO, R_NO, R_DL, R_DL, R_NO}};
+
+	// Rocket Crowbar 1.9: a classification outside the table is no relationship
+	if (Classify() < 0 || Classify() >= 14 || pTarget->Classify() < 0 || pTarget->Classify() >= 14)
+		return R_NO;
 
 	return iEnemy[Classify()][pTarget->Classify()];
 }
@@ -2527,19 +2568,9 @@ float CBaseMonster::ChangeYaw(int yawSpeed)
 	ideal = pev->ideal_yaw;
 	if (current != ideal)
 	{
-		if (m_flLastYawTime == 0.0f)
-		{
-			m_flLastYawTime = gpGlobals->time - gpGlobals->frametime;
-		}
-
-		float delta = gpGlobals->time - m_flLastYawTime;
-		m_flLastYawTime = gpGlobals->time;
-
-		// Clamp delta like the engine does with frametime
-		if (delta > 0.25)
-			delta = 0.25;
-
-		speed = (float)yawSpeed * delta * 2;
+		// orig 0x1c8730: the original turns by frametime (halflife-updated measures the time since
+		// the last turn, m_flLastYawTime)
+		speed = (float)yawSpeed * gpGlobals->frametime * 10;
 		move = ideal - current;
 
 		if (ideal > current)
@@ -2981,10 +3012,6 @@ bool CBaseMonster::KeyValue(KeyValueData* pkvd)
 		m_iTriggerCondition = atoi(pkvd->szValue);
 		return true;
 	}
-	else if (FStrEq(pkvd->szKeyName, "allow_item_dropping"))
-	{
-		m_AllowItemDropping = atoi(pkvd->szValue) != 0;
-	}
 
 	return CBaseToggle::KeyValue(pkvd);
 }
@@ -3232,6 +3259,30 @@ bool CBaseMonster::FCanActiveIdle()
 	return false;
 }
 
+// orig 0x1c9e00
+void CBaseMonster::PlaySentence(const char* pszSentence, float duration, float volume, float attenuation)
+{
+	if (pszSentence && IsAlive())
+	{
+		if (pszSentence[0] == '!')
+			EMIT_SOUND_DYN(edict(), CHAN_VOICE, pszSentence, volume, attenuation, 0, PITCH_NORM);
+		else
+			SENTENCEG_PlayRndSz(edict(), pszSentence, volume, attenuation, 0, PITCH_NORM);
+	}
+}
+
+// orig 0x1c9e80
+void CBaseMonster::PlayScriptedSentence(const char* pszSentence, float duration, float volume, float attenuation, bool bConcurrent, CBaseEntity* pListener)
+{
+	PlaySentence(pszSentence, duration, volume, attenuation);
+}
+
+// orig 0x1c9ed0
+void CBaseMonster::SentenceStop()
+{
+	EMIT_SOUND(edict(), CHAN_VOICE, "common/null.wav", 1.0, ATTN_IDLE);
+}
+
 
 void CBaseMonster::CorpseFallThink()
 {
@@ -3390,16 +3441,16 @@ bool CBaseMonster::GetEnemy()
 //=========================================================
 // DropItem - dead monster drops named item
 //=========================================================
+// orig 0x1ca4f0: Rocket Crowbar drops nothing in multiplayer, and what it drops in single player
+// doesn't respawn.
 CBaseEntity* CBaseMonster::DropItem(const char* pszItemName, const Vector& vecPos, const Vector& vecAng)
 {
+	if (g_pGameRules->IsMultiplayer())
+		return nullptr;
+
 	if (!pszItemName)
 	{
 		ALERT(at_console, "DropItem() - No item name!\n");
-		return nullptr;
-	}
-
-	if (!m_AllowItemDropping)
-	{
 		return nullptr;
 	}
 
@@ -3410,6 +3461,7 @@ CBaseEntity* CBaseMonster::DropItem(const char* pszItemName, const Vector& vecPo
 		// do we want this behavior to be default?! (sjb)
 		pItem->pev->velocity = pev->velocity;
 		pItem->pev->avelocity = Vector(0, RANDOM_FLOAT(0, 100), 0);
+		pItem->pev->spawnflags |= SF_NORESPAWN;
 		return pItem;
 	}
 	else

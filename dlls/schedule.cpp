@@ -25,6 +25,7 @@
 #include "nodes.h"
 #include "defaultai.h"
 #include "soundent.h"
+#include "gamerules.h"
 
 //=========================================================
 // FHaveSchedule - Returns true if monster's m_pSchedule
@@ -464,7 +465,8 @@ void CBaseMonster::RunTask(Task_t* pTask)
 			else // !!!HACKHACK - put monster in a thin, wide bounding box until we fix the solid type/bounding volume problem
 				UTIL_SetSize(pev, Vector(pev->mins.x, pev->mins.y, pev->mins.z), Vector(pev->maxs.x, pev->maxs.y, pev->mins.z + 1));
 
-			if (ShouldFadeOnDeath())
+			// Rocket Crowbar 1.9: every corpse fades in multiplayer
+			if (ShouldFadeOnDeath() || g_pGameRules->IsMultiplayer())
 			{
 				// this monster was created by a monstermaker... fade the corpse out.
 				SUB_StartFadeOut();

@@ -906,6 +906,7 @@ void CBaseTrigger::ToggleUse(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_
 }
 
 // When touched, a hurt trigger does DMG points of damage each half-second
+// orig 0x226730
 void CBaseTrigger::HurtTouch(CBaseEntity* pOther)
 {
 	float fldmg;
@@ -913,13 +914,14 @@ void CBaseTrigger::HurtTouch(CBaseEntity* pOther)
 	if (0 == pOther->pev->takedamage)
 		return;
 
-	if ((pev->spawnflags & SF_TRIGGER_HURT_CLIENTONLYTOUCH) != 0 && !pOther->IsPlayer())
+	// Rocket Crowbar: a driven monster counts as a client here
+	if ((pev->spawnflags & SF_TRIGGER_HURT_CLIENTONLYTOUCH) != 0 && !pOther->IsPlayer() && !pOther->IsDriveent())
 	{
 		// this trigger is only allowed to touch clients, and this ain't a client.
 		return;
 	}
 
-	if ((pev->spawnflags & SF_TRIGGER_HURT_NO_CLIENTS) != 0 && pOther->IsPlayer())
+	if ((pev->spawnflags & SF_TRIGGER_HURT_NO_CLIENTS) != 0 && (pOther->IsPlayer() || pOther->IsDriveent()))
 		return;
 
 	static_assert(MAX_PLAYERS <= 32, "Rework the player mask logic to support more than 32 players");
@@ -1122,6 +1124,7 @@ void CTriggerOnce::Spawn()
 
 
 
+// orig 0x226ad0
 void CBaseTrigger::MultiTouch(CBaseEntity* pOther)
 {
 	entvars_t* pevToucher;
@@ -1129,7 +1132,8 @@ void CBaseTrigger::MultiTouch(CBaseEntity* pOther)
 	pevToucher = pOther->pev;
 
 	// Only touch clients, monsters, or pushables (depending on flags)
-	if (((pevToucher->flags & FL_CLIENT) != 0 && (pev->spawnflags & SF_TRIGGER_NOCLIENTS) == 0) ||
+	// (Rocket Crowbar: a driven monster counts as a client)
+	if ((((pevToucher->flags & FL_CLIENT) != 0 || pOther->IsDriveent()) && (pev->spawnflags & SF_TRIGGER_NOCLIENTS) == 0) ||
 		((pevToucher->flags & FL_MONSTER) != 0 && (pev->spawnflags & SF_TRIGGER_ALLOWMONSTERS) != 0) ||
 		(pev->spawnflags & SF_TRIGGER_PUSHABLES) != 0 && FClassnameIs(pevToucher, "func_pushable"))
 	{
@@ -1480,8 +1484,16 @@ edict_t* CChangeLevel::FindLandmark(const char* pLandmarkName)
 // triggered by buttons, etc.
 //
 //=========================================================
+// orig 0x227640. Rocket Crowbar's sv_noexit 1 gibs whoever uses an exit in deathmatch.
 void CChangeLevel::UseChangeLevel(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE useType, float value)
 {
+	if ((int)CVAR_GET_FLOAT("sv_noexit") == 1 && g_pGameRules->IsDeathmatch())
+	{
+		// VERIFY: guard, the original crashes here with no caller; it damages the caller, not the activator
+		if (pCaller)
+			pCaller->TakeDamage(pev, pev, 50000, DMG_ALWAYSGIB);
+		return;
+	}
 	ChangeLevelNow(pActivator);
 }
 
@@ -1546,9 +1558,17 @@ void CChangeLevel::ChangeLevelNow(CBaseEntity* pActivator)
 //
 // GLOBALS ASSUMED SET:  st_szNextMap
 //
+// orig 0x2279f0. Rocket Crowbar's sv_noexit 1 gibs whatever touches an exit in deathmatch; a
+// driven monster may change the level like a player.
 void CChangeLevel::TouchChangeLevel(CBaseEntity* pOther)
 {
-	if (!FClassnameIs(pOther->pev, "player"))
+	if ((int)CVAR_GET_FLOAT("sv_noexit") == 1 && g_pGameRules->IsDeathmatch())
+	{
+		pOther->TakeDamage(pev, pev, 50000, DMG_ALWAYSGIB);
+		return;
+	}
+
+	if (!FClassnameIs(pOther->pev, "player") && !pOther->IsDriveent())
 		return;
 
 	ChangeLevelNow(pOther);

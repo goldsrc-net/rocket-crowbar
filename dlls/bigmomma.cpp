@@ -195,57 +195,16 @@ public:
 	void HandleAnimEvent(MonsterEvent_t* pEvent) override;
 	void LayHeadcrab();
 
-	int GetNodeSequence()
-	{
-		CBaseEntity* pTarget = m_hTargetEnt;
-		if (pTarget)
-		{
-			return pTarget->pev->netname; // netname holds node sequence
-		}
-		return 0;
-	}
+	int GetNodeSequence();
 
 
-	int GetNodePresequence()
-	{
-		CInfoBM* pTarget = (CInfoBM*)(CBaseEntity*)m_hTargetEnt;
-		if (pTarget)
-		{
-			return pTarget->m_preSequence;
-		}
-		return 0;
-	}
+	int GetNodePresequence();
 
-	float GetNodeDelay()
-	{
-		CBaseEntity* pTarget = m_hTargetEnt;
-		if (pTarget)
-		{
-			return pTarget->pev->speed; // Speed holds node delay
-		}
-		return 0;
-	}
+	float GetNodeDelay();
 
-	float GetNodeRange()
-	{
-		CBaseEntity* pTarget = m_hTargetEnt;
-		if (pTarget)
-		{
-			return pTarget->pev->scale; // Scale holds node delay
-		}
-		return 1e6;
-	}
+	float GetNodeRange();
 
-	float GetNodeYaw()
-	{
-		CBaseEntity* pTarget = m_hTargetEnt;
-		if (pTarget)
-		{
-			if (pTarget->pev->angles.y != 0)
-				return pTarget->pev->angles.y;
-		}
-		return pev->angles.y;
-	}
+	float GetNodeYaw();
 
 	// Restart the crab count on each new level
 	void OverrideReset() override
@@ -255,26 +214,7 @@ public:
 
 	void DeathNotice(entvars_t* pevChild) override;
 
-	bool CanLayCrab()
-	{
-		if (m_crabTime < gpGlobals->time && m_crabCount < BIG_MAXCHILDREN)
-		{
-			// Don't spawn crabs inside each other
-			Vector mins = pev->origin - Vector(32, 32, 0);
-			Vector maxs = pev->origin + Vector(32, 32, 0);
-
-			CBaseEntity* pList[2];
-			int count = UTIL_EntitiesInBox(pList, 2, mins, maxs, FL_MONSTER);
-			for (int i = 0; i < count; i++)
-			{
-				if (pList[i] != this) // Don't hurt yourself!
-					return false;
-			}
-			return true;
-		}
-
-		return false;
-	}
+	bool CanLayCrab();
 
 	void LaunchMortar();
 
@@ -310,8 +250,90 @@ private:
 	float m_mortarTime;
 	float m_painSoundTime;
 	int m_crabCount;
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x226898; } // orig 0xf1670
 };
 LINK_ENTITY_TO_CLASS(monster_bigmomma, CBigMomma);
+
+// The original's out-of-line node and crab helpers (the SDK has them inline in the class)
+// orig 0xf1630
+int CBigMomma::GetNodeSequence()
+{
+	CBaseEntity* pTarget = m_hTargetEnt;
+	if (pTarget)
+	{
+		return pTarget->pev->netname; // netname holds node sequence
+	}
+	return 0;
+}
+
+// orig 0xf1600
+int CBigMomma::GetNodePresequence()
+{
+	CInfoBM* pTarget = (CInfoBM*)(CBaseEntity*)m_hTargetEnt;
+	if (pTarget)
+	{
+		return pTarget->m_preSequence;
+	}
+	return 0;
+}
+
+// orig 0xf15c0
+float CBigMomma::GetNodeDelay()
+{
+	CBaseEntity* pTarget = m_hTargetEnt;
+	if (pTarget)
+	{
+		return pTarget->pev->speed; // Speed holds node delay
+	}
+	return 0;
+}
+
+// orig 0xf1580
+float CBigMomma::GetNodeRange()
+{
+	CBaseEntity* pTarget = m_hTargetEnt;
+	if (pTarget)
+	{
+		return pTarget->pev->scale; // Scale holds node delay
+	}
+	return 1e6;
+}
+
+// orig 0xf1530
+float CBigMomma::GetNodeYaw()
+{
+	CBaseEntity* pTarget = m_hTargetEnt;
+	if (pTarget)
+	{
+		if (pTarget->pev->angles.y != 0)
+			return pTarget->pev->angles.y;
+	}
+	return pev->angles.y;
+}
+
+// orig 0xf1430
+bool CBigMomma::CanLayCrab()
+{
+	if (m_crabTime < gpGlobals->time && m_crabCount < BIG_MAXCHILDREN)
+	{
+		// Don't spawn crabs inside each other
+		Vector mins = pev->origin - Vector(32, 32, 0);
+		Vector maxs = pev->origin + Vector(32, 32, 0);
+
+		CBaseEntity* pList[2];
+		int count = UTIL_EntitiesInBox(pList, 2, mins, maxs, FL_MONSTER);
+		for (int i = 0; i < count; i++)
+		{
+			if (pList[i] != this) // Don't hurt yourself!
+				return false;
+		}
+		return true;
+	}
+
+	return false;
+}
 
 TYPEDESCRIPTION CBigMomma::m_SaveData[] =
 	{

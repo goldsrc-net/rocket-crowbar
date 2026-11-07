@@ -5228,10 +5228,10 @@ addr	size	file	class	method	kind	signature	mangled
 00242e10	12	zombie.cpp	CZombie	GetGuassDistOut	rc	CZombie::GetGuassDistOut()	GetGuassDistOut__7CZombie
 00242e20	12	zombie.cpp	CZombie	GetGuassHull	rc	CZombie::GetGuassHull()	GetGuassHull__7CZombie
 00242e30	71	zombie.cpp		__tf7CZombie	generated	__tf7CZombie	__tf7CZombie
-00242e80	21	zombie.cpp		__default_terminate	rc	__default_terminate	__default_terminate
-00242e98	31	zombie.cpp		__terminate	rc	__terminate	__terminate
-00242eb8	48	zombie.cpp		__throw_type_match	rc	__throw_type_match	__throw_type_match
-00242ee8	5	zombie.cpp		__empty	rc	__empty	__empty
+00242e80	21	zombie.cpp		__default_terminate	generated	__default_terminate	__default_terminate
+00242e98	31	zombie.cpp		__terminate	generated	__terminate	__terminate
+00242eb8	48	zombie.cpp		__throw_type_match	generated	__throw_type_match	__throw_type_match
+00242ee8	5	zombie.cpp		__empty	generated	__empty	__empty
 00242ef0	67	libgcc2.c		new_eh_context	rc	new_eh_context	new_eh_context
 00242f34	54	libgcc2.c		eh_context_free	rc	eh_context_free	eh_context_free
 00242f6c	29	libgcc2.c		__get_eh_context	rc	__get_eh_context	__get_eh_context

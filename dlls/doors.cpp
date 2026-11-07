@@ -520,12 +520,13 @@ void CBaseDoor::Precache()
 //
 // Doors not tied to anything (e.g. button, another door) can be touched, to make them activate.
 //
+// orig 0x11b050
 void CBaseDoor::DoorTouch(CBaseEntity* pOther)
 {
 	entvars_t* pevToucher = pOther->pev;
 
-	// Ignore touches by anything but players
-	if (!FClassnameIs(pevToucher, "player"))
+	// Ignore touches by anything but players (Rocket Crowbar: or a driven monster)
+	if (!FClassnameIs(pevToucher, "player") && !pOther->IsDriveent())
 		return;
 
 	// If door has master, and it's not ready to trigger,

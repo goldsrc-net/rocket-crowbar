@@ -14,7 +14,7 @@
 #include "shake.h"
 #include "flag.h"
 
-// teamplay_gamerules.cpp: RC additions, not in this package
+// teamplay_gamerules.cpp (RC additions there)
 extern const char* GetTeamNameForIndex(int iTeam);
 extern void AddTeamScore(int iTeam, int iScore);
 
@@ -342,15 +342,4 @@ Vector GetFlagBaseColor(int iTeam)
 	default:
 		return g_vecZero;
 	}
-}
-
-// TEMP STUB (curses-misc): real one belongs in teamplay_gamerules.cpp (RC addition)
-const char* GetTeamNameForIndex(int iTeam)
-{
-	return "";
-}
-
-// TEMP STUB (curses-misc): real one belongs in teamplay_gamerules.cpp (RC addition)
-void AddTeamScore(int iTeam, int iScore)
-{
 }

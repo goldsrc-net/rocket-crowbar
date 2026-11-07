@@ -100,6 +100,11 @@ public:
 	int m_iFrustration;
 
 	int m_iShell;
+
+	// Rocket Crowbar 1.9
+	int GetRCCaps() override { return 0x7fe3fff; } // orig 0x1a9710
+	int GetGuassDistOut() override { return 56; } // orig 0x1a9720
+	int GetGuassHull() override { return human_hull; } // orig 0x1a9730
 };
 LINK_ENTITY_TO_CLASS(monster_human_assassin, CHAssassin);
 
