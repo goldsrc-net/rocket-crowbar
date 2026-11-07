@@ -31,10 +31,12 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
   `mp_chattime`, `mp_falldamage`, `mp_fragsleft`, `mp_timeleft`, `sk_plr_hornet_dmg1`-`3`,
   `sv_allowbunnyhopping`, `sv_alltalk`, `sv_busters`, `sv_pushable_fixed_tick_fudge`,
   `voice_serverdebug`. They post-date RC's 2001 SDK. With the code that would read them
-  reconstructed, `allow_spectators`, `mp_chattime`, `mp_falldamage` and `sk_plr_hornet_dmg1`-`3`
-  have no effect, `sv_alltalk` changes nothing (see the voice manager below) and `sv_busters` is
-  off, so at their defaults these match the original. `sv_allowbunnyhopping` is below.
-  docs/SERVER.md lists each.
+  reconstructed, `allow_spectators`, `mp_chattime`, `mp_falldamage`, `sk_plr_hornet_dmg1`-`3`
+  and `sv_pushable_fixed_tick_fudge` have no effect (`CPushable::Move` in `dlls/func_break.cpp` is
+  SDK 2.1's again and nothing else reads it), `sv_alltalk` changes nothing (see the voice manager
+  below) and `sv_busters` is off, so at their defaults these match the original.
+  `CHalfLifeMultiplay::Think` keeps `mp_fragsleft` and `mp_timeleft` updated for server browsers;
+  the original's Think writes neither. `sv_allowbunnyhopping` is below. docs/SERVER.md lists each.
 
 ## Commands and entities
 
@@ -69,6 +71,54 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
   original; halflife-updated's non-monster speakers (HL25) are left out.
 - **`GetTeamNameForIndex` returns a static buffer.** The original copies into a read-only `""`
   literal, which crashed every CTF message on Linux.
+
+## halflife-updated changes kept in stock functions
+
+RC 1.9's stock-named functions have the original's behavior back wherever halflife-updated's
+showed in multiplayer play (audit of 2026-11-07, `reference/audit/r1.md`-`r6.md`, one row per
+function; the original decides, since RC 1.9 was built on SDK 2.1 and may have changed a stock
+body). What halflife-updated changed there and we keep, besides restyling and the crash guards
+listed under "Crashes in the original":
+
+- **Players keep the engine's `FL_PROXY` and `FL_FAKECLIENT` flags** (`dlls/player.cpp` Spawn). The
+  original sets `pev->flags` to `FL_CLIENT`, so HLTV proxies and bots stay marked as such.
+- **The weapon bits are 64 bits for today's client** (`dlls/player.cpp` UpdateClientData's
+  `Weapons` message, which the original doesn't send; HasSuit and the suit, flashlight and charger
+  tests read `m_WeaponBits`, mirrored into `pev->weapons`).
+- **`fullupdate` and impulse 204 run halflife-updated's fuller `ForceClientDllUpdate`**
+  (`dlls/player.cpp`): it also resets the HUD, field of view, weapon-bits, room-type and ammo
+  caches and resends ResetHUD, what today's client needs.
+- **Node graphs go through the engine filesystem; on amd64 the file is
+  `maps/graphs/<map>.nod64`** (`dlls/nodes.cpp`), since CGraph and CLink hold pointers. i386 keeps
+  `.nod`, version 16, as the original. The `.nrp` report prints an int with `%d` where the
+  original's `%f` printed garbage.
+- **A second `worldspawn` removes itself** (`dlls/world.cpp` CWorld::Precache). In the original,
+  any extra worldspawn (a map with two, or one a `.lec` creates) runs the whole map setup again:
+  new game rules, rc.ini reload, votes reset, every spawner created a second time.
+- **Save/restore is halflife-updated's** (`dlls/util.cpp`, `dlls/monsters.cpp`, `dlls/world.cpp`
+  CGlobalState): save data held by reference, 1-byte booleans, `FIELD_INT64`, pointer-size
+  function fields, the empty token table test and `\n`-ended messages; beams keep their attachment
+  when their entity is set again on restore (`dlls/effects.cpp` SetStartEntity, SetEndEntity).
+  Multiplayer doesn't save, and save files aren't compatible with the original's anyway.
+- **Singleplayer-only paths are halflife-updated's** (`dlls/singleplay_gamerules.cpp` spserver.cfg
+  and GetNextBestWeapon, `dlls/triggers.cpp` trigger_camera's `m_hViewEntity` and the changelevel
+  transition code, `dlls/player.cpp` Restore, UpdateClientData's restore block and CStripWeapons'
+  local player).
+
+Kept until Steven decides (`reference/audit/r7.md`):
+
+- **env_sound's room type reaches the client from `CBasePlayer::UpdateClientData`**
+  (`dlls/sound.cpp` CEnvSound::Think, `dlls/player.cpp`): resent on every spawn and full update,
+  and reset to 0 at a new map. The original sends `SVC_ROOMTYPE` once, when an env_sound takes
+  over, so its room effect carries into the next map.
+- **`CBasePlayer::TakeDamage` sends HLTV an `SVC_DIRECTOR` damage event** (`dlls/player.cpp`), which
+  the original doesn't. Only an HLTV proxy's auto-director sees it.
+- **A pickup's `AmmoPickup` follows its `WeapPickup`** (`dlls/player.cpp` AddPlayerItem runs
+  ExtractAmmo after the weapon joins the list); the original gives the ammo inside AddToPlayer,
+  before.
+- **A `func_tank` whose target is nearer than its barrel offset aims without the barrel
+  correction** (`dlls/func_tank.cpp` AdjustAnglesForBarrel). The original takes the square root of
+  a negative there and aims with NaN angles.
 
 ## Weapons
 
@@ -134,6 +184,43 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
   from `new[]`, which corrupts its heap at shutdown for `CVEC<sHeading>`.
 - **The houndeye and alien grunt pickups test for NULL before calling `IsPlayer()`.** The original
   calls it first; same behavior for any real caller.
+
+In stock functions, halflife-updated's guards kept (audit of 2026-11-07; `ORIGINAL_BUGS.md` lists
+each, and the audit rows in `reference/audit/` have the reasoning):
+
+- **`game_score` and `game_player_equip` ignore a missing activator** (`dlls/maprules.cpp`). The
+  original calls `IsPlayer()` through the null pointer.
+- **`trigger_counter` takes a NULL activator** (`dlls/triggers.cpp` CounterUse).
+- **Keyvalue parsing stays in its buffer**: `UTIL_StripToken` takes its destination's size
+  (`dlls/maprules.cpp` CGamePlayerEquip::KeyValue, `dlls/triggers.cpp` CMultiManager::KeyValue),
+  and `light_environment`'s color values start at 0 when a keyvalue has no numbers (`dlls/lights.cpp`
+  CEnvLight::KeyValue), where the original read uninitialized ints.
+- **The nihilanth's target-name buffers are 128 bytes** (`dlls/nihilanth.cpp` NextActivity,
+  HandleAnimEvent). The original built them in 64 and 36 bytes from 64-byte keyvalues plus a
+  number.
+- **The node graph's routing tables free with `delete[]`** (`dlls/nodes.cpp`
+  ComputeStaticRoutingTables), where the original used scalar delete on four `new[]` arrays.
+- **`func_breakable` material 9 (`matNone`) precaches and sounds as wood** (`dlls/func_break.cpp`
+  Precache, DamageSound). KeyValue lets 9 through and the original then used an uninitialized
+  model name and sound list.
+- **A `func_plat`'s inside trigger holds its platform by handle and removes itself when the
+  platform is gone** (`dlls/plats.cpp` CPlatTrigger); the original read the freed platform.
+- **`CSoundEnt::ISoundsInList` counts 0 for an unknown list type** (`dlls/soundent.cpp`) instead of
+  walking an uninitialized index.
+- **A `speaker` with a preset outside 1-12 plays nothing** (`dlls/sound.cpp` SpeakerThink); the
+  original used whatever its sound-name pointer held.
+- **`env_beam`'s ring with a point entity returns before its message starts** (`dlls/effects.cpp`
+  CLightning::StrikeThink). The original returned with the temp-entity message still open, so the
+  next message start is an engine error.
+- **Monster guards** (each marked VERIFY): the bullsquid's spit tests for an enemy
+  (`dlls/bullsquid.cpp` HandleAnimEvent), `CHGrunt::CheckMeleeAttack1` fails with no enemy
+  (`dlls/hgrunt.cpp`), a talking monster's stare skips the distance test with no player 1 and
+  `CanFollow` checks `m_pCine` just after a script ends (`dlls/talkmonster.cpp` RunTask,
+  CanFollow), a hornet without an owner does no damage (`dlls/hornet.cpp` DieTouch), and the
+  osprey's flight checks its path corner (`dlls/osprey.cpp` FlyThink).
+- **Player inventory** (`dlls/player.cpp`): `RemovePlayerItem` also clears the last item when the
+  active one goes, where the original left it pointing at the removed item; `SwitchWeapon` takes a
+  NULL weapon; `PackDeadPlayerItems` holds `MAX_WEAPONS` weapons where the original's list had 20.
 
 ## Layout
 
