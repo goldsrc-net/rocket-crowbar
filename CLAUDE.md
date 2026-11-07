@@ -75,3 +75,9 @@ compared with the original beyond that.
   gameplay change into `docs/GAMEPLAY.md`.
 - Found outside RC: the rig's ReHLDS `filesystem_stdio.so` crashes on any gamedir with a pak
   file (`tools/rig/README.md`).
+- To do after mod-rc2's audit (Steven, 2026-11-07): the functions RC kept stock still have
+  halflife-updated's bodies, which differ from the SDK RC 1.9 shipped. "Stock" here means the
+  name exists in halflife-updated (`scripts/sdk_baseline.sh`); nobody compared the bodies. Same
+  pass as `../mod-rc2/reference/audit/BRIEF.md`: diff each stock function against RC 1.9's SDK
+  version (`../mod-rc2/scripts/stock_drift.py --sdk`), put that SDK's behavior back wherever it
+  shows in multiplayer, keep crash guards and singleplayer-only fixes, document the rest.
