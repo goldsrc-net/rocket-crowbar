@@ -26,6 +26,18 @@ The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).
   `voice_serverdebug`. They post-date RC's 2001 SDK. At their defaults they should match the
   original's behavior; each gets checked against it when the code that reads it is reconstructed.
 
+## Messages and prediction
+
+- **`Health` is a 2-byte message, `ScoreInfo` 9 bytes.** The original registers them as 1 and 5
+  bytes (the 2001 client's formats); today's Half-Life client (HL25), which RC players use, reads
+  `Health` as a short and `ScoreInfo` with class and team. We keep halflife-updated's
+  registrations and every writer matches them (the drive monsters' 28 `Health` writes are shorts).
+- **`sv_allowbunnyhopping` defaults to 1.** RC 1.9's server movement has no bunny-hop cap
+  (`pm_shared`, server side). halflife-updated clients cap unless the server allows it, so the
+  default makes them predict what the server does. Valve's Steam client always caps (not
+  checked against its binary), so a Steam player bunny-hopping on an RC server can mispredict, as
+  any old-SDK mod's would.
+
 ## Prefs
 
 - **`rc.ini` may use CRLF line ends** (decided 2026-11-07). The original Linux build keeps the

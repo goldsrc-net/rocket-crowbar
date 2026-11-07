@@ -27,6 +27,8 @@
 #include "player.h"
 #include "skill.h"
 #include "gamerules.h"
+#include "weapons.h"
+#include "Preff.h"
 
 class CRecharge : public CBaseToggle
 {
@@ -40,6 +42,11 @@ public:
 	int ObjectCaps() override { return (CBaseToggle::ObjectCaps() | FCAP_CONTINUOUS_USE) & ~FCAP_ACROSS_TRANSITION; }
 	bool Save(CSave& save) override;
 	bool Restore(CRestore& restore) override;
+
+	// Rocket Crowbar 1.9's bot interface (not virtual in the original)
+	bool BotCanHaveItem(CBaseEntity* pBot);
+	int GetBotWeight(CBot* pBot, CBaseEntity* pEnemy);
+	void BotUseMe(CBot* pBot);
 
 	static TYPEDESCRIPTION m_SaveData[];
 
@@ -83,6 +90,7 @@ bool CRecharge::KeyValue(KeyValueData* pkvd)
 	return CBaseToggle::KeyValue(pkvd);
 }
 
+// orig 0x1a1370
 void CRecharge::Spawn()
 {
 	Precache();
@@ -93,7 +101,7 @@ void CRecharge::Spawn()
 	UTIL_SetOrigin(pev, pev->origin); // set size and link into world
 	UTIL_SetSize(pev, pev->mins, pev->maxs);
 	SET_MODEL(ENT(pev), STRING(pev->model));
-	m_iJuice = gSkillData.suitchargerCapacity;
+	m_iJuice = (int)PREFS_KeyLoopUpFloat("ITEMS", "WallChargerGive", gSkillData.suitchargerCapacity); // RC: rc.ini
 	pev->frame = 0;
 }
 
@@ -105,6 +113,7 @@ void CRecharge::Precache()
 }
 
 
+// orig 0x1a14b0. RC: the armor cap and charge rate come from rc.ini.
 void CRecharge::Use(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE useType, float value)
 {
 	// if it's not a player, ignore
@@ -167,22 +176,23 @@ void CRecharge::Use(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE useT
 
 
 	// charge the player
-	if (m_hActivator->pev->armorvalue < 100)
+	if (m_hActivator->pev->armorvalue < PREFS_KeyLoopUpIntClamp("PLAYER", "MaxArmor", 100, 0, 999))
 	{
 		m_iJuice--;
 		m_hActivator->pev->armorvalue += 1;
 
-		if (m_hActivator->pev->armorvalue > 100)
-			m_hActivator->pev->armorvalue = 100;
+		if (m_hActivator->pev->armorvalue > PREFS_KeyLoopUpIntClamp("PLAYER", "MaxArmor", 100, 0, 999))
+			m_hActivator->pev->armorvalue = PREFS_KeyLoopUpIntClamp("PLAYER", "MaxArmor", 100, 0, 999);
 	}
 
 	// govern the rate of charge
-	m_flNextCharge = gpGlobals->time + 0.1;
+	m_flNextCharge = gpGlobals->time + PREFS_KeyLoopUpFloat("ITEMS", "WallChargerRate", 0.1);
 }
 
+// orig 0x1a17f0
 void CRecharge::Recharge()
 {
-	m_iJuice = gSkillData.suitchargerCapacity;
+	m_iJuice = (int)PREFS_KeyLoopUpFloat("ITEMS", "WallChargerGive", gSkillData.suitchargerCapacity);
 	pev->frame = 0;
 	SetThink(&CRecharge::SUB_DoNothing);
 }
@@ -202,4 +212,31 @@ void CRecharge::Off()
 	}
 	else
 		SetThink(&CRecharge::SUB_DoNothing);
+}
+
+// The original bot's object (CBot, defined only in the bot library): it begins like an entity
+// (its entvars first), and these read its 16-bit field at +0x2c, compared with the same offset
+// of this entity. That offset of CBaseEntity is never written by the game library (memory the
+// engine zeroes), so ours compares with 0. VERIFY: what the bot keeps at +0x2c.
+static short RCBotField2c(CBot* pBot) { return *reinterpret_cast<short*>(reinterpret_cast<byte*>(pBot) + 0x2c); }
+
+// orig 0x1a1950. The armor cap here clamps to 250 (Use clamps it to 999).
+bool CRecharge::BotCanHaveItem(CBaseEntity* pBot)
+{
+	return m_iJuice > 0 && pBot->pev->armorvalue < PREFS_KeyLoopUpIntClamp("PLAYER", "MaxArmor", 100, 0, 250);
+}
+
+// orig 0x1a19c0
+int CRecharge::GetBotWeight(CBot* pBot, CBaseEntity* pEnemy)
+{
+	if (!BotCanHaveItem(reinterpret_cast<CBaseEntity*>(pBot)))
+		return 0;
+
+	return RCBotField2c(pBot) == 0 ? 50 : 40;
+}
+
+// orig 0x1a1a10: asks BotCanHaveItem and ignores the answer.
+void CRecharge::BotUseMe(CBot* pBot)
+{
+	BotCanHaveItem(reinterpret_cast<CBaseEntity*>(pBot));
 }

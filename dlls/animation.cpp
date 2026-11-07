@@ -499,3 +499,39 @@ int GetBodygroup(void* pmodel, entvars_t* pev, int iGroup)
 
 	return iCurrent;
 }
+
+// Rocket Crowbar 1.9
+
+// orig 0xe8740
+int GetSequenceCount(void* pmodel)
+{
+	studiohdr_t* pstudiohdr = (studiohdr_t*)pmodel;
+	if (!pstudiohdr)
+		return 0;
+
+	return pstudiohdr->numseq;
+}
+
+// orig 0xe8760: precache what every sequence's events need (SequencePrecache by label).
+void PrecacheAllSeq(void* pmodel)
+{
+	studiohdr_t* pstudiohdr = (studiohdr_t*)pmodel;
+	if (!pstudiohdr)
+		return;
+
+	mstudioseqdesc_t* pseqdesc = (mstudioseqdesc_t*)((byte*)pstudiohdr + pstudiohdr->seqindex);
+	for (int i = 0; i < pstudiohdr->numseq; i++)
+		SequencePrecache(pmodel, pseqdesc[i].label);
+}
+
+// orig 0xe87c0: list the model's sequences on the console. No caller in the original.
+void DumpAllSeq(void* pmodel)
+{
+	studiohdr_t* pstudiohdr = (studiohdr_t*)pmodel;
+	if (!pstudiohdr)
+		return;
+
+	mstudioseqdesc_t* pseqdesc = (mstudioseqdesc_t*)((byte*)pstudiohdr + pstudiohdr->seqindex);
+	for (int i = 0; i < pstudiohdr->numseq; i++)
+		ALERT(at_console, "%i\t%s\n", i, pseqdesc[i].label);
+}

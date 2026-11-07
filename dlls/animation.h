@@ -35,6 +35,11 @@ int FindTransition(void* pmodel, int iEndingAnim, int iGoalAnim, int* piDir);
 void SetBodygroup(void* pmodel, entvars_t* pev, int iGroup, int iValue);
 int GetBodygroup(void* pmodel, entvars_t* pev, int iGroup);
 
+// Rocket Crowbar 1.9
+int GetSequenceCount(void* pmodel);
+void PrecacheAllSeq(void* pmodel);
+void DumpAllSeq(void* pmodel);
+
 int GetAnimationEvent(void* pmodel, entvars_t* pev, MonsterEvent_t* pMonsterEvent, float flStart, float flEnd, int index);
 bool ExtractBbox(void* pmodel, int sequence, float* mins, float* maxs);
 

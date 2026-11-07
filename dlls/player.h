@@ -224,7 +224,7 @@ public:
 	void StartSneaking() override { m_tSneaking = gpGlobals->time - 1; }
 	void StopSneaking() override { m_tSneaking = gpGlobals->time + 30; }
 	bool IsSneaking() override { return m_tSneaking <= gpGlobals->time; }
-	bool IsAlive() override { return (pev->deadflag == DEAD_NO) && pev->health > 0; }
+	bool IsAlive() override { return (pev->deadflag == DEAD_NO) && pev->health > 0 && !IsActingAsCam(); } // orig 0x1f6f40: an observer or a driver isn't alive
 	bool ShouldFadeOnDeath() override { return false; }
 	bool IsPlayer() override { return true; } // Spectators should return false for this, they aren't "players" as far as game logic is concerned
 
@@ -390,8 +390,21 @@ public:
 	bool m_blIsObserver; // 0x600, unsaved: set by InitObserver, cleared by ObserverFrame. VERIFY name
 	float m_fDrvEntAlpha; // 0x674, unsaved: the client's cl_de_alpha (0-1), how see-through the driven monster is drawn for its driver. VERIFY name
 
-	virtual bool IsActingAsCam() { return m_blIsObserver || m_bInDriveEnt; }
-	void PlayerDoID(); // orig 0x1ee750
+	virtual bool IsActingAsCam() { return m_blIsObserver || m_bInDriveEnt; } // orig 0x1f6fa0
+	void PlayerDoID();															// orig 0x1ee750
+
+	// w2-player-core: the rest of RC's CBasePlayer functions (player.cpp)
+	void StartDyingCam();
+	void PlayStepSound(int step, float fvol);
+	void UpdateStepSound();
+	void EXPORT ButStompTouch(CBaseEntity* pOther);
+	int BloodColor() override { return m_blIsObserver ? DONT_BLEED : BLOOD_COLOR_RED; } // orig 0x1efbf0
+	int GetRCCaps() override { return IsActingAsCam() ? 0 : 0x7fe3fff; }				 // orig 0x1f6ee0 (no names for the cap bits anywhere)
+	int GetGuassDistOut() override { return 56; }										 // orig 0x1f6f20
+	int GetGuassHull() override { return human_hull; }									 // orig 0x1f6f30
+	Vector GetBotShootOrg() override { return Center() - Vector(0, 0, 18); }			 // orig 0x1f6fc0
+	int GetBotTargetWeight(CBaseEntity* pBot) override { return 7; }					 // orig 0x1f4ea0
+	bool BotTargetRealseable(CBaseEntity* pBot) override { return true; }				 // orig 0x1f4eb0
 
 	// prefs-votes needs: unsaved members of the observer (pregame.cpp) and the votes.
 	bool m_blWasObserver = false;			  // 0x601, set on entering observer mode, cleared nowhere in pregame.cpp. VERIFY name
@@ -455,3 +468,7 @@ inline bool giPrecacheGrunt = false;
 inline DLL_GLOBAL bool gDisplayTitle = false;
 inline DLL_GLOBAL unsigned int g_ulModelIndexPlayer = 0;
 inline DLL_GLOBAL CBaseEntity* g_pLastSpawn = nullptr;
+
+// Rocket Crowbar 1.9: the butt stomp's ring sprite (player.cpp); ClientPrecache (client.cpp) sets it
+// to sprites/shockwave.spr (orig 0x1036a1).
+extern int g_iPlayerShockwave;

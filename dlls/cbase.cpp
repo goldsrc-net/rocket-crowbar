@@ -235,10 +235,15 @@ void DispatchUse(edict_t* pentUsed, edict_t* pentOther)
 		pEntity->Use(pOther, pOther, USE_TOGGLE, 0);
 }
 
+// orig 0xfa7d0. RC: no think for a freed or FL_KILLME edict, or an entity whose pev doesn't
+// point back at this edict.
 void DispatchThink(edict_t* pent)
 {
+	if (!pent->pvPrivateData || 0 != pent->free || FBitSet(pent->v.flags, FL_KILLME))
+		return;
+
 	CBaseEntity* pEntity = (CBaseEntity*)GET_PRIVATE(pent);
-	if (pEntity)
+	if (pEntity && !FNullEnt(pEntity->pev) && pEntity->pev->pContainingEntity == pent)
 	{
 		if (FBitSet(pEntity->pev->flags, FL_DORMANT))
 			ALERT(at_error, "Dormant entity %s is thinking!!\n", STRING(pEntity->pev->classname));
@@ -474,15 +479,11 @@ void SaveReadFields(SAVERESTOREDATA* pSaveData, const char* pname, void* pBaseDa
 }
 
 
+// orig 0xfb1a0. RC: a freed edict, or one without its entity, is no handle either.
 edict_t* EHANDLE::Get()
 {
-	if (m_pent)
-	{
-		if (m_pent->serialnumber == m_serialnumber)
-			return m_pent;
-		else
-			return NULL;
-	}
+	if (m_pent && m_pent->serialnumber == m_serialnumber && 0 == m_pent->free && m_pent->pvPrivateData)
+		return m_pent;
 	return NULL;
 };
 
@@ -524,10 +525,17 @@ CBaseEntity* EHANDLE::operator->()
 
 
 // give health
+// orig 0xfb2c0. RC: negative health is damage (the entity hurts itself).
 bool CBaseEntity::TakeHealth(float flHealth, int bitsDamageType)
 {
 	if (0 == pev->takedamage)
 		return false;
+
+	if (flHealth < 0)
+	{
+		TakeDamage(pev, pev, -flHealth, bitsDamageType);
+		return true;
+	}
 
 	// heal
 	if (pev->health >= pev->max_health)
@@ -543,9 +551,13 @@ bool CBaseEntity::TakeHealth(float flHealth, int bitsDamageType)
 
 // inflict damage on this entity.  bitsDamageType indicates type of damage inflicted, ie: DMG_CRUSH
 
+// orig 0xfb370. RC: negative damage heals (checked before takedamage, as in the original).
 bool CBaseEntity::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType)
 {
 	Vector vecTemp;
+
+	if (flDamage < 0)
+		return TakeHealth(-flDamage, bitsDamageType);
 
 	if (0 == pev->takedamage)
 		return false;
@@ -793,17 +805,56 @@ int CBaseEntity::DamageDecal(int bitsDamageType)
 
 
 
-// NOTE: szName must be a pointer to constant memory, e.g. "monster_class" because the entity
-// will keep a pointer to it after this call.
+// Rocket Crowbar 1.9 (orig 0x2809b0-0x2809b8, 0x2f7280). Create copies every classname it is
+// given into this table, so szName need not be constant memory; GiveNamedItem (player.cpp)
+// uses it too and CWorld clears the count. g_bUnsafeCreate (set by client commands and cheats,
+// cleared in CWorld::Precache) makes Create refuse a classname nothing has spawned yet.
+char g_pFakeConstClassnames[256][128];
+int g_iCntFakeClassnames = 0;
+bool g_bUnsafeCreate = false;
+
+// orig 0xfc050. RC: refuses unknown or (while g_bUnsafeCreate) never-spawned classnames and
+// interns the classname. The original test-spawns the classname first (IsValidEnitityClassname).
 CBaseEntity* CBaseEntity::Create(const char* szName, const Vector& vecOrigin, const Vector& vecAngles, edict_t* pentOwner)
 {
 	edict_t* pent;
 	CBaseEntity* pEntity;
 
-	pent = CREATE_NAMED_ENTITY(MAKE_STRING(szName));
+	if (!IsClassnamePrecached(const_cast<char*>(szName)) && g_bUnsafeCreate)
+	{
+		ALERT(at_console, "Trying to Create %s, not precached!\n", szName);
+		return NULL;
+	}
+
+	if (!IsValidEnitityClassname(const_cast<char*>(szName)))
+	{
+		ALERT(at_console, "NULL Ent, %s, in Create!\n", szName);
+		return NULL;
+	}
+
+	int i;
+	for (i = 0; i < g_iCntFakeClassnames; i++)
+	{
+		if (!stricmp(g_pFakeConstClassnames[i], szName))
+			break;
+	}
+
+	string_t iszName;
+	if (i < g_iCntFakeClassnames)
+		iszName = MAKE_STRING(g_pFakeConstClassnames[i]);
+	else if (g_iCntFakeClassnames < 256)
+	{
+		strcpy(g_pFakeConstClassnames[g_iCntFakeClassnames], szName);
+		iszName = MAKE_STRING(g_pFakeConstClassnames[g_iCntFakeClassnames]);
+		g_iCntFakeClassnames++;
+	}
+	else
+		iszName = MAKE_STRING(szName); // table full: the caller's string, as stock
+
+	pent = CREATE_NAMED_ENTITY(iszName);
 	if (FNullEnt(pent))
 	{
-		ALERT(at_console, "NULL Ent in Create!\n");
+		ALERT(at_console, "NULL Ent, %s, in Create!\n", szName);
 		return NULL;
 	}
 	pEntity = Instance(pent);

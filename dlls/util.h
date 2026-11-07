@@ -341,6 +341,9 @@ extern float UTIL_AngleDistance(float next, float cur);
 extern char* UTIL_VarArgs(const char* format, ...);
 extern void UTIL_Remove(CBaseEntity* pEntity);
 extern bool UTIL_IsValidEntity(edict_t* pent);
+class CBasePlayer;
+class CBasePlayerItem;
+void UTIL_GetNextBestWeapon(CBasePlayer* pPlayer, CBasePlayerItem* pCurrentWeapon); // Rocket Crowbar 1.9, no caller
 extern bool UTIL_TeamsMatch(const char* pTeamName1, const char* pTeamName2);
 
 // Use for ease-in, ease-out style interpolation (accel/decel)
@@ -361,6 +364,7 @@ inline void UTIL_CenterPrintAll(const char* msg_name, const char* param1 = NULL,
 	UTIL_ClientPrintAll(HUD_PRINTCENTER, msg_name, param1, param2, param3, param4);
 }
 
+class CBasePlayer;
 class CBasePlayerItem;
 class CBasePlayer;
 
@@ -531,6 +535,7 @@ int SENTENCEG_Lookup(const char* sample, char* sentencenum);
 void TEXTURETYPE_Init();
 char TEXTURETYPE_Find(char* name);
 float TEXTURETYPE_PlaySound(TraceResult* ptr, Vector vecSrc, Vector vecEnd, int iBulletType);
+void TEXTURETYPE_MkTeAndPlaySound(Vector vecOrigin, const char* pszSound, float flVolume, float flAttenuation, int iPitch); // Rocket Crowbar 1.9 (sound.cpp)
 
 // NOTE: use EMIT_SOUND_DYN to set the pitch of a sound. Pitch of 100
 // is no pitch shift.  Pitch > 100 up to 255 is a higher pitch, pitch < 100

@@ -31,6 +31,7 @@
 #include "weapons.h"
 #include "gamerules.h"
 #include "UserMessages.h"
+#include "animation.h"
 
 float UTIL_WeaponTimeBase()
 {
@@ -206,6 +207,12 @@ UTIL_GroupTrace::~UTIL_GroupTrace()
 	g_groupop = m_oldgroupop;
 
 	ENGINE_SETGROUPMASK(g_groupmask, g_groupop);
+}
+
+// orig 0x2319e0. Rocket Crowbar 1.9: a wrapper with no caller in the original.
+void UTIL_GetNextBestWeapon(CBasePlayer* pPlayer, CBasePlayerItem* pCurrentWeapon)
+{
+	g_pGameRules->GetNextBestWeapon(pPlayer, pCurrentWeapon);
 }
 
 TYPEDESCRIPTION gEntvarsDescription[] =
@@ -1573,11 +1580,17 @@ void UTIL_BubbleTrail(Vector from, Vector to, int count)
 }
 
 
+// orig 0x2349d0. RC: only a live, valid entity, and the RC entities holding it are told first.
 void UTIL_Remove(CBaseEntity* pEntity)
 {
 	if (!pEntity)
 		return;
 
+	edict_t* pent = pEntity->pev->pContainingEntity;
+	if (!pent || !pent->pvPrivateData || 0 != pent->free || FNullEnt(pEntity->pev))
+		return;
+
+	DispatchRemoveEnt(pEntity->edict());
 	pEntity->UpdateOnRemove();
 	pEntity->pev->flags |= FL_KILLME;
 	pEntity->pev->targetname = 0;
@@ -1592,9 +1605,15 @@ bool UTIL_IsValidEntity(edict_t* pent)
 }
 
 
+// orig 0x234ac0. RC: once per classname (it adds the classname to the precache list). Five
+// monsters are also spawned before removal and every sequence of their model precached
+// (PrecacheAllSeq), so their sequences' event sounds and models are ready.
 void UTIL_PrecacheOther(const char* szClassname)
 {
 	edict_t* pent;
+
+	if (IsClassnamePrecachedNoInvalid(szClassname))
+		return;
 
 	pent = CREATE_NAMED_ENTITY(MAKE_STRING(szClassname));
 	if (FNullEnt(pent))
@@ -1605,7 +1624,16 @@ void UTIL_PrecacheOther(const char* szClassname)
 
 	CBaseEntity* pEntity = CBaseEntity::Instance(VARS(pent));
 	if (pEntity)
+	{
 		pEntity->Precache();
+		AddToPrecachedList(szClassname);
+		if (!stricmp("monster_scientist", szClassname) || !stricmp("monster_barney", szClassname) || !stricmp("monster_alien_grunt", szClassname) || !stricmp("monster_alien_slave", szClassname) || !stricmp("monster_human_grunt", szClassname))
+		{
+			DispatchSpawn(pEntity->edict());
+			if (0 != pEntity->pev->modelindex)
+				PrecacheAllSeq(GET_MODEL_PTR(pEntity->edict()));
+		}
+	}
 	REMOVE_ENTITY(pent);
 }
 

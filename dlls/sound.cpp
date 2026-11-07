@@ -27,7 +27,7 @@
 #include "pm_materials.h"
 #include "pm_shared.h"
 
-static char* memfgets(byte* pMemFile, int fileSize, int& filePos, char* pBuffer, int bufferSize);
+char* memfgets(byte* pMemFile, int fileSize, int& filePos, char* pBuffer, int bufferSize);
 
 
 // ==================== GENERIC AMBIENT SOUND ======================================
@@ -1500,7 +1500,8 @@ char grgchTextureType[CTEXTURESMAX];				   // parallel array of texture types
 // save in array.  Only works first time called,
 // ignored on subsequent calls.
 
-static char* memfgets(byte* pMemFile, int fileSize, int& filePos, char* pBuffer, int bufferSize)
+// orig 0x2156a0 (global in the original, static in halflife-updated)
+char* memfgets(byte* pMemFile, int fileSize, int& filePos, char* pBuffer, int bufferSize)
 {
 	// Bullet-proofing
 	if (!pMemFile || !pBuffer)
@@ -1636,6 +1637,20 @@ char TEXTURETYPE_Find(char* name)
 // original traceline endpoints used by the attacker, iBulletType is the type of bullet that hit the texture.
 // returns volume of strike instrument (crowbar) to play
 
+// orig 0x215a30. Rocket Crowbar 1.9: play a sound at a point from a short-lived entity
+// ("sound_emiiter", removed 0.1 s later) instead of an ambient sound from the world.
+void TEXTURETYPE_MkTeAndPlaySound(Vector vecOrigin, const char* pszSound, float flVolume, float flAttenuation, int iPitch)
+{
+	CBaseEntity* pEntity = GetClassPtr((CBaseEntity*)NULL);
+	pEntity->Spawn();
+	pEntity->pev->classname = MAKE_STRING("sound_emiiter");
+	pEntity->SetThink(&CBaseEntity::SUB_Remove);
+	pEntity->pev->nextthink = gpGlobals->time + 0.1;
+	UTIL_SetOrigin(pEntity->pev, vecOrigin);
+	EMIT_SOUND_DYN(pEntity->edict(), CHAN_BODY, pszSound, flVolume, flAttenuation, 0, iPitch);
+}
+
+// orig 0x215ae0
 float TEXTURETYPE_PlaySound(TraceResult* ptr, Vector vecSrc, Vector vecEnd, int iBulletType)
 {
 	// hit the world, try to play sound based on texture material type
@@ -1651,7 +1666,9 @@ float TEXTURETYPE_PlaySound(TraceResult* ptr, Vector vecSrc, Vector vecEnd, int 
 	int cnt;
 	float fattn = ATTN_NORM;
 
-	if (!g_pGameRules->PlayTextureSounds())
+	// Rocket Crowbar: no texture sounds with sv_lowlag 1. The original doesn't ask the game rules
+	// (PlayTextureSounds, false in multiplayer), so its deathmatch plays them.
+	if (CVAR_GET_FLOAT("sv_lowlag") == 1)
 		return 0.0;
 
 	CBaseEntity* pEntity = CBaseEntity::Instance(ptr->pHit);
@@ -1803,10 +1820,10 @@ float TEXTURETYPE_PlaySound(TraceResult* ptr, Vector vecSrc, Vector vecEnd, int 
 			switch (RANDOM_LONG(0, 1))
 			{
 			case 0:
-				UTIL_EmitAmbientSound(CWorld::World->edict(), ptr->vecEndPos, "buttons/spark5.wav", flVolume, ATTN_NORM, 0, 100);
+				TEXTURETYPE_MkTeAndPlaySound(ptr->vecEndPos, "buttons/spark5.wav", flVolume, ATTN_NORM, 100);
 				break;
 			case 1:
-				UTIL_EmitAmbientSound(CWorld::World->edict(), ptr->vecEndPos, "buttons/spark6.wav", flVolume, ATTN_NORM, 0, 100);
+				TEXTURETYPE_MkTeAndPlaySound(ptr->vecEndPos, "buttons/spark6.wav", flVolume, ATTN_NORM, 100);
 				break;
 				// case 0: EMIT_SOUND(ENT(pev), CHAN_VOICE, "buttons/spark5.wav", flVolume, ATTN_NORM);	break;
 				// case 1: EMIT_SOUND(ENT(pev), CHAN_VOICE, "buttons/spark6.wav", flVolume, ATTN_NORM);	break;
@@ -1814,8 +1831,8 @@ float TEXTURETYPE_PlaySound(TraceResult* ptr, Vector vecSrc, Vector vecEnd, int 
 		}
 	}
 
-	// play material hit sound
-	UTIL_EmitAmbientSound(CWorld::World->edict(), ptr->vecEndPos, rgsz[RANDOM_LONG(0, cnt - 1)], fvol, fattn, 0, 96 + RANDOM_LONG(0, 0xf));
+	// play material hit sound (RC: from a temporary entity, TEXTURETYPE_MkTeAndPlaySound)
+	TEXTURETYPE_MkTeAndPlaySound(ptr->vecEndPos, rgsz[RANDOM_LONG(0, cnt - 1)], fvol, fattn, 96 + RANDOM_LONG(0, 0xf));
 	//EMIT_SOUND_DYN( ENT(m_pPlayer->pev), CHAN_WEAPON, rgsz[RANDOM_LONG(0,cnt-1)], fvol, ATTN_NORM, 0, 96 + RANDOM_LONG(0,0xf));
 
 	return fvolbar;

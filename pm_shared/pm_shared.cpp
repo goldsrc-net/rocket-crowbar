@@ -1841,6 +1841,141 @@ bool PM_CheckStuck()
 	return true;
 }
 
+// orig 0xde700 (SDK 2.0, which RC 1.9 is built on; halflife-updated dropped it). Where a chase
+// camera sits: 112 units behind the target's eyes (origin + 28) along the view angles, pulled
+// in to whatever the line hits, 4 units off the surface.
+void GetChaseOrigin(float* angles, int target, float* offset, float* returnvec)
+{
+	physent_t* ent = &pmove->physents[target];
+	Vector forward, vecStart, vecEnd;
+
+	AngleVectors(Vector(angles), &forward, nullptr, nullptr);
+
+	VectorCopy(ent->origin, vecStart);
+	vecStart[2] += 28;
+
+	VectorMA(offset, 112, forward, vecEnd);
+	VectorSubtract(vecStart, vecEnd, vecEnd);
+
+	pmtrace_t* trace = pmove->PM_TraceLine(vecStart, vecEnd, PM_TRACELINE_PHYSENTSONLY, 2, target);
+
+	VectorMA(trace->endpos, 4, trace->plane.normal, returnvec);
+}
+
+#ifndef CLIENT_DLL
+/*
+===============
+PM_SpectatorMove
+
+orig 0xde7e0. The server's is the SDK 2.0 one RC 1.9 shipped: iuser2 0 roams freely, any other
+iuser2 chases the physent with that info, from behind (GetChaseOrigin), locked to the
+target's yaw and roll when iuser1 is 1 (OBS_CHASE_LOCKED). The client build keeps
+halflife-updated's (below), which matches the clients players run.
+===============
+*/
+void PM_SpectatorMove()
+{
+	float speed, drop, friction, control, newspeed;
+	float currentspeed, addspeed, accelspeed;
+	int i;
+	Vector wishvel;
+	float fmove, smove;
+	Vector wishdir;
+	float wishspeed;
+
+	if (pmove->iuser2 == 0)
+	{
+		speed = Length(pmove->velocity);
+		if (speed < 1)
+		{
+			VectorCopy(vec3_origin, pmove->velocity)
+		}
+		else
+		{
+			drop = 0;
+
+			friction = pmove->movevars->friction * 1.5; // extra friction
+			control = speed < pmove->movevars->stopspeed ? pmove->movevars->stopspeed : speed;
+			drop += control * friction * pmove->frametime;
+
+			newspeed = speed - drop;
+			if (newspeed < 0)
+				newspeed = 0;
+			newspeed /= speed;
+
+			VectorScale(pmove->velocity, newspeed, pmove->velocity);
+		}
+
+		fmove = pmove->cmd.forwardmove;
+		smove = pmove->cmd.sidemove;
+
+		VectorNormalize(pmove->forward);
+		VectorNormalize(pmove->right);
+
+		for (i = 0; i < 3; i++)
+		{
+			wishvel[i] = pmove->forward[i] * fmove + pmove->right[i] * smove;
+		}
+		wishvel[2] += pmove->cmd.upmove;
+
+		VectorCopy(wishvel, wishdir);
+		wishspeed = VectorNormalize(wishdir);
+
+		if (wishspeed > pmove->movevars->spectatormaxspeed)
+		{
+			VectorScale(wishvel, pmove->movevars->spectatormaxspeed / wishspeed, wishvel);
+			wishspeed = pmove->movevars->spectatormaxspeed;
+		}
+
+		currentspeed = DotProduct(pmove->velocity, wishdir);
+		addspeed = wishspeed - currentspeed;
+		if (addspeed <= 0)
+			return;
+
+		accelspeed = pmove->movevars->accelerate * pmove->frametime * wishspeed;
+		if (accelspeed > addspeed)
+			accelspeed = addspeed;
+
+		for (i = 0; i < 3; i++)
+			pmove->velocity[i] += accelspeed * wishdir[i];
+
+		VectorMA(pmove->origin, pmove->frametime, pmove->velocity, pmove->origin);
+	}
+	else
+	{
+		int target;
+
+		for (target = 0; target < pmove->numphysent; target++)
+		{
+			if (pmove->physents[target].info == pmove->iuser2)
+				break;
+		}
+
+		if (target == pmove->numphysent)
+			return;
+
+		Vector angles;
+		if (pmove->iuser1 == OBS_CHASE_LOCKED)
+		{
+			angles[0] = 0;
+			angles[1] = pmove->physents[target].angles[1];
+			angles[2] = pmove->physents[target].angles[2];
+		}
+		else
+		{
+			VectorCopy(pmove->angles, angles);
+		}
+
+		Vector offset = vec3_origin;
+		Vector newOrg;
+		GetChaseOrigin(angles, target, offset, newOrg);
+
+		VectorCopy(newOrg, pmove->origin);
+		VectorCopy(angles, pmove->angles);
+		VectorCopy(vec3_origin, pmove->velocity);
+	}
+}
+#else
 /*
 ===============
 PM_SpectatorMove
@@ -1967,6 +2102,7 @@ void PM_SpectatorMove()
 		VectorCopy(vec3_origin, pmove->velocity);
 	}
 }
+#endif
 
 /*
 ==================
@@ -2643,10 +2779,15 @@ void PM_Jump()
 	// In the air now.
 	pmove->onground = -1;
 
+#ifdef CLIENT_DLL
 	PM_PreventMegaBunnyJumping();
 
 	// Don't play jump sounds while frozen.
 	if ((pmove->flags & FL_FROZEN) == 0)
+#else
+	// orig 0xdfaf0: RC 1.9's server (SDK 2.0) has no bunny-hop cap and plays the jump sound
+	// even while frozen. The client build keeps halflife-updated's.
+#endif
 	{
 		if (tfc)
 		{
@@ -2779,6 +2920,16 @@ void PM_CheckFalling()
 		if (pmove->waterlevel > 0)
 		{
 		}
+#ifndef CLIENT_DLL
+		// orig 0xe0170: RC 1.9's server has no hard-landing case. Over half the safe fall speed
+		// always plays the pain sound at 0.85 (no "tfc" test); the client build keeps
+		// halflife-updated's.
+		else if (pmove->flFallVelocity > PLAYER_MAX_SAFE_FALL_SPEED / 2)
+		{
+			pmove->PM_PlaySound(CHAN_VOICE, "player/pl_fallpain3.wav", 1, ATTN_NORM, 0, PITCH_NORM);
+			fvol = 0.85;
+		}
+#else
 		else if (pmove->flFallVelocity > PLAYER_MAX_SAFE_FALL_SPEED)
 		{
 			// NOTE:  In the original game dll , there were no breaks after these cases, causing the first one to
@@ -2805,6 +2956,7 @@ void PM_CheckFalling()
 
 			fvol = 0.85;
 		}
+#endif
 		else if (pmove->flFallVelocity < PLAYER_MIN_BOUNCE_SPEED)
 		{
 			fvol = 0;
@@ -3434,6 +3586,16 @@ void PM_Move(struct playermove_s* ppmove, qboolean server)
 }
 
 int PM_GetVisEntInfo(int ent)
+{
+	if (ent >= 0 && ent <= pmove->numvisent)
+	{
+		return pmove->visents[ent].info;
+	}
+	return -1;
+}
+
+// orig 0xe1290: SDK 2.0's name for PM_GetVisEntInfo (halflife-updated renamed it).
+int PM_GetInfo(int ent)
 {
 	if (ent >= 0 && ent <= pmove->numvisent)
 	{

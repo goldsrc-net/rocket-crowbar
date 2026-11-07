@@ -621,7 +621,7 @@ void CDriveBM::UpdateOwnerHUD()
 		iPercent = 100;
 
 	MESSAGE_BEGIN(MSG_ONE, gmsgHealth, NULL, m_pOwner->pev->pContainingEntity);
-	WRITE_BYTE(iPercent);
+	WRITE_SHORT(iPercent);
 	MESSAGE_END();
 	m_iLastHealth = (int)pev->health;
 }
@@ -684,7 +684,7 @@ void CDriveBM::Killed(entvars_t* pevAttacker, int iGib)
 		WRITE_BYTE(4);
 		MESSAGE_END();
 		MESSAGE_BEGIN(MSG_ONE, gmsgHealth, NULL, m_pOwner->pev->pContainingEntity);
-		WRITE_BYTE(0);
+		WRITE_SHORT(0);
 		MESSAGE_END();
 	}
 

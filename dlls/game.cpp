@@ -45,7 +45,7 @@ cvar_t allow_spectators = {"allow_spectators", "0.0", FCVAR_SERVER}; // 0 preven
 
 cvar_t mp_chattime = {"mp_chattime", "10", FCVAR_SERVER};
 
-cvar_t sv_allowbunnyhopping = {"sv_allowbunnyhopping", "0", FCVAR_SERVER};
+cvar_t sv_allowbunnyhopping = {"sv_allowbunnyhopping", "1", FCVAR_SERVER}; // 1: RC 1.9 has no bunny-hop cap (DEVIATIONS.md)
 
 // Rocket Crowbar 1.9 (reference/cvars.tsv: names, defaults and flags read from the original)
 cvar_t rockbarversion = {"Rocket_Crowbar_Version", "19", FCVAR_SERVER};

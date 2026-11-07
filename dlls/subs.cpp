@@ -51,9 +51,26 @@ void CNullEntity::Spawn()
 }
 LINK_ENTITY_TO_CLASS(info_null, CNullEntity);
 
+// Rocket Crowbar 1.9: a null entity the engine removes at the end of the frame it spawns in
+// (FL_KILLME), so other entities' Spawn can still find it that frame. VERIFY: nothing in the
+// original's code looks for info_semi_null by name; maps may use it as a target.
+class CSemiNullEntity : public CBaseEntity
+{
+public:
+	void Spawn() override;
+};
+
+// orig 0x21c470
+void CSemiNullEntity::Spawn()
+{
+	pev->flags |= FL_KILLME;
+}
+LINK_ENTITY_TO_CLASS(info_semi_null, CSemiNullEntity);
+
 class CBaseDMStart : public CPointEntity
 {
 public:
+	void Spawn() override;
 	bool KeyValue(KeyValueData* pkvd) override;
 	bool IsTriggered(CBaseEntity* pEntity) override;
 
@@ -62,18 +79,53 @@ private:
 
 // These are the new entry points to entities.
 LINK_ENTITY_TO_CLASS(info_player_deathmatch, CBaseDMStart);
-LINK_ENTITY_TO_CLASS(info_player_start, CPointEntity);
+LINK_ENTITY_TO_CLASS(info_player_start, CBaseDMStart); // RC: CBaseDMStart (stock CPointEntity)
 LINK_ENTITY_TO_CLASS(info_landmark, CPointEntity);
 
+// Rocket Crowbar 1.9: the spots its own entities spawn at. CBaseDMStart's team_no keyvalue is
+// the team a spot belongs to (pev->button).
+LINK_ENTITY_TO_CLASS(info_deathball_spawn, CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_drive_apache_spawn, CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_drive_garg_spawn, CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_drive_assassin_spawn, CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_drive_icky_spawn, CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_drive_houndeye_spawn, CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_drive_panth_spawn, CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_drive_slave_spawn, CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_drive_turret_spawn, CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_drive_bm_spawn, CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_drive_agrunt_spawn, CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_drive_controller_spawn, CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_drive_bullsquid_spawn, CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_flagspawn, CBaseDMStart);
+LINK_ENTITY_TO_CLASS(info_teamspawn, CBaseDMStart);
+
+// orig 0x21c820. The original sets "master" but then reports it unhandled (the team_no test's
+// else clears fHandled), and never passes other keys on to CPointEntity; kept.
 bool CBaseDMStart::KeyValue(KeyValueData* pkvd)
 {
 	if (FStrEq(pkvd->szKeyName, "master"))
 	{
 		pev->netname = ALLOC_STRING(pkvd->szValue);
+	}
+
+	if (FStrEq(pkvd->szKeyName, "team_no"))
+	{
+		pev->button = atoi(pkvd->szValue);
 		return true;
 	}
 
-	return CPointEntity::KeyValue(pkvd);
+	return false;
+}
+
+// orig 0x21c9d0. RC: a spot stands still, not solid, with no size.
+void CBaseDMStart::Spawn()
+{
+	pev->velocity = g_vecZero;
+	pev->movetype = MOVETYPE_NONE;
+	pev->solid = SOLID_NOT;
+	UTIL_SetOrigin(pev, pev->origin);
+	UTIL_SetSize(pev, g_vecZero, g_vecZero);
 }
 
 bool CBaseDMStart::IsTriggered(CBaseEntity* pEntity)
@@ -106,8 +158,17 @@ void CBaseEntity::UpdateOnRemove()
 }
 
 // Convenient way to delay removing oneself
+// orig 0x21cac0. RC: only a live, valid entity is removed; RC entities that hold it are told
+// (DispatchRemoveEnt) and any beam attached to it is killed on every client first.
 void CBaseEntity::SUB_Remove()
 {
+	if (!pev)
+		return;
+
+	edict_t* pent = pev->pContainingEntity;
+	if (!pent || 0 != pent->free || !pent->pvPrivateData || FNullEnt(pev))
+		return;
+
 	UpdateOnRemove();
 	if (pev->health > 0)
 	{
@@ -115,6 +176,13 @@ void CBaseEntity::SUB_Remove()
 		pev->health = 0;
 		ALERT(at_aiconsole, "SUB_Remove called on entity with health > 0\n");
 	}
+
+	DispatchRemoveEnt(edict());
+
+	MESSAGE_BEGIN(MSG_BROADCAST, SVC_TEMPENTITY);
+	WRITE_BYTE(TE_KILLBEAM);
+	WRITE_SHORT(ENTINDEX(edict()));
+	MESSAGE_END();
 
 	REMOVE_ENTITY(ENT(pev));
 }

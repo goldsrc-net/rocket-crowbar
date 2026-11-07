@@ -751,7 +751,7 @@ void CDriveApache::UpdateOwnerHUD()
 			iHealth = 100;
 
 		MESSAGE_BEGIN(MSG_ONE, gmsgHealth, NULL, m_pOwner->edict());
-		WRITE_BYTE(iHealth);
+		WRITE_SHORT(iHealth);
 		MESSAGE_END();
 
 		m_iClientHealth = (int)pev->health;
@@ -1163,7 +1163,7 @@ void CDriveApache::Killed(entvars_t* pevAttacker, int iGib)
 			MESSAGE_END();
 
 			MESSAGE_BEGIN(MSG_ONE, gmsgHealth, NULL, m_pOwner->edict());
-			WRITE_BYTE(0);
+			WRITE_SHORT(0);
 			MESSAGE_END();
 		}
 	}

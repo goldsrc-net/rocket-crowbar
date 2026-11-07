@@ -661,7 +661,7 @@ void CDriveBullsquid::UpdateOwnerHUD()
 		iHealth = 100;
 
 	MESSAGE_BEGIN(MSG_ONE, gmsgHealth, NULL, m_pOwner->pev->pContainingEntity);
-	WRITE_BYTE(iHealth);
+	WRITE_SHORT(iHealth);
 	MESSAGE_END();
 
 	m_iClientHealth = (int)pev->health;
@@ -923,7 +923,7 @@ void CDriveBullsquid::Killed(entvars_t* pevAttacker, int iGib)
 		MESSAGE_END();
 
 		MESSAGE_BEGIN(MSG_ONE, gmsgHealth, NULL, m_pOwner->pev->pContainingEntity);
-		WRITE_BYTE(0);
+		WRITE_SHORT(0);
 		MESSAGE_END();
 	}
 

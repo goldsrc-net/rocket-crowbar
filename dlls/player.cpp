@@ -41,6 +41,11 @@
 #include "hltv.h"
 #include "UserMessages.h"
 #include "client.h"
+#include "driveent.h"
+#include "flag.h"
+#include "curses.h"
+#include "pregame.h"
+#include "Preff.h"
 
 // #define DUCKFIX
 
@@ -48,6 +53,22 @@ extern void CopyToBodyQue(entvars_t* pev);
 extern edict_t* EntSelectSpawnPoint(CBaseEntity* pPlayer);
 
 extern bool IsBustingGame();
+
+// Rocket Crowbar 1.9: from other files
+extern const char* GetTeamNameForIndex(int iTeam); // teamplay_gamerules.cpp (RC)
+extern bool IsClientListenServer(edict_t* pEntity); // client.cpp (RC)
+extern short FixedSigned16(float value, float scale); // util.cpp
+extern unsigned short FixedUnsigned16(float value, float scale); // util.cpp
+void DestroyFreezeTimer(entvars_t* pev);   // hornetgun.cpp (RC)
+void DestroyFrictionTimer(entvars_t* pev); // handgrenade.cpp (RC)
+
+// Rocket Crowbar 1.9: this file's RC free functions
+int MapTextureTypeStepType(char chTextureType);
+void DoPlayerShockwaveEffect(Vector vecOrigin);
+CBaseEntity* PickRandomSpawnOfClassname(const char* szClassname, CBaseEntity* pPlayer, bool bTeam, bool& bForced);
+edict_t* DoEntSpawnPointStuff(const char* szClassname, CBaseEntity* pPlayer, bool bTeam);
+CBaseEntity* FindEntityForward(CBaseEntity* pMe);
+bool AllowToTransform(edict_t* pPlayer);
 
 #define TRAIN_ACTIVE 0x80
 #define TRAIN_NEW 0xc0
@@ -374,6 +395,7 @@ void CBasePlayer::TraceAttack(entvars_t* pevAttacker, float flDamage, Vector vec
 #define ARMOR_RATIO 0.2 // Armor Takes 80% of the damage
 #define ARMOR_BONUS 0.5 // Each Point of Armor is work 1/x points of health
 
+// orig 0x1ea2c0; RC: mp_teampush
 bool CBasePlayer::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType)
 {
 	// have suit diagnose the problem - ie: report damage type
@@ -406,7 +428,25 @@ bool CBasePlayer::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, fl
 
 	if (!g_pGameRules->FPlayerCanTakeDamage(this, pAttacker))
 	{
-		// Refuse the damage
+		// Refuse the damage. Rocket Crowbar: with mp_teampush 1 the hit still pushes the player,
+		// as CBaseMonster::TakeDamage would.
+		Vector vecDir = g_vecZero;
+		if (!FNullEnt(pevInflictor))
+		{
+			CBaseEntity* pInflictor = CBaseEntity::Instance(pevInflictor);
+			if (pInflictor)
+			{
+				vecDir = (pInflictor->Center() - Vector(0, 0, 10) - Center()).Normalize();
+				vecDir = g_vecAttackDir = vecDir.Normalize();
+			}
+		}
+
+		if (CVAR_GET_FLOAT("mp_teampush") != 1)
+			return false;
+
+		if (!FNullEnt(pevInflictor) && pev->movetype == MOVETYPE_WALK && (!pevAttacker || pevAttacker->solid != SOLID_TRIGGER))
+			pev->velocity = pev->velocity + vecDir * -DamageForce(flDamage);
+
 		return false;
 	}
 
@@ -852,13 +892,53 @@ void CBasePlayer::RemoveAllItems(bool removeSuit)
  * ENTITY_METHOD(PlayerDie)
  */
 
+// orig 0x1eb6a0. RC: drops the CTF flag, takes the driver out of a drive monster, the dying
+// camera (StartDyingCam), no gibs or death sound for an invisible player.
 void CBasePlayer::Killed(entvars_t* pevAttacker, int iGib)
 {
 	CSound* pSound;
 
-	// Holster weapon immediately, to allow it to cleanup
-	if (m_pActiveItem)
-		m_pActiveItem->Holster();
+	// halflife-updated holstered the active weapon here; the original doesn't.
+
+	DispatchPlayerKilled(edict());
+	DestroyFreezeTimer(pev);
+	ClearBits(pev->flags, FL_FROZEN);
+	DestroyFrictionTimer(pev);
+	pev->gravity = 1;
+	pev->friction = 1;
+
+	CBaseFlag* pFlag = DoesEntHaveFlag(this);
+	if (pFlag)
+	{
+		char szMsg[512];
+
+		pFlag->FlagDrop(pev);
+		sprintf(szMsg, "* %s of team %s (%s) lost the %s (%s) flag!\n", STRING(pev->netname), m_szTeamName, GetFlagTeamColor(g_pGameRules->GetTeamIndex(m_szTeamName) + 1), GetTeamNameForIndex(pFlag->m_iTeam), GetFlagTeamColor(pFlag->m_iTeam));
+		UTIL_SayTextAll(szMsg, this);
+		UTIL_ScreenFade(this, GetFlagBaseColor(pFlag->m_iTeam), 1, 0, 32, 0);
+	}
+
+	pev->renderfx = kRenderFxNone;
+	pev->rendercolor = g_vecZero;
+	pev->renderamt = 0;
+
+	if (m_bInDriveEnt && m_pCurDriveEnt)
+	{
+		if (m_pCurDriveEnt->IsAlive())
+		{
+			m_pCurDriveEnt->DEClientLeave();
+			m_bInDriveEnt = false;
+			m_pCurDriveEnt->Killed(pev, GIB_NORMAL);
+			UTIL_SetOrigin(pev, m_pCurDriveEnt->pev->origin);
+			m_pCurDriveEnt = NULL;
+			pev->effects |= EF_NODRAW;
+		}
+		else
+			m_pCurDriveEnt->DEClientLeave();
+
+		m_bInDriveEnt = false;
+		m_pCurDriveEnt = NULL;
+	}
 
 	g_pGameRules->PlayerKilled(this, pevAttacker, g_pevLastInflictor);
 
@@ -877,14 +957,19 @@ void CBasePlayer::Killed(entvars_t* pevAttacker, int iGib)
 		}
 	}
 
+	if (pev->iuser4 == 1) // VERIFY: nothing in RC's code sets iuser4 on a player
+		return;
+
+	ClearBits(pev->flags, FL_FROZEN);
 	SetAnimation(PLAYER_DIE);
 
 	m_flRespawnTimer = 0.0f;
 
-	pev->modelindex = g_ulModelIndexPlayer; // don't use eyes
+	// The original doesn't reset pev->modelindex to g_ulModelIndexPlayer here.
 
 	pev->deadflag = DEAD_DYING;
 	pev->movetype = MOVETYPE_TOSS;
+	pev->takedamage = DAMAGE_NO;
 	ClearBits(pev->flags, FL_ONGROUND);
 	if (pev->velocity.z < 10)
 		pev->velocity.z += RANDOM_FLOAT(0, 300);
@@ -895,7 +980,7 @@ void CBasePlayer::Killed(entvars_t* pevAttacker, int iGib)
 	// send "health" update message to zero
 	m_iClientHealth = 0;
 	MESSAGE_BEGIN(MSG_ONE, gmsgHealth, NULL, pev);
-	WRITE_SHORT(m_iClientHealth);
+	WRITE_SHORT(m_iClientHealth); // VERIFY: the original's Health is 1 byte (UserMessages.cpp registers 2, see the dossier)
 	MESSAGE_END();
 
 	// Tell Ammo Hud that the player is dead
@@ -912,14 +997,11 @@ void CBasePlayer::Killed(entvars_t* pevAttacker, int iGib)
 	WRITE_BYTE(0);
 	MESSAGE_END();
 
-	// Adrian: always make the players non-solid in multiplayer when they die
-	if (g_pGameRules->IsMultiplayer())
-	{
-		pev->solid = SOLID_NOT;
-	}
+	StartDyingCam();
 
-	// UNDONE: Put this in, but add FFADE_PERMANENT and make fade time 8.8 instead of 4.12
-	// UTIL_ScreenFade( edict(), Vector(128,0,0), 6, 15, 255, FFADE_OUT | FFADE_MODULATE );
+	// a player hidden by a drive monster neither gibs nor makes a death sound
+	if ((pev->effects & EF_NODRAW) != 0)
+		return;
 
 	if ((pev->health < -40 && iGib != GIB_NEVER) || iGib == GIB_ALWAYS)
 	{
@@ -931,11 +1013,15 @@ void CBasePlayer::Killed(entvars_t* pevAttacker, int iGib)
 
 	DeathSound();
 
-	pev->angles.x = 0;
-	pev->angles.z = 0;
+	pev->v_angle.x = 0;
+	pev->v_angle.z = 0;
+	m_vecDeathAng = pev->v_angle;
 
 	SetThink(&CBasePlayer::PlayerDeathThink);
 	pev->nextthink = gpGlobals->time + 0.1;
+
+	// non-solid while dead (halflife-updated does this for multiplayer only, before the gib test)
+	pev->solid = SOLID_NOT;
 }
 
 
@@ -1277,9 +1363,19 @@ bool CBasePlayer::IsOnLadder()
 	return (pev->movetype == MOVETYPE_FLY);
 }
 
+// orig 0x1ec5b0. RC: points the view at the dying camera and holds the death angles.
 void CBasePlayer::PlayerDeathThink()
 {
 	float flForward;
+
+	if (m_blSetView)
+	{
+		SET_VIEW(edict(), m_pCam->edict());
+		m_blSetView = false;
+	}
+
+	pev->angles = m_vecDeathAng;
+	pev->fixangle = 1;
 
 	if (FBitSet(pev->flags, FL_ONGROUND))
 	{
@@ -1299,33 +1395,24 @@ void CBasePlayer::PlayerDeathThink()
 		PackDeadPlayerItems();
 	}
 
+	ClearBits(pev->flags, FL_FROZEN);
 
 	if (0 != pev->modelindex && (!m_fSequenceFinished) && (pev->deadflag == DEAD_DYING))
 	{
 		StudioFrameAdvance();
 
-		m_flRespawnTimer += gpGlobals->frametime;
-		if (m_flRespawnTimer < 4.0f) // 120 frames at 30 fps -- animations should be no longer than this
+		// The original counts think frames (its m_iRespawnFrames); halflife-updated counts 4 seconds.
+		m_flRespawnTimer += 1;
+		if (m_flRespawnTimer < 120) // 120 frames at 30 fps -- animations should be no longer than this
 			return;
 	}
 
+	// halflife-updated also copies the body to the body queue here in multiplayer and stops a
+	// grounded corpse (MOVETYPE_NONE); the original does neither.
 	if (pev->deadflag == DEAD_DYING)
-	{
-		// Once we finish animating, if we're in multiplayer just make a copy of our body right away.
-		if (m_fSequenceFinished && g_pGameRules->IsMultiplayer() && pev->movetype == MOVETYPE_NONE)
-		{
-			CopyToBodyQue(pev);
-			pev->modelindex = 0;
-		}
-
 		pev->deadflag = DEAD_DEAD;
-	}
 
-	// once we're done animating our death and we're on the ground, we want to set movetype to None so our dead body won't do collisions and stuff anymore
-	// this prevents a bug where the dead body would go to a player's head if he walked over it while the dead player was clicking their button to respawn
-	if (pev->movetype != MOVETYPE_NONE && FBitSet(pev->flags, FL_ONGROUND))
-		pev->movetype = MOVETYPE_NONE;
-
+	pev->frame = 255;
 	StopAnimation();
 
 	pev->effects |= EF_NOINTERP;
@@ -1357,9 +1444,6 @@ void CBasePlayer::PlayerDeathThink()
 		StartDeathCam();
 	}
 
-	if (0 != pev->iuser1) // player is in spectator mode
-		return;
-
 	// wait for any button down,  or mp_forcerespawn is set and the respawn time is up
 	if (!fAnyButtonDown && !(g_pGameRules->IsMultiplayer() && forcerespawn.value > 0 && (gpGlobals->time > (m_fDeadTime + 5))))
 		return;
@@ -1377,6 +1461,7 @@ void CBasePlayer::PlayerDeathThink()
 // StartDeathCam - find an intermission spot and send the
 // player off into observer mode
 //=========================================================
+// orig 0x1ec910. RC: takes the view back from the dying camera first.
 void CBasePlayer::StartDeathCam()
 {
 	edict_t *pSpot, *pNewSpot;
@@ -1388,119 +1473,53 @@ void CBasePlayer::StartDeathCam()
 		return;
 	}
 
+	SET_VIEW(edict(), edict());
+
 	pSpot = FIND_ENTITY_BY_CLASSNAME(NULL, "info_intermission");
 
-	if (!FNullEnt(pSpot))
-	{
-		// at least one intermission spot in the world.
-		iRand = RANDOM_LONG(0, 3);
-
-		while (iRand > 0)
-		{
-			pNewSpot = FIND_ENTITY_BY_CLASSNAME(pSpot, "info_intermission");
-
-			if (pNewSpot)
-			{
-				pSpot = pNewSpot;
-			}
-
-			iRand--;
-		}
-
-		CopyToBodyQue(pev);
-
-		UTIL_SetOrigin(pev, pSpot->v.origin);
-		pev->angles = pev->v_angle = pSpot->v.v_angle;
-	}
-	else
+	if (FNullEnt(pSpot))
 	{
 		// no intermission spot. Push them up in the air, looking down at their corpse
 		TraceResult tr;
 		CopyToBodyQue(pev);
 		UTIL_TraceLine(pev->origin, pev->origin + Vector(0, 0, 128), ignore_monsters, edict(), &tr);
-
-		UTIL_SetOrigin(pev, tr.vecEndPos);
-		pev->angles = pev->v_angle = UTIL_VecToAngles(tr.vecEndPos - pev->origin);
+		StartObserver(tr.vecEndPos, UTIL_VecToAngles(tr.vecEndPos - pev->origin));
+		return;
 	}
 
-	// start death cam
+	// at least one intermission spot in the world.
+	iRand = RANDOM_LONG(0, 3);
 
-	m_afPhysicsFlags |= PFLAG_OBSERVER;
-	pev->view_ofs = g_vecZero;
-	pev->fixangle = 1;
-	pev->solid = SOLID_NOT;
-	pev->takedamage = DAMAGE_NO;
-	pev->movetype = MOVETYPE_NONE;
-	pev->modelindex = 0;
+	while (iRand > 0)
+	{
+		pNewSpot = FIND_ENTITY_BY_CLASSNAME(pSpot, "info_intermission");
+
+		if (pNewSpot)
+		{
+			pSpot = pNewSpot;
+		}
+
+		iRand--;
+	}
+
+	CopyToBodyQue(pev);
+	StartObserver(pSpot->v.origin, pSpot->v.v_angle);
 }
 
+// orig 0x1ecb50. The original's is the old SDK's death camera; halflife-updated's spectator
+// mode (TE_KILLPLAYERATTACHMENTS, holster, team reset, RemoveAllItems, Observer_SetMode) isn't in it.
 void CBasePlayer::StartObserver(Vector vecPosition, Vector vecViewAngle)
 {
-	// clear any clientside entities attached to this player
-	MESSAGE_BEGIN(MSG_PAS, SVC_TEMPENTITY, pev->origin);
-	WRITE_BYTE(TE_KILLPLAYERATTACHMENTS);
-	WRITE_BYTE((byte)entindex());
-	MESSAGE_END();
-
-	// Holster weapon immediately, to allow it to cleanup
-	if (m_pActiveItem)
-		m_pActiveItem->Holster();
-
-	if (m_pTank != NULL)
-	{
-		m_pTank->Use(this, this, USE_OFF, 0);
-		m_pTank = NULL;
-	}
-
-	// clear out the suit message cache so we don't keep chattering
-	SetSuitUpdate(NULL, false, 0);
-
-	// Tell Ammo Hud that the player is dead
-	MESSAGE_BEGIN(MSG_ONE, gmsgCurWeapon, NULL, pev);
-	WRITE_BYTE(0);
-	WRITE_BYTE(0XFF);
-	WRITE_BYTE(0xFF);
-	MESSAGE_END();
-
-	// reset FOV
-	m_iFOV = m_iClientFOV = 0;
-	MESSAGE_BEGIN(MSG_ONE, gmsgSetFOV, NULL, pev);
-	WRITE_BYTE(0);
-	MESSAGE_END();
-
-	// Setup flags
-	m_iHideHUD = (HIDEHUD_HEALTH | HIDEHUD_WEAPONS);
 	m_afPhysicsFlags |= PFLAG_OBSERVER;
-	pev->effects = EF_NODRAW;
+
 	pev->view_ofs = g_vecZero;
 	pev->angles = pev->v_angle = vecViewAngle;
 	pev->fixangle = 1;
 	pev->solid = SOLID_NOT;
 	pev->takedamage = DAMAGE_NO;
 	pev->movetype = MOVETYPE_NONE;
-	ClearBits(m_afPhysicsFlags, PFLAG_DUCKING);
-	ClearBits(pev->flags, FL_DUCKING);
-	pev->deadflag = DEAD_RESPAWNABLE;
-	pev->health = 1;
-
-	// Clear out the status bar
-	m_fInitHUD = true;
-
-	pev->team = 0;
-	MESSAGE_BEGIN(MSG_ALL, gmsgTeamInfo);
-	WRITE_BYTE(ENTINDEX(edict()));
-	WRITE_STRING("");
-	MESSAGE_END();
-
-	// Remove all the player's stuff
-	RemoveAllItems(false);
-
-	// Move them to the new position
+	pev->modelindex = 0;
 	UTIL_SetOrigin(pev, vecPosition);
-
-	// Find a player to watch
-	m_flNextObserverInput = 0;
-	Observer_SetMode(m_iObserverLastMode);
 }
 
 //
@@ -1508,11 +1527,10 @@ void CBasePlayer::StartObserver(Vector vecPosition, Vector vecViewAngle)
 //
 #define PLAYER_SEARCH_RADIUS (float)64
 
+// orig 0x1ecc10. RC: with nothing usable in reach, a pickup_drive_apache straight ahead (80
+// units) is used. halflife-updated's IsObserver() early-out isn't in the original.
 void CBasePlayer::PlayerUse()
 {
-	if (IsObserver())
-		return;
-
 	// Was use pressed or released?
 	if (((pev->button | m_afButtonPressed | m_afButtonReleased) & IN_USE) == 0)
 		return;
@@ -1595,6 +1613,21 @@ void CBasePlayer::PlayerUse()
 	}
 	pObject = pClosest;
 
+	if (!pObject)
+	{
+		// the Apache pickup is too big for the sphere search: look straight ahead for it
+		TraceResult tr;
+		Vector vecSrc = pev->origin + pev->view_ofs;
+
+		UTIL_TraceLine(vecSrc, vecSrc + gpGlobals->v_forward * 80, dont_ignore_monsters, edict(), &tr);
+		if (tr.pHit)
+		{
+			CBaseEntity* pHit = CBaseEntity::Instance(tr.pHit);
+			if (pHit && 0 == strcmp(STRING(pHit->pev->classname), "pickup_drive_apache"))
+				pObject = pHit;
+		}
+	}
+
 	// Found an object
 	if (pObject)
 	{
@@ -1627,45 +1660,77 @@ void CBasePlayer::PlayerUse()
 
 
 
+// orig 0x1ed140. RC jumps on the server: the jump speed and the long jump come from rc.ini
+// ([PLAYER] JumpHeight, LongjumpForwardVelo, LongjumpZVelo), a long jump starts a butt stomp
+// (ButStompTouch), the jump plays a step sound, and the old SDK's swimming-up is back.
 void CBasePlayer::Jump()
 {
-	Vector vecWallCheckDir; // direction we're tracing a line to find a wall when walljumping
-	Vector vecAdjustedVelocity;
-	Vector vecSpot;
-	TraceResult tr;
-
-	if (FBitSet(pev->flags, FL_WATERJUMP))
+	if (FBitSet(pev->flags, FL_WATERJUMP) || FBitSet(pev->flags, FL_FROZEN))
 		return;
 
 	if (pev->waterlevel >= 2)
 	{
+		if (pev->watertype == CONTENT_WATER)
+			pev->velocity.z = 100;
+		else if (pev->watertype == CONTENT_SLIME)
+			pev->velocity.z = 80;
+		else
+			pev->velocity.z = 50;
+
+		// play swiming sound
+		if (m_flSwimTime < gpGlobals->time)
+		{
+			m_flSwimTime = gpGlobals->time + 1;
+			switch (RANDOM_LONG(0, 3))
+			{
+			case 0:
+				EMIT_SOUND(ENT(pev), CHAN_BODY, "player/pl_wade1.wav", 1, ATTN_NORM);
+				break;
+			case 1:
+				EMIT_SOUND(ENT(pev), CHAN_BODY, "player/pl_wade2.wav", 1, ATTN_NORM);
+				break;
+			case 2:
+				EMIT_SOUND(ENT(pev), CHAN_BODY, "player/pl_wade3.wav", 1, ATTN_NORM);
+				break;
+			case 3:
+				EMIT_SOUND(ENT(pev), CHAN_BODY, "player/pl_wade4.wav", 1, ATTN_NORM);
+				break;
+			}
+		}
 		return;
 	}
-
-	// jump velocity is sqrt( height * gravity * 2)
 
 	// If this isn't the first frame pressing the jump button, break out.
 	if (!FBitSet(m_afButtonPressed, IN_JUMP))
 		return; // don't pogo stick
 
 	if ((pev->flags & FL_ONGROUND) == 0 || !pev->groundentity)
-	{
 		return;
-	}
 
 	// many features in this function use v_forward, so makevectors now.
 	UTIL_MakeVectors(pev->angles);
 
-	// ClearBits(pev->flags, FL_ONGROUND);		// don't stairwalk
+	ClearBits(pev->flags, FL_ONGROUND); // don't stairwalk
 
 	SetAnimation(PLAYER_JUMP);
 
-	if (m_fLongJump &&
-		(pev->button & IN_DUCK) != 0 &&
-		(pev->flDuckTime > 0) &&
-		pev->velocity.Length() > 50)
+	PlayStepSound(MapTextureTypeStepType(m_chTextureType), 1.0);
+
+	if ((FBitSet(pev->flags, FL_DUCKING) || FBitSet(m_afPhysicsFlags, PFLAG_DUCKING)) && m_fLongJump &&
+		(pev->button & IN_DUCK) != 0 && gpGlobals->time - m_flDuckTime < 1)
 	{
+		RANDOM_LONG(0, 1); // the original throws the result away
+		pev->punchangle.x = -5;
+		pev->velocity = gpGlobals->v_forward * PREFS_KeyLoopUpFloat("PLAYER", "LongjumpForwardVelo", 200);
+		pev->velocity.z = PREFS_KeyLoopUpFloat("PLAYER", "LongjumpZVelo", 500);
 		SetAnimation(PLAYER_SUPERJUMP);
+		m_blInButStomp = true;
+		m_flMinStompTime = gpGlobals->time + 0.1;
+	}
+	else
+	{
+		// jump velocity is sqrt( height * gravity * 2)
+		pev->velocity.z = sqrt(1600 * PREFS_KeyLoopUpFloat("PLAYER", "JumpHeight", 45));
 	}
 
 	// If you're standing on a conveyor, add it's velocity to yours (for momentum)
@@ -1675,14 +1740,7 @@ void CBasePlayer::Jump()
 		pev->velocity = pev->velocity + pev->basevelocity;
 	}
 
-	// JoshA: CS behaviour does this for tracktrain + train as well,
-	// but let's just do this for func_vehicle to avoid breaking existing content.
-	//
-	// If you're standing on a moving train... then add the velocity of the train to yours.
-	if (pevGround && (/*(!strcmp( "func_tracktrain", STRING(pevGround->classname))) ||
-			(!strcmp( "func_train", STRING(pevGround->classname))) ) ||*/
-			(!strcmp("func_vehicle", STRING(pevGround->classname)))))
-		pev->velocity = pev->velocity + pevGround->velocity;
+	// halflife-updated's func_vehicle momentum isn't in the original.
 }
 
 
@@ -1705,13 +1763,69 @@ void FixPlayerCrouchStuck(edict_t* pPlayer)
 	}
 }
 
+// orig 0x1ed530. RC ducks on the server, the old SDK's way: holding duck lowers the view over
+// 0.4 seconds and then shrinks the hull to the duck hull; letting go stands back up when the
+// standing hull fits. Not while frozen, in noclip or observing.
 void CBasePlayer::Duck()
 {
+	if (FBitSet(pev->flags, FL_FROZEN) || pev->movetype == MOVETYPE_NOCLIP || m_blIsObserver)
+		return;
+
 	if ((pev->button & IN_DUCK) != 0)
 	{
-		if (m_IdealActivity != ACT_LEAP)
+		if ((m_afButtonPressed & IN_DUCK) != 0 && !FBitSet(pev->flags, FL_DUCKING))
 		{
-			SetAnimation(PLAYER_WALK);
+			m_flDuckTime = gpGlobals->time;
+			m_afPhysicsFlags |= PFLAG_DUCKING;
+		}
+
+		float time = gpGlobals->time - m_flDuckTime;
+
+		if ((m_afPhysicsFlags & PFLAG_DUCKING) != 0)
+		{
+			if (time >= 0.4 || !FBitSet(pev->flags, FL_ONGROUND))
+			{
+				// finished ducking (or ducked in the air)
+				if (FBitSet(pev->flags, FL_ONGROUND))
+				{
+					pev->origin = pev->origin - Vector(0, 0, 18);
+					FixPlayerCrouchStuck(edict());
+				}
+
+				UTIL_SetOrigin(pev, pev->origin);
+				UTIL_SetSize(pev, Vector(-16, -16, -18), Vector(16, 16, 18));
+				pev->view_ofs = Vector(0, 0, 12);
+				pev->flags |= FL_DUCKING;
+				m_afPhysicsFlags &= ~PFLAG_DUCKING;
+			}
+			else
+			{
+				// still lowering the view
+				float duckFraction = UTIL_SplineFraction(time, 1.0 / 0.4);
+				pev->view_ofs = (Vector(0, 0, 12) - (Vector(-16, -16, -18) - Vector(-16, -16, -36))) * duckFraction + Vector(0, 0, 28) * (1 - duckFraction);
+			}
+		}
+
+		SetAnimation(PLAYER_WALK);
+	}
+	else
+	{
+		// try to stand up (every frame duck isn't held, ducked or not)
+		TraceResult trace;
+		Vector newOrigin = pev->origin;
+
+		if (FBitSet(pev->flags, FL_ONGROUND))
+			newOrigin = newOrigin + Vector(0, 0, 18);
+
+		UTIL_TraceHull(newOrigin, newOrigin, dont_ignore_monsters, human_hull, edict(), &trace);
+
+		if (0 == trace.fStartSolid)
+		{
+			ClearBits(pev->flags, FL_DUCKING);
+			m_afPhysicsFlags &= ~PFLAG_DUCKING;
+			pev->view_ofs = Vector(0, 0, 28);
+			UTIL_SetSize(pev, Vector(-16, -16, -36), Vector(16, 16, 36));
+			pev->origin = newOrigin;
 		}
 	}
 }
@@ -1719,8 +1833,15 @@ void CBasePlayer::Duck()
 //
 // ID's player as such.
 //
+// orig 0x1ed990. RC: an observer is CLASS_NONE, a driver takes the class of what he drives.
 int CBasePlayer::Classify()
 {
+	if (m_blIsObserver)
+		return CLASS_NONE;
+
+	if (m_bInDriveEnt && m_pCurDriveEnt && m_pCurDriveEnt->pev && m_pCurDriveEnt->pev->pContainingEntity && UTIL_IsValidEntity(m_pCurDriveEnt->pev->pContainingEntity))
+		return m_pCurDriveEnt->Classify();
+
 	return CLASS_PLAYER;
 }
 
@@ -1770,6 +1891,488 @@ void CBasePlayer::AddPointsToTeam(int score, bool bAllowNegativeScore)
 			}
 		}
 	}
+}
+
+// Rocket Crowbar keeps the old SDK's server-side step sounds (pm_shared plays the walking ones;
+// the player code plays one when jumping).
+#define STEP_CONCRETE 0 // default step sound
+#define STEP_METAL 1	// metal floor
+#define STEP_DIRT 2		// dirt, sand, rock
+#define STEP_VENT 3		// ventillation duct
+#define STEP_GRATE 4	// metal grating
+#define STEP_TILE 5		// floor tiles
+#define STEP_SLOSH 6	// shallow liquid puddle
+#define STEP_WADE 7		// wading in liquid
+#define STEP_LADDER 8	// climbing ladder
+
+// orig 0x1edbf0. Play a step sound of the given type at fvol, alternating left and right feet.
+void CBasePlayer::PlayStepSound(int step, float fvol)
+{
+	static int iSkipStep = 0;
+
+	if (!g_pGameRules->PlayFootstepSounds(this, fvol))
+		return;
+
+	// irand - 0,1 for right foot, 2,3 for left foot
+	// used to alternate left and right foot
+	int irand = RANDOM_LONG(0, 1) + (m_iStepLeft * 2);
+
+	m_iStepLeft = !m_iStepLeft;
+
+	const char* pszSound = NULL;
+
+	switch (step)
+	{
+	default:
+	case STEP_CONCRETE:
+	{
+		static const char* const sounds[] = {"player/pl_step1.wav", "player/pl_step3.wav", "player/pl_step2.wav", "player/pl_step4.wav"};
+		pszSound = sounds[irand];
+		break;
+	}
+	case STEP_METAL:
+	{
+		static const char* const sounds[] = {"player/pl_metal1.wav", "player/pl_metal3.wav", "player/pl_metal2.wav", "player/pl_metal4.wav"};
+		pszSound = sounds[irand];
+		break;
+	}
+	case STEP_DIRT:
+	{
+		static const char* const sounds[] = {"player/pl_dirt1.wav", "player/pl_dirt3.wav", "player/pl_dirt2.wav", "player/pl_dirt4.wav"};
+		pszSound = sounds[irand];
+		break;
+	}
+	case STEP_VENT:
+	{
+		static const char* const sounds[] = {"player/pl_duct1.wav", "player/pl_duct3.wav", "player/pl_duct2.wav", "player/pl_duct4.wav"};
+		pszSound = sounds[irand];
+		break;
+	}
+	case STEP_GRATE:
+	{
+		static const char* const sounds[] = {"player/pl_grate1.wav", "player/pl_grate3.wav", "player/pl_grate2.wav", "player/pl_grate4.wav"};
+		pszSound = sounds[irand];
+		break;
+	}
+	case STEP_TILE:
+	{
+		static const char* const sounds[] = {"player/pl_tile1.wav", "player/pl_tile3.wav", "player/pl_tile2.wav", "player/pl_tile4.wav", "player/pl_tile5.wav"};
+		if (0 == RANDOM_LONG(0, 4))
+			irand = 4;
+		pszSound = sounds[irand];
+		break;
+	}
+	case STEP_SLOSH:
+	{
+		static const char* const sounds[] = {"player/pl_slosh1.wav", "player/pl_slosh3.wav", "player/pl_slosh2.wav", "player/pl_slosh4.wav"};
+		pszSound = sounds[irand];
+		break;
+	}
+	case STEP_WADE:
+	{
+		static const char* const sounds[] = {"player/pl_wade1.wav", "player/pl_wade2.wav", "player/pl_wade3.wav", "player/pl_wade4.wav"};
+		if (iSkipStep == 0)
+		{
+			iSkipStep++;
+			return;
+		}
+
+		if (iSkipStep++ == 3)
+			iSkipStep = 0;
+
+		pszSound = sounds[irand];
+		break;
+	}
+	case STEP_LADDER:
+	{
+		static const char* const sounds[] = {"player/pl_ladder1.wav", "player/pl_ladder3.wav", "player/pl_ladder2.wav", "player/pl_ladder4.wav"};
+		pszSound = sounds[irand];
+		break;
+	}
+	}
+
+	EMIT_SOUND(ENT(pev), CHAN_BODY, pszSound, fvol, ATTN_NORM);
+}
+
+// orig 0x1ee1a0. Simple mapping from texture type character to step type.
+int MapTextureTypeStepType(char chTextureType)
+{
+	switch (chTextureType)
+	{
+	default:
+	case CHAR_TEX_CONCRETE:
+		return STEP_CONCRETE;
+	case CHAR_TEX_METAL:
+		return STEP_METAL;
+	case CHAR_TEX_DIRT:
+		return STEP_DIRT;
+	case CHAR_TEX_VENT:
+		return STEP_VENT;
+	case CHAR_TEX_GRATE:
+		return STEP_GRATE;
+	case CHAR_TEX_TILE:
+		return STEP_TILE;
+	case CHAR_TEX_SLOSH:
+		return STEP_SLOSH;
+	}
+}
+
+// orig 0x1ee260. The old SDK's footstep timing with the sound itself taken out (the original
+// computes the step type and throws it away): it keeps the walk animation, the texture under the
+// player and m_flTimeStepSound up to date. Nothing while frozen or on low friction.
+void CBasePlayer::UpdateStepSound()
+{
+	if (gpGlobals->time <= m_flTimeStepSound)
+		return;
+
+	if (FBitSet(pev->flags, FL_FROZEN))
+		return;
+
+	if (pev->friction < 1)
+		return;
+
+	float speed = pev->velocity.Length();
+	bool fLadder = IsOnLadder();
+	float velwalk, velrun, flduck;
+
+	// UNDONE: need defined numbers for run, walk, crouch, crouch run velocities!!!!
+	if (FBitSet(pev->flags, FL_DUCKING) || fLadder)
+	{
+		velwalk = 60; // These constants should be based on cl_movespeedkey * cl_forwardspeed somehow
+		velrun = 80;  // UNDONE: Move walking to server
+		flduck = 0.1;
+	}
+	else
+	{
+		velwalk = 120;
+		velrun = 210;
+		flduck = 0.0;
+	}
+
+	// if we're on a ladder or on the ground, and we're moving fast enough,
+	// play step sound.  Also, if m_flTimeStepSound is zero, get the new
+	// sound right away - we just started moving in new level.
+	if ((fLadder || FBitSet(pev->flags, FL_ONGROUND)) && pev->velocity != g_vecZero && (speed >= velwalk || 0 == m_flTimeStepSound))
+	{
+		SetAnimation(PLAYER_WALK);
+
+		bool fWalking = speed < velrun;
+
+		Vector center, knee, feet;
+		center = knee = feet = (pev->absmin + pev->absmax) * 0.5;
+		float height = pev->absmax.z - pev->absmin.z;
+
+		knee.z = pev->absmin.z + height * 0.2;
+		feet.z = pev->absmin.z;
+
+		// find out what we're stepping in or on...
+		if (fLadder)
+		{
+			m_flTimeStepSound = gpGlobals->time + 0.35;
+		}
+		else if (UTIL_PointContents(knee) == CONTENTS_WATER)
+		{
+			m_flTimeStepSound = gpGlobals->time + 0.6;
+		}
+		else
+		{
+			if (UTIL_PointContents(feet) != CONTENTS_WATER)
+			{
+				// find texture under player, if different from current texture,
+				// get material type
+				Vector start, end;
+				float rgfl1[3];
+				float rgfl2[3];
+				char szbuffer[64];
+
+				start = end = center;			// center point of player BB
+				start.z = end.z = pev->absmin.z; // copy zmin
+				start.z += 4.0;					// extend start up
+				end.z -= 24.0;					// extend end down
+
+				start.CopyToArray(rgfl1);
+				end.CopyToArray(rgfl2);
+
+				const char* pTextureName = TRACE_TEXTURE(ENT(pev->groundentity), rgfl1, rgfl2);
+				if (pTextureName)
+				{
+					// strip leading '-0' or '{' or '!'
+					if (*pTextureName == '-')
+						pTextureName += 2;
+					if (*pTextureName == '{' || *pTextureName == '!')
+						pTextureName++;
+
+					if (0 != strnicmp(pTextureName, m_szTextureName, CBTEXTURENAMEMAX - 1))
+					{
+						// current texture is different from texture player is on...
+						// set current texture
+						strcpy(szbuffer, pTextureName);
+						szbuffer[CBTEXTURENAMEMAX - 1] = 0;
+						strcpy(m_szTextureName, szbuffer);
+
+						// get the material type
+						m_chTextureType = TEXTURETYPE_Find(m_szTextureName);
+					}
+				}
+
+				MapTextureTypeStepType(m_chTextureType); // the original discards the step type
+			}
+
+			// a puddle and every texture type step at the same rate
+			m_flTimeStepSound = fWalking ? gpGlobals->time + 0.4 : gpGlobals->time + 0.3;
+		}
+
+		m_flTimeStepSound += flduck; // slower step time if ducking
+	}
+}
+
+// orig 0x1ee750. Rocket Crowbar's player ID: the player (or driven monster) closest to the
+// crosshair within 4096 units and a 0.968 dot, if visible, is named in an orange HUD text line
+// for 0.3 seconds. A driver looks from his origin along v_angle, ignoring his own monster.
+void CBasePlayer::PlayerDoID()
+{
+	Vector vecSrc = pev->origin + pev->view_ofs;
+	float flBestDot = 0.968;
+
+	UTIL_MakeVectors(pev->v_angle + pev->punchangle);
+
+	if (m_bInDriveEnt && m_pCurDriveEnt)
+	{
+		vecSrc = pev->origin;
+		UTIL_MakeVectors(pev->v_angle);
+	}
+
+	Vector vecForward = gpGlobals->v_forward;
+	CBaseEntity* pBest = NULL;
+	CBaseEntity* pEntity = NULL;
+
+	while ((pEntity = UTIL_FindEntityInSphere(pEntity, vecSrc, 4096)) != NULL)
+	{
+		if (!pEntity->pev || FNullEnt(pEntity->pev))
+			continue;
+
+		edict_t* pent = pEntity->pev->pContainingEntity;
+		if (!pent || !pent->pvPrivateData || pent->free || pEntity->pev == pev)
+			continue;
+
+		if (!pEntity->IsAlive() || (pEntity->pev->flags & FL_NOTARGET) != 0)
+			continue;
+
+		if (m_bInDriveEnt && m_pCurDriveEnt && m_pCurDriveEnt->pev == pEntity->pev)
+			continue;
+
+		// players, and anything somebody drives
+		if (pEntity->Classify() != CLASS_PLAYER)
+		{
+			if (!pEntity->GetControllerName())
+				continue;
+			if (!pEntity->IsDriveent())
+				continue;
+		}
+
+		float flZDiff = pEntity->Center().z - vecSrc.z;
+		Vector vecLOS = pEntity->Center() - vecSrc;
+		float flDot;
+
+		// close up and level, only the yaw counts
+		if (fabs(flZDiff) >= 32 || vecLOS.Length() >= 100 || (m_bInDriveEnt && m_pCurDriveEnt))
+			flDot = DotProduct(vecLOS.Normalize(), vecForward);
+		else
+			flDot = DotProduct(vecLOS.Make2D().Normalize(), vecForward.Make2D().Normalize());
+
+		if (flDot > flBestDot)
+		{
+			TraceResult tr;
+			Vector vecEnd = pEntity->Center();
+
+			gpGlobals->trace_flags = FTRACE_SIMPLEBOX;
+			if (!m_bInDriveEnt || !m_pCurDriveEnt)
+				UTIL_TraceLine(vecSrc, vecEnd, ignore_monsters, edict(), &tr);
+			else
+				UTIL_TraceLine(vecSrc + vecForward * 16, vecEnd, ignore_monsters, m_pCurDriveEnt->edict(), &tr);
+
+			if (tr.flFraction >= 1.0 || tr.pHit == pEntity->pev->pContainingEntity)
+			{
+				flBestDot = flDot;
+				pBest = pEntity;
+			}
+		}
+	}
+
+	if (!pBest || FNullEnt(pBest->pev))
+		return;
+
+	char szName[256];
+
+	if (pBest->Classify() == CLASS_PLAYER)
+		sprintf(szName, "%s", STRING(pBest->pev->netname));
+	else
+		sprintf(szName, "%s", pBest->GetControllerName());
+
+	MESSAGE_BEGIN(MSG_ONE_UNRELIABLE, SVC_TEMPENTITY, NULL, edict());
+	WRITE_BYTE(TE_TEXTMESSAGE);
+	WRITE_BYTE(14 & 0xFF); // channel
+	WRITE_SHORT(FixedSigned16(-1, 1 << 13));
+	WRITE_SHORT(FixedSigned16(0.7, 1 << 13));
+	WRITE_BYTE(0); // effect
+	WRITE_BYTE(255);
+	WRITE_BYTE(128);
+	WRITE_BYTE(0);
+	WRITE_BYTE(100);
+	WRITE_BYTE(255);
+	WRITE_BYTE(128);
+	WRITE_BYTE(0);
+	WRITE_BYTE(100);
+	WRITE_SHORT(0); // fade in
+	WRITE_SHORT(0); // fade out
+	WRITE_SHORT(FixedUnsigned16(0.3, 1 << 8));
+	WRITE_STRING(szName);
+	MESSAGE_END();
+}
+
+int g_iPlayerShockwave = 0; // sprites/shockwave.spr, precached by ClientPrecache (client.cpp)
+
+// orig 0x1eef90. The butt stomp's ring: a blue-white beam cylinder from 12 units above vecOrigin.
+void DoPlayerShockwaveEffect(Vector vecOrigin)
+{
+	vecOrigin = vecOrigin + Vector(0, 0, 12);
+
+	MESSAGE_BEGIN(MSG_PAS, SVC_TEMPENTITY, vecOrigin);
+	WRITE_BYTE(TE_BEAMCYLINDER);
+	WRITE_COORD(vecOrigin.x);
+	WRITE_COORD(vecOrigin.y);
+	WRITE_COORD(vecOrigin.z);
+	WRITE_COORD(vecOrigin.x);
+	WRITE_COORD(vecOrigin.y);
+	WRITE_COORD(vecOrigin.z + 1800); // reach damage radius over .2 seconds
+	WRITE_SHORT(g_iPlayerShockwave);
+	WRITE_BYTE(0);	 // startframe
+	WRITE_BYTE(0);	 // framerate
+	WRITE_BYTE(1);	 // life
+	WRITE_BYTE(12);	 // width
+	WRITE_BYTE(0);	 // noise
+	WRITE_BYTE(220); // r
+	WRITE_BYTE(220); // g
+	WRITE_BYTE(255); // b
+	WRITE_BYTE(180); // brightness
+	WRITE_BYTE(0);	 // speed
+	MESSAGE_END();
+}
+
+// orig 0x1ef190. The touch a long jump sets (Jump): landing on something that takes damage, from
+// above its center, crushes it ([PLAYER] LongJumpStompDmg, inflictor classname "stomp"); landing
+// on the world just makes the ring and the sound. Either way the touch ends and gravity resets.
+void CBasePlayer::ButStompTouch(CBaseEntity* pOther)
+{
+	if (pOther->pev->takedamage != DAMAGE_NO && pev->origin.z + pev->mins.z > pOther->Center().z)
+	{
+		CBaseEntity* pStomp = GetClassPtr((CBaseEntity*)NULL);
+		pStomp->Spawn();
+		pStomp->pev->classname = MAKE_STRING("stomp");
+		pOther->TakeDamage(pStomp->pev, pev, PREFS_KeyLoopUpFloat("PLAYER", "LongJumpStompDmg", 1000), DMG_CRUSH | DMG_ALWAYSGIB);
+		pStomp->SUB_Remove();
+
+		DoPlayerShockwaveEffect(Vector(pev->origin.x, pev->origin.y, pev->absmin.z));
+		EMIT_SOUND_DYN(edict(), CHAN_ITEM, "garg/gar_stomp1.wav", 0.7, 1.1, 0, 130);
+	}
+	else
+	{
+		TraceResult tr;
+		Vector vecFeet = Vector(pev->origin.x, pev->origin.y, pev->origin.z + pev->mins.z + 4);
+
+		UTIL_TraceLine(vecFeet, vecFeet - Vector(0, 0, 16), ignore_monsters, edict(), &tr);
+
+		// VERIFY: literal reading: a trace that hits nothing still counts when its pHit is a brush model
+		bool bGround = tr.flFraction < 1.0;
+		if (!bGround && tr.pHit && CBaseEntity::Instance(tr.pHit) && CBaseEntity::Instance(tr.pHit)->IsBSPModel())
+			bGround = true;
+
+		if (bGround)
+		{
+			DoPlayerShockwaveEffect(vecFeet);
+			EMIT_SOUND_DYN(edict(), CHAN_ITEM, "garg/gar_stomp1.wav", 0.75, 1.1, 0, 130);
+		}
+	}
+
+	SetTouch(NULL);
+	pev->gravity = 1;
+}
+
+// orig 0x1eb0c0. Rocket Crowbar's death camera: an invisible "dying_cam" entity (kept in m_pCam)
+// placed up to 200 units from the body at a random yaw and a 30-60 degree pitch (one time in 20
+// along or against the player's velocity instead), looking at the body. PlayerDeathThink points
+// the player's view at it (m_blSetView). Bots don't get one.
+void CBasePlayer::StartDyingCam()
+{
+	if (IsBot())
+		return;
+
+	if (!m_pCam || !m_blCamInited || !m_pCam->pev->pContainingEntity->pvPrivateData)
+	{
+		m_pCam = GetClassPtr((CBaseEntity*)NULL);
+		m_pCam->pev->movetype = MOVETYPE_NONE;
+		m_pCam->pev->solid = SOLID_NOT;
+		SET_MODEL(m_pCam->edict(), "models/w_isotopebox.mdl");
+		m_pCam->pev->classname = MAKE_STRING("dying_cam");
+		UTIL_SetOrigin(m_pCam->pev, m_pCam->pev->origin);
+		UTIL_SetSize(m_pCam->pev, g_vecZero, g_vecZero);
+		m_pCam->pev->owner = edict();
+		m_pCam->pev->rendermode = kRenderTransColor;
+		m_pCam->pev->renderamt = 0;
+		m_blCamInited = true;
+	}
+
+	Vector vecAngles;
+	vecAngles.y = RANDOM_FLOAT(0, 360);
+	vecAngles.x = RANDOM_FLOAT(-30, -60);
+	vecAngles.z = 0;
+
+	if (RANDOM_LONG(1, 20) == 1)
+	{
+		if (RANDOM_FLOAT(0, 1) > 0.5)
+			vecAngles = UTIL_VecToAngles(-pev->velocity);
+		else
+			vecAngles = UTIL_VecToAngles(pev->velocity);
+		vecAngles.z = 0;
+	}
+
+	while (vecAngles.x < 0)
+		vecAngles.x += 360;
+	while (vecAngles.x > 360)
+		vecAngles.x -= 360;
+	while (vecAngles.y < 0)
+		vecAngles.y += 360;
+	while (vecAngles.y > 360)
+		vecAngles.y -= 360;
+	while (vecAngles.z < 0)
+		vecAngles.z += 360;
+	while (vecAngles.z > 360)
+		vecAngles.z -= 360;
+
+	UTIL_MakeVectors(vecAngles);
+	Vector vecForward = gpGlobals->v_forward;
+
+	TraceResult tr;
+	UTIL_TraceLine(pev->origin, pev->origin + vecForward * 200, ignore_monsters, edict(), &tr);
+
+	Vector vecCam;
+	if (tr.flFraction <= 0.1 || 0 != tr.fAllSolid || 0 != tr.fStartSolid)
+		vecCam = pev->origin + Vector(0, 0, 16);
+	else if (tr.flFraction < 1.0)
+		vecCam = tr.vecEndPos + tr.vecPlaneNormal.Normalize() * 8;
+	else
+		vecCam = tr.vecEndPos;
+
+	if (UTIL_PointContents(vecCam) == CONTENTS_SOLID)
+		vecCam = pev->origin + Vector(0, 0, 16);
+
+	UTIL_SetOrigin(m_pCam->pev, vecCam);
+
+	Vector vecLook = UTIL_VecToAngles((pev->origin - vecCam).Normalize());
+	m_pCam->pev->v_angle = Vector(-vecLook.x, vecLook.y, vecLook.z);
+	m_pCam->pev->angles = Vector(-vecLook.x, vecLook.y, vecLook.z);
+
+	m_blSetView = true;
 }
 
 //Player ID
@@ -1883,9 +2486,16 @@ void CBasePlayer::UpdateStatusBar()
 #define CLIMB_PUNCH_X -7		 // how far to 'punch' client X axis when climbing
 #define CLIMB_PUNCH_Z 7			 // how far to 'punch' client Z axis when climbing
 
+// orig 0x1ef420. RC: the pregame observer (ObserverFrame) and its respawn, the hand-off to a
+// driven monster (DEClientPreThink, and nothing else of the player's think while driving), the
+// player ID every 0.3 s, curse messages, health and armor regeneration from rc.ini, and the
+// butt stomp. The old SDK's node graph pointer check isn't in it, nor halflife-updated's view
+// entity reset or its spectator buttons.
 void CBasePlayer::PreThink()
 {
 	int buttonsChanged = (m_afButtonLast ^ pev->button); // These buttons have changed this frame
+
+	m_afButtonLast = pev->button;
 
 	// Debounced button codes for pressed/released
 	// UNDONE: Do we need auto-repeat?
@@ -1897,6 +2507,38 @@ void CBasePlayer::PreThink()
 	if (g_fGameOver)
 		return; // intermission or finale
 
+	// JOHN: checks if new client data (for HUD and view control) needs to be sent to the client
+	UpdateClientData();
+
+	if (m_blIsObserver)
+	{
+		ObserverFrame(this);
+		if (m_blIsObserver)
+			return;
+	}
+
+	if (m_blObserverRespawn)
+	{
+		Spawn();
+		m_fInitHUD = true;
+		UpdateClientData();
+		m_blObserverRespawn = false;
+		return;
+	}
+
+	if (m_bInDriveEnt && m_pCurDriveEnt)
+		m_pCurDriveEnt->DEClientPreThink();
+
+	if (IsNetClient() && m_flIDTime < gpGlobals->time)
+	{
+		PlayerDoID();
+		m_flIDTime = gpGlobals->time + 0.3;
+	}
+
+	// the driven monster does the rest
+	if (m_bInDriveEnt && m_pCurDriveEnt)
+		return;
+
 	UTIL_MakeVectors(pev->v_angle); // is this still used?
 
 	ItemPreFrame();
@@ -1907,55 +2549,35 @@ void CBasePlayer::PreThink()
 	else
 		m_iHideHUD |= HIDEHUD_FLASHLIGHT;
 
-	if (m_bResetViewEntity)
-	{
-		m_bResetViewEntity = false;
-
-		CBaseEntity* viewEntity = m_hViewEntity;
-
-		if (viewEntity)
-		{
-			SET_VIEW(edict(), viewEntity->edict());
-		}
-	}
-
-	// in the event that the player JUST spawned, and the level node graph
-	// was loaded, fix all of the node graph pointers before the game starts.
-
-	// !!!BUGBUG - now that we have multiplayer, this needs to be moved!
-	if (0 != WorldGraph.m_fGraphPresent && 0 == WorldGraph.m_fGraphPointersSet)
-	{
-		if (!WorldGraph.FSetGraphPointers())
-		{
-			ALERT(at_console, "**Graph pointers were not set!\n");
-		}
-		else
-		{
-			ALERT(at_console, "**Graph Pointers Set!\n");
-		}
-	}
-
-	// JOHN: checks if new client data (for HUD and view control) needs to be sent to the client
-	UpdateClientData();
-
 	CheckTimeBasedDamage();
 
 	CheckSuitUpdate();
-
-	// Observer Button Handling
-	if (IsObserver())
-	{
-		Observer_HandleButtons();
-		Observer_CheckTarget();
-		Observer_CheckProperties();
-		pev->impulse = 0;
-		return;
-	}
 
 	if (pev->deadflag >= DEAD_DYING)
 	{
 		PlayerDeathThink();
 		return;
+	}
+
+	DrawCursedMsg(this);
+
+	// health and armor regeneration (on when rc.ini sets the times and the timers were started)
+	if (m_fHealthRegenTime > 0 && m_fHealthRegenTime < gpGlobals->time && PREFS_KeyLoopUpFloat("PLAYER", "HealthRegenTime", -1) > 0)
+	{
+		m_fHealthRegenTime = PREFS_KeyLoopUpFloat("PLAYER", "HealthRegenTime", -1) + gpGlobals->time;
+		if (pev->health < PREFS_KeyLoopUpFloat("PLAYER", "HealthRegenMax", pev->max_health))
+			TakeHealth(PREFS_KeyLoopUpFloat("PLAYER", "HealthRegenAmount", 1), DMG_GENERIC);
+	}
+
+	if (m_fArmorRegenTime > 0 && m_fArmorRegenTime < gpGlobals->time && PREFS_KeyLoopUpFloat("PLAYER", "ArmorRegenTime", -1) > 0)
+	{
+		m_fArmorRegenTime = PREFS_KeyLoopUpFloat("PLAYER", "ArmorRegenTime", -1) + gpGlobals->time;
+		if (pev->armorvalue < (float)PREFS_KeyLoopUpInt("PLAYER", "ArmorRegenMax", PREFS_KeyLoopUpIntClamp("PLAYER", "MaxArmor", 100, 0, 999)))
+		{
+			pev->armorvalue += PREFS_KeyLoopUpFloat("PLAYER", "ArmorRegenAmount", 1);
+			if (pev->armorvalue > (float)PREFS_KeyLoopUpIntClamp("PLAYER", "MaxArmor", 100, 0, 999))
+				pev->armorvalue = (float)PREFS_KeyLoopUpIntClamp("PLAYER", "MaxArmor", 100, 0, 999);
+		}
 	}
 
 	// So the correct flags get sent to client asap.
@@ -1987,7 +2609,7 @@ void CBasePlayer::PreThink()
 				//ALERT( at_error, "In train mode with no train!\n" );
 				m_afPhysicsFlags &= ~PFLAG_ONTRAIN;
 				m_iTrain = TRAIN_NEW | TRAIN_OFF;
-				if (pTrain->Classify() == CLASS_VEHICLE)
+				if (pTrain && pTrain->Classify() == CLASS_VEHICLE)
 					((CFuncVehicle*)pTrain)->m_pDriver = NULL;
 				return;
 			}
@@ -2049,6 +2671,22 @@ void CBasePlayer::PreThink()
 	else if ((m_iTrain & TRAIN_ACTIVE) != 0)
 		m_iTrain = TRAIN_NEW; // turn off train
 
+	// a long jump turns into a butt stomp once it starts coming down
+	if (m_blInButStomp)
+	{
+		if (!FBitSet(pev->flags, FL_ONGROUND) && !IsOnLadder())
+		{
+			if (pev->velocity.z < 10 && m_flMinStompTime < gpGlobals->time)
+			{
+				pev->gravity = 3;
+				m_blInButStomp = false;
+				SetTouch(&CBasePlayer::ButStompTouch);
+			}
+		}
+		else
+			m_blInButStomp = false;
+	}
+
 	if ((pev->button & IN_JUMP) != 0)
 	{
 		// If on a ladder, jump off the ladder
@@ -2060,6 +2698,8 @@ void CBasePlayer::PreThink()
 	// If trying to duck, already ducked, or in the process of ducking
 	if ((pev->button & IN_DUCK) != 0 || FBitSet(pev->flags, FL_DUCKING) || (m_afPhysicsFlags & PFLAG_DUCKING) != 0)
 		Duck();
+
+	UpdateStepSound();
 
 	if (!FBitSet(pev->flags, FL_ONGROUND))
 	{
@@ -2525,8 +3165,8 @@ Check for turning off powerups
 GLOBALS ASSUMED SET:  g_ulModelIndexPlayer
 ================
 */
-static void
-CheckPowerups(entvars_t* pev)
+// orig 0x1f0260 (a global in the original)
+void CheckPowerups(entvars_t* pev)
 {
 	if (pev->health <= 0)
 		return;
@@ -2655,13 +3295,28 @@ void CBasePlayer::UpdatePlayerSound()
 }
 
 
+// orig 0x1f0520. RC: nothing for an observer, a driver hands over to his monster
+// (DEClientPostThink), the safe fall speed comes from rc.ini ([PLAYER] MaxSafeFallVelo), a hard
+// landing plays the fall pain sounds and a landing step sound, and falling does no damage (the
+// original asks the game rules for the fall damage and only uses it for the splat sound).
+// The original returns early where this goes to pt_end; pt_end is halflife-updated's decay of
+// the predicted weapon timers, which stand in for the original's absolute weapon times.
 void CBasePlayer::PostThink()
 {
+	if (m_blIsObserver)
+		goto pt_end;
+
 	if (g_fGameOver)
 		goto pt_end; // intermission or finale
 
 	if (!IsAlive())
 		goto pt_end;
+
+	if (m_bInDriveEnt && m_pCurDriveEnt)
+	{
+		m_pCurDriveEnt->DEClientPostThink();
+		goto pt_end;
+	}
 
 	// Handle Tank controlling
 	if (m_pTank != NULL)
@@ -2688,7 +3343,7 @@ void CBasePlayer::PostThink()
 
 	if ((FBitSet(pev->flags, FL_ONGROUND)) && (pev->health > 0) && m_flFallVelocity >= PLAYER_FALL_PUNCH_THRESHHOLD)
 	{
-		// ALERT ( at_console, "%f\n", m_flFallVelocity );
+		float fvol = 0.5;
 
 		if (pev->watertype == CONTENT_WATER)
 		{
@@ -2698,8 +3353,18 @@ void CBasePlayer::PostThink()
 			// if ( !pev->groundentity || VARS(pev->groundentity)->velocity.z == 0 )
 			// EMIT_SOUND(ENT(pev), CHAN_BODY, "player/pl_wade1.wav", 1, ATTN_NORM);
 		}
-		else if (m_flFallVelocity > PLAYER_MAX_SAFE_FALL_SPEED)
-		{ // after this point, we start doing damage
+		else if (m_flFallVelocity > PREFS_KeyLoopUpFloat("PLAYER", "MaxSafeFallVelo", 580))
+		{
+			switch (RANDOM_LONG(0, 1))
+			{
+			case 0:
+				EMIT_SOUND(ENT(pev), CHAN_VOICE, "player/pl_fallpain2.wav", 1, ATTN_NORM);
+				// the original has no break here: case 0 plays both sounds
+				[[fallthrough]];
+			case 1:
+				EMIT_SOUND(ENT(pev), CHAN_VOICE, "player/pl_fallpain3.wav", 1, ATTN_NORM);
+				break;
+			}
 
 			float flFallDamage = g_pGameRules->FlPlayerFallDamage(this);
 
@@ -2709,11 +3374,27 @@ void CBasePlayer::PostThink()
 				EMIT_SOUND(ENT(pev), CHAN_ITEM, "common/bodysplat.wav", 1, ATTN_NORM);
 			}
 
-			if (flFallDamage > 0)
-			{
-				TakeDamage(CWorld::World->pev, CWorld::World->pev, flFallDamage, DMG_FALL);
-				pev->punchangle.x = 0;
-			}
+			fvol = 1.0;
+		}
+		else if (m_flFallVelocity > PREFS_KeyLoopUpFloat("PLAYER", "MaxSafeFallVelo", 580) * 0.5)
+		{
+			fvol = 0.85;
+		}
+		else if (m_flFallVelocity < PLAYER_MIN_BOUNCE_SPEED)
+		{
+			fvol = 0;
+		}
+
+		if (fvol > 0.0)
+		{
+			// get current texture under player right away
+			m_flTimeStepSound = 0;
+			UpdateStepSound();
+
+			// play step sound for current texture
+			PlayStepSound(MapTextureTypeStepType(m_chTextureType), fvol);
+
+			RANDOM_LONG(0, 1); // the original throws the result away
 		}
 
 		if (IsAlive())
@@ -2818,6 +3499,7 @@ pt_end:
 
 
 // checks if the spot is clear of players
+// orig 0x1f0970. RC: anything alive within 64 units blocks the spot (the SDK: a player within 128).
 bool IsSpawnPointValid(CBaseEntity* pPlayer, CBaseEntity* pSpot)
 {
 	CBaseEntity* ent = NULL;
@@ -2827,14 +3509,94 @@ bool IsSpawnPointValid(CBaseEntity* pPlayer, CBaseEntity* pSpot)
 		return false;
 	}
 
-	while ((ent = UTIL_FindEntityInSphere(ent, pSpot->pev->origin, 128)) != NULL)
+	while ((ent = UTIL_FindEntityInSphere(ent, pSpot->pev->origin, 64)) != NULL)
 	{
-		// if ent is a client, don't spawn on 'em
-		if (ent->IsPlayer() && ent != pPlayer)
+		if (ent->IsAlive() && ent != pPlayer)
 			return false;
 	}
 
 	return true;
+}
+
+// orig 0x1f09f0. A random free spot of szClassname (with bTeam, one whose pev->button is
+// pPlayer's team number); with none free, a random occupied one and bForced set. NULL when the
+// map has none.
+CBaseEntity* PickRandomSpawnOfClassname(const char* szClassname, CBaseEntity* pPlayer, bool bTeam, bool& bForced)
+{
+	CBaseEntity* rgpSpots[64];
+	int iCount = 0;
+	CBaseEntity* pSpot = NULL;
+
+	// the original caps the count at 63, so a 64th and later spot keeps overwriting the last slot
+	while ((pSpot = UTIL_FindEntityByClassname(pSpot, szClassname)) != NULL)
+	{
+		if (FNullEnt(pSpot->pev->pContainingEntity))
+			continue;
+		if (!IsSpawnPointValid(pPlayer, pSpot))
+			continue;
+		if (bTeam && pSpot->pev->button != g_pGameRules->GetTeamIndex(((CBasePlayer*)pPlayer)->m_szTeamName) + 1)
+			continue;
+
+		rgpSpots[iCount++] = pSpot;
+		if (iCount > 63)
+			iCount = 63;
+	}
+
+	if (iCount < 1)
+	{
+		iCount = 0;
+		pSpot = NULL;
+		while ((pSpot = UTIL_FindEntityByClassname(pSpot, szClassname)) != NULL)
+		{
+			if (FNullEnt(pSpot->pev->pContainingEntity))
+				continue;
+			if (bTeam && pSpot->pev->button != g_pGameRules->GetTeamIndex(((CBasePlayer*)pPlayer)->m_szTeamName) + 1)
+				continue;
+
+			rgpSpots[iCount++] = pSpot;
+			if (iCount > 63)
+				iCount = 63;
+		}
+
+		if (iCount < 1)
+			return NULL;
+
+		bForced = true;
+	}
+	else
+		bForced = false;
+
+	return rgpSpots[RANDOM_LONG(0, iCount - 1)];
+}
+
+// orig 0x1f0c10. Picks a spot (PickRandomSpawnOfClassname); on an occupied one, everything alive
+// within 64 units is killed: 9999 damage from pPlayer, and again from the world if it survives.
+edict_t* DoEntSpawnPointStuff(const char* szClassname, CBaseEntity* pPlayer, bool bTeam)
+{
+	bool bForced = false;
+	CBaseEntity* pSpot = PickRandomSpawnOfClassname(szClassname, pPlayer, bTeam, bForced);
+
+	if (!pSpot)
+		return NULL;
+
+	if (bForced)
+	{
+		CBaseEntity* ent = NULL;
+		edict_t* pWorld = INDEXENT(0);
+
+		// VERIFY: pPlayer itself is alive here if it stands within 64 units of the spot
+		while ((ent = UTIL_FindEntityInSphere(ent, pSpot->pev->origin, 64)) != NULL)
+		{
+			if (!ent->IsAlive())
+				continue;
+
+			ent->TakeDamage(pPlayer->pev, pPlayer->pev, 9999, DMG_GENERIC);
+			if (pWorld && !FNullEnt(ent->pev) && ent->IsAlive())
+				ent->TakeDamage(VARS(pWorld), VARS(pWorld), 9999, DMG_GENERIC);
+		}
+	}
+
+	return pSpot->pev->pContainingEntity;
 }
 
 /*
@@ -2842,112 +3604,72 @@ bool IsSpawnPointValid(CBaseEntity* pPlayer, CBaseEntity* pSpot)
 EntSelectSpawnPoint
 
 Returns the entity to spawn at
-
-USES AND SETS GLOBAL g_pLastSpawn
 ============
 */
+// orig 0x1f0d70. RC: random spots through DoEntSpawnPointStuff, info_teamspawn in teamplay, and
+// as a last resort the map's scientists, grunts or barneys. No g_pLastSpawn, no startspot.
 edict_t* EntSelectSpawnPoint(CBaseEntity* pPlayer)
 {
-	CBaseEntity* pSpot;
-	edict_t* player;
+	const char* szClassname;
+	edict_t* pSpot;
 
-	int nNumRandomSpawnsToTry = 10;
-
-	player = pPlayer->edict();
-
-	// choose a info_player_deathmatch point
 	if (g_pGameRules->IsCoOp())
 	{
-		pSpot = UTIL_FindEntityByClassname(g_pLastSpawn, "info_player_coop");
-		if (!FNullEnt(pSpot))
-			goto ReturnSpot;
-		pSpot = UTIL_FindEntityByClassname(g_pLastSpawn, "info_player_start");
-		if (!FNullEnt(pSpot))
-			goto ReturnSpot;
+		pSpot = DoEntSpawnPointStuff("info_player_coop", pPlayer, false);
+		if (pSpot)
+			return pSpot;
+		szClassname = "info_player_start";
+	}
+	else if (g_pGameRules->IsTeamplay())
+	{
+		pSpot = DoEntSpawnPointStuff("info_teamspawn", pPlayer, true);
+		if (pSpot)
+			return pSpot;
+		szClassname = "info_player_deathmatch";
 	}
 	else if (g_pGameRules->IsDeathmatch())
-	{
-		if (NULL == g_pLastSpawn)
-		{
-			int nNumSpawnPoints = 0;
-			CBaseEntity* pEnt = UTIL_FindEntityByClassname(NULL, "info_player_deathmatch");
-			while (NULL != pEnt)
-			{
-				nNumSpawnPoints++;
-				pEnt = UTIL_FindEntityByClassname(pEnt, "info_player_deathmatch");
-			}
-			nNumRandomSpawnsToTry = nNumSpawnPoints;
-		}
-
-		pSpot = g_pLastSpawn;
-		// Randomize the start spot
-		for (int i = RANDOM_LONG(1, nNumRandomSpawnsToTry - 1); i > 0; i--)
-			pSpot = UTIL_FindEntityByClassname(pSpot, "info_player_deathmatch");
-		if (FNullEnt(pSpot)) // skip over the null point
-			pSpot = UTIL_FindEntityByClassname(pSpot, "info_player_deathmatch");
-
-		CBaseEntity* pFirstSpot = pSpot;
-
-		do
-		{
-			if (pSpot)
-			{
-				// check if pSpot is valid
-				if (IsSpawnPointValid(pPlayer, pSpot))
-				{
-					if (pSpot->pev->origin == Vector(0, 0, 0))
-					{
-						pSpot = UTIL_FindEntityByClassname(pSpot, "info_player_deathmatch");
-						continue;
-					}
-
-					// if so, go to pSpot
-					goto ReturnSpot;
-				}
-			}
-			// increment pSpot
-			pSpot = UTIL_FindEntityByClassname(pSpot, "info_player_deathmatch");
-		} while (pSpot != pFirstSpot); // loop if we're not back to the start
-
-		// we haven't found a place to spawn yet,  so kill any guy at the first spawn point and spawn there
-		if (!FNullEnt(pSpot))
-		{
-			CBaseEntity* ent = NULL;
-			while ((ent = UTIL_FindEntityInSphere(ent, pSpot->pev->origin, 128)) != NULL)
-			{
-				// if ent is a client, kill em (unless they are ourselves)
-				if (ent->IsPlayer() && !(ent->edict() == player))
-					ent->TakeDamage(CWorld::World->pev, CWorld::World->pev, 300, DMG_GENERIC);
-			}
-			goto ReturnSpot;
-		}
-	}
-
-	// If startspot is set, (re)spawn there.
-	if (FStringNull(gpGlobals->startspot) || 0 == strlen(STRING(gpGlobals->startspot)))
-	{
-		pSpot = UTIL_FindEntityByClassname(NULL, "info_player_start");
-		if (!FNullEnt(pSpot))
-			goto ReturnSpot;
-	}
+		szClassname = "info_player_deathmatch";
 	else
+		szClassname = NULL;
+
+	if (szClassname)
 	{
-		pSpot = UTIL_FindEntityByTargetname(NULL, STRING(gpGlobals->startspot));
-		if (!FNullEnt(pSpot))
-			goto ReturnSpot;
+		pSpot = DoEntSpawnPointStuff(szClassname, pPlayer, false);
+		if (pSpot)
+			return pSpot;
 	}
 
-ReturnSpot:
-	if (FNullEnt(pSpot))
-	{
-		ALERT(at_error, "PutClientInServer: no info_player_start on level");
-		return CWorld::World->edict();
-	}
+	CBaseEntity* pStart = UTIL_FindEntityByClassname(NULL, "info_player_start");
+	if (pStart && !FNullEnt(pStart->pev) && IsSpawnPointValid(pPlayer, pStart))
+		return pStart->pev->pContainingEntity;
 
-	g_pLastSpawn = pSpot;
-	return pSpot->edict();
+	if ((pSpot = DoEntSpawnPointStuff("info_player_start", pPlayer, false)) != NULL)
+		return pSpot;
+	if ((pSpot = DoEntSpawnPointStuff("info_player_coop", pPlayer, false)) != NULL)
+		return pSpot;
+	if ((pSpot = DoEntSpawnPointStuff("info_player_deathmatch", pPlayer, false)) != NULL)
+		return pSpot;
+	if ((pSpot = DoEntSpawnPointStuff("info_teamspawn", pPlayer, true)) != NULL)
+		return pSpot;
+	if ((pSpot = DoEntSpawnPointStuff("info_teamspawn", pPlayer, false)) != NULL)
+		return pSpot;
+	if ((pSpot = DoEntSpawnPointStuff("monster_scientist", pPlayer, false)) != NULL)
+		return pSpot;
+	if ((pSpot = DoEntSpawnPointStuff("monster_human_grunt", pPlayer, false)) != NULL)
+		return pSpot;
+	if ((pSpot = DoEntSpawnPointStuff("monster_barney", pPlayer, false)) != NULL)
+		return pSpot;
+
+	ALERT(at_error, "No spawnpoints on level\n");
+	return INDEXENT(0);
 }
 
+// orig 0x1f1000. RC: precaches first, reads the client's extragibs, bloodscale and
+// driveentalpha userinfo, forces the client's move speeds and slot 1/2 binds, puts a new player
+// into the pregame observer (sv_pregameobserver 1, multiplayer, once per connection), takes the
+// start health, armor, max health and long jump from rc.ini, resets the drive, stomp and curse
+// state, starts the regeneration timers, gives the active weapon a 0.5 s delay, and sets up the
+// dying camera.
 void CBasePlayer::Spawn()
 {
 	m_flStartCharge = gpGlobals->time;
@@ -2960,15 +3682,52 @@ void CBasePlayer::Spawn()
 			m_bIsSpawning = false;
 		}};
 
+	Precache();
+
+	g_engfuncs.pfnSetPhysicsKeyValue(edict(), "slj", "0");
+	g_engfuncs.pfnSetPhysicsKeyValue(edict(), "hl", "1");
+	g_engfuncs.pfnSetPhysicsKeyValue(edict(), "bj", UTIL_dtos1(sv_allowbunnyhopping.value != 0 ? 1 : 0));
+
+	m_iGibExtra = atoi(g_engfuncs.pfnInfoKeyValue(g_engfuncs.pfnGetInfoKeyBuffer(edict()), "extragibs"));
+	m_flBloodScale = atof(g_engfuncs.pfnInfoKeyValue(g_engfuncs.pfnGetInfoKeyBuffer(edict()), "bloodscale"));
+	m_fDrvEntAlpha = atof(g_engfuncs.pfnInfoKeyValue(g_engfuncs.pfnGetInfoKeyBuffer(edict()), "driveentalpha"));
+
+	if (m_iGibExtra > 255)
+		m_iGibExtra = 255;
+	if (m_iGibExtra < 0)
+		m_iGibExtra = 0;
+	if (m_fDrvEntAlpha > 1)
+		m_fDrvEntAlpha = 1;
+	if (m_fDrvEntAlpha < 0)
+		m_fDrvEntAlpha = 0;
+
+	CLIENT_COMMAND(edict(), "cl_forwardspeed 1000\ncl_backspeed 1000\ncl_sidespeed 1000\n");
+	CLIENT_COMMAND(edict(), "bind \"1\" \"slot1\"\nbind \"2\" \"slot2\"\n");
+
+	g_pGameRules->SetDefaultPlayerTeam(this);
+	m_fInitHUD = true;
+
+	// a player who just joined watches first
+	if (CVAR_GET_FLOAT("sv_pregameobserver") == 1 && !m_blIsObserver && !m_blWasObserver && g_pGameRules->IsMultiplayer())
+	{
+		m_blWasObserver = true;
+		m_blIsObserver = true;
+		m_blObserverRespawn = true;
+		SET_VIEW(edict(), edict());
+		InitObserver(this);
+		return;
+	}
+
+	// The original sets pev->flags to FL_CLIENT; halflife-updated keeps the engine's FL_PROXY and FL_FAKECLIENT.
+	pev->flags &= FL_PROXY | FL_FAKECLIENT;
+	pev->flags |= FL_CLIENT;
 	pev->classname = MAKE_STRING("player");
-	pev->health = 100;
-	pev->armorvalue = 0;
+	pev->health = PREFS_KeyLoopUpFloat("PLAYER", "StartHealth", 100);
+	pev->armorvalue = PREFS_KeyLoopUpInt("PLAYER", "StartArmor", 0);
 	pev->takedamage = DAMAGE_AIM;
 	pev->solid = SOLID_SLIDEBOX;
 	pev->movetype = MOVETYPE_WALK;
-	pev->max_health = pev->health;
-	pev->flags &= FL_PROXY | FL_FAKECLIENT; // keep proxy and fakeclient flags set by engine
-	pev->flags |= FL_CLIENT;
+	pev->max_health = PREFS_KeyLoopUpFloat("PLAYER", "MaxHealth", pev->health);
 	pev->air_finished = gpGlobals->time + 12;
 	pev->dmg = 2; // initial water damage
 	pev->effects = 0;
@@ -2977,17 +3736,56 @@ void CBasePlayer::Spawn()
 	pev->dmg_save = 0;
 	pev->friction = 1.0;
 	pev->gravity = 1.0;
+	pev->rendermode = kRenderNormal;
+	pev->renderamt = 255;
 	m_bitsHUDDamage = -1;
 	m_bitsDamageType = 0;
 	m_afPhysicsFlags = 0;
-	m_fLongJump = false; // no longjump module.
+	pev->iuser1 = 0;
+	pev->iuser4 = 0;
+	m_fLongJump = PREFS_KeyLoopUpBool("PLAYER", "StartWithlongJump", false);
 
-	g_engfuncs.pfnSetPhysicsKeyValue(edict(), "slj", "0");
-	g_engfuncs.pfnSetPhysicsKeyValue(edict(), "hl", "1");
-	g_engfuncs.pfnSetPhysicsKeyValue(edict(), "bj", UTIL_dtos1(sv_allowbunnyhopping.value != 0 ? 1 : 0));
+	m_fCurseMSGTime = gpGlobals->time;
+	m_flNextChatTime = gpGlobals->time; // VERIFY: the original's write-only member at +0x688
+	pev->euser3 = NULL;
+	pev->iuser3 = 0;
+	pev->euser2 = NULL;
+	m_pLastItem = NULL;
+	m_iClientHideHUD = -1; // force this to be recalculated
+	m_iHideHUD = 0;
+	m_fWeapon = false;
+	m_pClientActiveItem = NULL;
+	m_iClientBattery = -1;
+	m_blInButStomp = false;
+	m_blOnTractor = false;
+	m_pCurDriveEnt = NULL;
+	m_bInDriveEnt = false;
+	m_fDrcEntTransTime = gpGlobals->time;
+	m_flFallVelocity = 0; // dont let uninitialized value here hurt the player
+	pev->velocity.z = 0;
+	m_bitsDamageType = 0;
+	m_afPhysicsFlags = 0;
+	m_blIsObserver = false;
+	m_blObserverRespawn = false;
+	m_blWasObserver = true;
+	m_fCurseRefireScale = 1;
+	m_fCurseDmgMirror = 0;
+	m_fCurseDmgScale = 1;
 
+	if (PREFS_KeyLoopUpFloat("PLAYER", "HealthRegenTime", -1) > 0)
+		m_fHealthRegenTime = PREFS_KeyLoopUpFloat("PLAYER", "HealthRegenTime", -1) + gpGlobals->time;
+	else
+		m_fHealthRegenTime = -1;
+
+	if (PREFS_KeyLoopUpFloat("PLAYER", "ArmorRegenTime", -1) > 0)
+		m_fArmorRegenTime = PREFS_KeyLoopUpFloat("PLAYER", "ArmorRegenTime", -1) + gpGlobals->time;
+	else
+		m_fArmorRegenTime = -1;
+
+	pev->velocity = g_vecZero;
 	m_iFOV = 0;		   // init field of view.
 	m_iClientFOV = -1; // make sure fov reset is sent
+	m_iClientHealth = -1;
 	m_ClientSndRoomtype = -1;
 
 	m_flNextDecalTime = 0; // let this player decal as soon as he spawns.
@@ -3003,14 +3801,11 @@ void CBasePlayer::Spawn()
 	m_flNextAttack = UTIL_WeaponTimeBase();
 	StartSneaking();
 
+	g_pGameRules->GetPlayerSpawnSpot(this);
+
+	m_fNoPlayerSound = false; // normal sound behavior.
 	m_iFlashBattery = 99;
 	m_flFlashLightTime = 1; // force first message
-
-	// dont let uninitialized value here hurt the player
-	m_flFallVelocity = 0;
-
-	g_pGameRules->SetDefaultPlayerTeam(this);
-	g_pGameRules->GetPlayerSpawnSpot(this);
 
 	SET_MODEL(ENT(pev), "models/player.mdl");
 	g_ulModelIndexPlayer = pev->modelindex;
@@ -3022,35 +3817,68 @@ void CBasePlayer::Spawn()
 		UTIL_SetSize(pev, VEC_HULL_MIN, VEC_HULL_MAX);
 
 	pev->view_ofs = VEC_VIEW;
-	Precache();
 	m_HackedGunPos = Vector(0, 32, 0);
+	m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
 
 	if (m_iPlayerSound == SOUNDLIST_EMPTY)
 	{
 		ALERT(at_console, "Couldn't alloc player sound slot!\n");
 	}
 
-	m_fNoPlayerSound = false; // normal sound behavior.
-
-	m_pLastItem = NULL;
-	m_fInitHUD = true;
-	m_iClientHideHUD = -1; // force this to be recalculated
-	m_fWeapon = false;
-	m_pClientActiveItem = NULL;
-	m_iClientBattery = -1;
-
-	// reset all ammo values to 0
+	// reset all ammo values to 0; the original marks the client's copies unknown (-1, the SDK 0)
 	for (int i = 0; i < MAX_AMMO_SLOTS; i++)
 	{
 		m_rgAmmo[i] = 0;
-		m_rgAmmoLast[i] = 0; // client ammo values also have to be reset  (the death hud clear messages does on the client side)
+		m_rgAmmoLast[i] = -1;
 	}
 
 	m_lastx = m_lasty = 0;
 
-	m_flNextChatTime = gpGlobals->time;
-
 	g_pGameRules->PlayerSpawn(this);
+
+	for (int i = 0; i < MAX_AMMO_SLOTS; i++)
+		m_rgAmmoLast[i] = -1;
+
+	// no shooting for half a second after spawning
+	m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
+	if (m_pActiveItem)
+	{
+		CBasePlayerWeapon* pWeapon = m_pActiveItem->GetWeaponPtr();
+		if (pWeapon) // VERIFY: the original treats every item as a weapon here
+		{
+			pWeapon->m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.5;
+			pWeapon->m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.5;
+			pWeapon->m_iClientClip = -1;
+		}
+		m_pActiveItem->UpdateClientData(this);
+	}
+
+	UpdateNVN();
+	m_flNVNUpdateTime = gpGlobals->time + 0.5;
+
+	if (IsBot())
+		return;
+
+	SET_VIEW(edict(), edict());
+	UpdateClientData();
+
+	if (!m_pCam || !m_blCamInited || !m_pCam->pev->pContainingEntity->pvPrivateData)
+	{
+		m_pCam = GetClassPtr((CBaseEntity*)NULL);
+		m_pCam->pev->movetype = MOVETYPE_NONE;
+		m_pCam->pev->solid = SOLID_NOT;
+		SET_MODEL(m_pCam->edict(), "models/w_isotopebox.mdl");
+		m_pCam->pev->classname = MAKE_STRING("dying_cam");
+		m_pCam->pev->owner = edict();
+		UTIL_SetOrigin(m_pCam->pev, m_pCam->pev->origin);
+		UTIL_SetSize(m_pCam->pev, g_vecZero, g_vecZero);
+		m_pCam->pev->rendermode = kRenderTransColor;
+		m_pCam->pev->renderamt = 0;
+		m_blCamInited = true;
+	}
+
+	m_blSetView = false;
+	m_flIDTime = gpGlobals->time;
 }
 
 
@@ -3058,6 +3886,23 @@ void CBasePlayer::Precache()
 {
 	// SOUNDS / MODELS ARE PRECACHED in ClientPrecache() (game specific)
 	// because they need to precache before any clients have connected
+
+	// in the event that the player JUST spawned, and the level node graph
+	// was loaded, fix all of the node graph pointers before the game starts.
+	// (orig 0x1f1d00: here, as in the old SDK; halflife-updated moved it to PreThink)
+
+	// !!!BUGBUG - now that we have multiplayer, this needs to be moved!
+	if (0 != WorldGraph.m_fGraphPresent && 0 == WorldGraph.m_fGraphPointersSet)
+	{
+		if (!WorldGraph.FSetGraphPointers())
+		{
+			ALERT(at_console, "**Graph pointers were not set!\n");
+		}
+		else
+		{
+			ALERT(at_console, "**Graph Pointers Set!\n");
+		}
+	}
 
 	// init geiger counter vars during spawn and each time
 	// we cross a level transition
@@ -3070,7 +3915,7 @@ void CBasePlayer::Precache()
 
 	m_iClientBattery = -1;
 
-	m_iTrain |= TRAIN_NEW;
+	m_iTrain = TRAIN_NEW; // the original assigns; halflife-updated ORs
 
 	// Make sure any necessary user messages have been registered
 	LinkUserMessages();
@@ -3404,14 +4249,45 @@ void CBloodSplat::Spray()
 
 //==============================================
 
+// orig 0x1f2720 (GiveNamedItem). RC: refuses a classname nothing has spawned yet or that isn't
+// an entity, and interns the classname in Create's table (cbase.cpp) instead of MAKE_STRING.
 static edict_t* GiveNamedItem_Common(entvars_t* pev, const char* pszName)
 {
-	int istr = MAKE_STRING(pszName);
+	if (!IsClassnamePrecached(const_cast<char*>(pszName)))
+	{
+		ALERT(at_console, "Trying to GiveNamedItem %s, not precached!\n", pszName);
+		return nullptr;
+	}
+
+	if (!IsValidEnitityClassname(const_cast<char*>(pszName)))
+	{
+		ALERT(at_console, "NULL Ent, %s, in GiveNamedItem!\n", pszName);
+		return nullptr;
+	}
+
+	int i;
+	for (i = 0; i < g_iCntFakeClassnames; i++)
+	{
+		if (!stricmp(g_pFakeConstClassnames[i], pszName))
+			break;
+	}
+
+	int istr;
+	if (i < g_iCntFakeClassnames)
+		istr = MAKE_STRING(g_pFakeConstClassnames[i]);
+	else if (g_iCntFakeClassnames < 256)
+	{
+		strcpy(g_pFakeConstClassnames[g_iCntFakeClassnames], pszName);
+		istr = MAKE_STRING(g_pFakeConstClassnames[g_iCntFakeClassnames]);
+		g_iCntFakeClassnames++;
+	}
+	else
+		istr = MAKE_STRING(pszName);
 
 	edict_t* pent = CREATE_NAMED_ENTITY(istr);
 	if (FNullEnt(pent))
 	{
-		ALERT(at_console, "NULL Ent in GiveNamedItem!\n");
+		ALERT(at_console, "NULL Ent, %s, in GiveNamedItem!\n", pszName);
 		return nullptr;
 	}
 	VARS(pent)->origin = pev->origin;
@@ -3611,8 +4487,45 @@ void CBasePlayer::ImpulseCommands()
 	pev->impulse = 0;
 }
 
+// orig 0x1f28d0. What the player is looking at, up to 8192 units (the SDK's static
+// FindEntityForward, a global in the original; nothing in the original calls it any more).
+CBaseEntity* FindEntityForward(CBaseEntity* pMe)
+{
+	TraceResult tr;
+
+	UTIL_MakeVectors(pMe->pev->v_angle);
+	UTIL_TraceLine(pMe->pev->origin + pMe->pev->view_ofs, pMe->pev->origin + pMe->pev->view_ofs + gpGlobals->v_forward * 8192, dont_ignore_monsters, pMe->edict(), &tr);
+	if (tr.flFraction != 1.0 && !FNullEnt(tr.pHit))
+	{
+		CBaseEntity* pHit = CBaseEntity::Instance(tr.pHit);
+		return pHit;
+	}
+	return NULL;
+}
+
+// orig 0x1f2f10. Cheat transforms are allowed outside multiplayer, and in it with sv_allowtransform 1.
+bool AllowToTransform(edict_t* pPlayer)
+{
+	if (g_pGameRules->IsMultiplayer() && CVAR_GET_FLOAT("sv_allowtransform") != 1)
+		return false;
+
+	return true;
+}
+
+// Puts pPlayer into a new drive monster it just created (the transform cheats).
+static void EnterNewDriveEnt(CBasePlayer* pPlayer)
+{
+	pPlayer->m_pCurDriveEnt->pev->angles = Vector(0, pPlayer->pev->v_angle.y, 0);
+	pPlayer->m_pCurDriveEnt->DEClientEnter(pPlayer);
+	pPlayer->m_bInDriveEnt = true;
+}
+
 //=========================================================
 //=========================================================
+// orig 0x1f2f70. RC replaced the SDK's debug impulses: 33-46 turn the player into a drive
+// monster (sv_allowtransform; the bullsquid and chumtoad only for the listen server's host),
+// 101 is stock, 111 gives all ammo and 112 the throwables. The others (76, 102-107, 195-199,
+// 202) are gone.
 void CBasePlayer::CheatImpulseCommands(int iImpulse)
 {
 	if (0 == g_psv_cheats->value)
@@ -3620,26 +4533,96 @@ void CBasePlayer::CheatImpulseCommands(int iImpulse)
 		return;
 	}
 
-	CBaseEntity* pEntity;
-	TraceResult tr;
+	const char* pszDrive = NULL;
+	bool bUnsafe = false; // the creates that may spawn a never-spawned classname, and check for NULL
 
 	switch (iImpulse)
 	{
-	case 76:
-	{
-		if (!giPrecacheGrunt)
-		{
-			giPrecacheGrunt = true;
-			ALERT(at_console, "You must now restart to use Grunt-o-matic.\n");
-		}
-		else
-		{
-			UTIL_MakeVectors(Vector(0, pev->v_angle.y, 0));
-			Create("monster_human_grunt", pev->origin + gpGlobals->v_forward * 128, pev->angles);
-		}
+	case 33:
+		if (!AllowToTransform(edict()) || m_bInDriveEnt)
+			return;
+		// VERIFY: the original doesn't check Create's result for 33-39 (crashes if it fails)
+		m_pCurDriveEnt = (CBaseDriveEnt*)Create("drive_apache", Center() + Vector(0, 0, 256), Vector(0, pev->v_angle.y, 0));
+		EnterNewDriveEnt(this);
+		return;
+
+	case 34:
+		pszDrive = "drive_garg";
 		break;
+	case 35:
+		pszDrive = "drive_assassin";
+		break;
+
+	case 36:
+	{
+		if (!AllowToTransform(edict()) || m_bInDriveEnt)
+			return;
+
+		// the turret goes on the floor or ceiling the player looks at
+		TraceResult tr;
+		UTIL_MakeVectors(pev->v_angle);
+		Vector vecSrc = pev->origin + pev->view_ofs;
+		UTIL_TraceLine(vecSrc, vecSrc + gpGlobals->v_forward * 1024, ignore_monsters, edict(), &tr);
+		if (tr.flFraction >= 1.0)
+			return;
+
+		if (tr.vecPlaneNormal != Vector(0, 0, 1) && tr.vecPlaneNormal != Vector(0, 0, -1))
+			return;
+
+		m_pCurDriveEnt = (CBaseDriveEnt*)Create("drive_turret", tr.vecEndPos + tr.vecPlaneNormal, tr.vecPlaneNormal);
+		if (tr.vecPlaneNormal == Vector(0, 0, 1))
+			m_pCurDriveEnt->pev->angles.y = pev->v_angle.y;
+		else
+			m_pCurDriveEnt->pev->angles.y = UTIL_AngleMod(180 - pev->v_angle.y);
+
+		m_pCurDriveEnt->DEClientEnter(this);
+		m_bInDriveEnt = true;
+		return;
 	}
 
+	case 37:
+		pszDrive = "drive_icky";
+		break;
+	case 38:
+		pszDrive = "drive_houndeye";
+		break;
+	case 39:
+		pszDrive = "drive_asl";
+		break;
+
+	case 40:
+		pszDrive = "drive_panth";
+		bUnsafe = true;
+		break;
+	case 41:
+		pszDrive = "drive_bm";
+		bUnsafe = true;
+		break;
+	case 42:
+		pszDrive = "drive_headcrab";
+		bUnsafe = true;
+		break;
+	case 43:
+		pszDrive = "drive_agrunt";
+		bUnsafe = true;
+		break;
+	case 44:
+		pszDrive = "drive_controller";
+		bUnsafe = true;
+		break;
+
+	case 45:
+	case 46:
+		if (!IsClientListenServer(edict()) || m_bInDriveEnt)
+			return;
+
+		g_bUnsafeCreate = true;
+		m_pCurDriveEnt = (CBaseDriveEnt*)Create(iImpulse == 45 ? "drive_bullsquid" : "drive_chumtoad", Center(), Vector(0, pev->v_angle.y, 0));
+		g_bUnsafeCreate = false;
+		if (!m_pCurDriveEnt)
+			return;
+		EnterNewDriveEnt(this);
+		return;
 
 	case 101:
 		gEvilImpulse101 = true;
@@ -3667,124 +4650,52 @@ void CBasePlayer::CheatImpulseCommands(int iImpulse)
 		GiveNamedItem("weapon_satchel");
 		GiveNamedItem("weapon_snark");
 		GiveNamedItem("weapon_hornetgun");
-
 		gEvilImpulse101 = false;
-		break;
+		return;
 
-	case 102:
-		// Gibbage!!!
-		CGib::SpawnRandomGibs(pev, 1, true);
-		break;
+	case 111:
+		gEvilImpulse101 = true;
+		GiveNamedItem("ammo_9mmclip");
+		GiveNamedItem("ammo_buckshot");
+		GiveNamedItem("ammo_9mmAR");
+		GiveNamedItem("ammo_ARgrenades");
+		GiveNamedItem("ammo_357");
+		GiveNamedItem("ammo_crossbow");
+		GiveNamedItem("ammo_gaussclip");
+		GiveNamedItem("ammo_rpgclip");
+		gEvilImpulse101 = false;
+		return;
 
-	case 103:
-		// What the hell are you doing?
-		pEntity = UTIL_FindEntityForward(this);
-		if (pEntity)
-		{
-			CBaseMonster* pMonster = pEntity->MyMonsterPointer();
-			if (pMonster)
-				pMonster->ReportAIState();
-		}
-		break;
+	case 112:
+		gEvilImpulse101 = true;
+		GiveNamedItem("weapon_handgrenade");
+		GiveNamedItem("weapon_tripmine");
+		GiveNamedItem("weapon_satchel");
+		GiveNamedItem("weapon_snark");
+		gEvilImpulse101 = false;
+		return;
 
-	case 104:
-		// Dump all of the global state varaibles (and global entity names)
-		gGlobalState.DumpGlobals();
-		break;
+	default:
+		return;
+	}
 
-	case 105: // player makes no sound for monsters to hear.
+	// 34, 35, 37-44: a drive monster at the player's center, facing his way
+	if (!AllowToTransform(edict()) || m_bInDriveEnt)
+		return;
+
+	if (bUnsafe)
+		g_bUnsafeCreate = true;
+
+	m_pCurDriveEnt = (CBaseDriveEnt*)Create(pszDrive, Center(), Vector(0, pev->v_angle.y, 0));
+
+	if (bUnsafe)
 	{
-		if (m_fNoPlayerSound)
-		{
-			ALERT(at_console, "Player is audible\n");
-			m_fNoPlayerSound = false;
-		}
-		else
-		{
-			ALERT(at_console, "Player is silent\n");
-			m_fNoPlayerSound = true;
-		}
-		break;
+		g_bUnsafeCreate = false;
+		if (!m_pCurDriveEnt)
+			return;
 	}
 
-	case 106:
-		// Give me the classname and targetname of this entity.
-		pEntity = UTIL_FindEntityForward(this);
-		if (pEntity)
-		{
-			ALERT(at_console, "Classname: %s", STRING(pEntity->pev->classname));
-
-			if (!FStringNull(pEntity->pev->targetname))
-			{
-				ALERT(at_console, " - Targetname: %s\n", STRING(pEntity->pev->targetname));
-			}
-			else
-			{
-				ALERT(at_console, " - TargetName: No Targetname\n");
-			}
-
-			ALERT(at_console, "Model: %s\n", STRING(pEntity->pev->model));
-			if (!FStringNull(pEntity->pev->globalname))
-				ALERT(at_console, "Globalname: %s\n", STRING(pEntity->pev->globalname));
-		}
-		break;
-
-	case 107:
-	{
-		TraceResult tr;
-
-		edict_t* pWorld = CWorld::World->edict();
-
-		Vector start = pev->origin + pev->view_ofs;
-		Vector end = start + gpGlobals->v_forward * 1024;
-		UTIL_TraceLine(start, end, ignore_monsters, edict(), &tr);
-		if (tr.pHit)
-			pWorld = tr.pHit;
-		const char* pTextureName = TRACE_TEXTURE(pWorld, start, end);
-		if (pTextureName)
-			ALERT(at_console, "Texture: %s (%c)\n", pTextureName, PM_FindTextureType(pTextureName));
-	}
-	break;
-	case 195: // show shortest paths for entire level to nearest node
-	{
-		Create("node_viewer_fly", pev->origin, pev->angles);
-	}
-	break;
-	case 196: // show shortest paths for entire level to nearest node
-	{
-		Create("node_viewer_large", pev->origin, pev->angles);
-	}
-	break;
-	case 197: // show shortest paths for entire level to nearest node
-	{
-		Create("node_viewer_human", pev->origin, pev->angles);
-	}
-	break;
-	case 199: // show nearest node and all connections
-	{
-		ALERT(at_console, "%d\n", WorldGraph.FindNearestNode(pev->origin, bits_NODE_GROUP_REALM));
-		WorldGraph.ShowNodeConnections(WorldGraph.FindNearestNode(pev->origin, bits_NODE_GROUP_REALM));
-	}
-	break;
-	case 202: // Random blood splatter
-		UTIL_MakeVectors(pev->v_angle);
-		UTIL_TraceLine(pev->origin + pev->view_ofs, pev->origin + pev->view_ofs + gpGlobals->v_forward * 128, ignore_monsters, ENT(pev), &tr);
-
-		if (tr.flFraction != 1.0)
-		{ // line hit something, so paint a decal
-			CBloodSplat* pBlood = GetClassPtr((CBloodSplat*)NULL);
-			pBlood->Spawn(pev);
-		}
-		break;
-	case 203: // remove creature.
-		pEntity = UTIL_FindEntityForward(this);
-		if (pEntity)
-		{
-			if (0 != pEntity->pev->takedamage)
-				pEntity->SetThink(&CBaseEntity::SUB_Remove);
-		}
-		break;
-	}
+	EnterNewDriveEnt(this);
 }
 
 //
@@ -4105,10 +5016,12 @@ ForceClientDllUpdate to ensure the demo gets messages
 reflecting all of the HUD state info.
 =========================================================
 */
+// orig 0x1f44a0. RC: a new player gets the vote timer, the player ID timer (bots none) and
+// the version banner (PrintRocketCrowbarMsg); an observer gets nothing past the HUD reset.
+// The train HUD always gets 0. Not in the original: halflife-updated's status bar, its
+// "no weapon" CurWeapon message and the Weapons bits message (kept, see the dossier).
 void CBasePlayer::UpdateClientData()
 {
-	const bool fullHUDInitRequired = m_fInitHUD != false;
-
 	if (m_fInitHUD)
 	{
 		m_fInitHUD = false;
@@ -4132,12 +5045,25 @@ void CBasePlayer::UpdateClientData()
 			{
 				FireTargets("game_playerjoin", this, this, USE_TOGGLE, 0);
 			}
+
+			m_flNextVoteTime = gpGlobals->time;
+
+			if (m_flIDTime != -1)
+				m_flIDTime = gpGlobals->time;
+
+			if (!IsBot())
+				PrintRocketCrowbarMsg(this);
+			else
+				m_flIDTime = -1; // bots don't ID
+
+			m_fShotgunRiftTime = m_fIsoBombTime = gpGlobals->time;
 		}
 
 		FireTargets("game_playerspawn", this, this, USE_TOGGLE, 0);
-
-		InitStatusBar();
 	}
+
+	if (m_blIsObserver)
+		return;
 
 	if (m_iHideHUD != m_iClientHideHUD)
 	{
@@ -4169,13 +5095,11 @@ void CBasePlayer::UpdateClientData()
 
 	if (pev->health != m_iClientHealth)
 	{
-		int iHealth = std::clamp<float>(pev->health, 0.f, (float)(std::numeric_limits<short>::max())); // make sure that no negative health values are sent
-		if (pev->health > 0.0f && pev->health <= 1.0f)
-			iHealth = 1;
+		int iHealth = pev->health > 0 ? (int)pev->health : 0; // the original: no upper clamp, no 0-1 to 1
 
 		// send "health" update message
 		MESSAGE_BEGIN(MSG_ONE, gmsgHealth, NULL, pev);
-		WRITE_SHORT(iHealth);
+		WRITE_SHORT(iHealth); // VERIFY: a byte in the original (UserMessages.cpp registers Health as 2 bytes)
 		MESSAGE_END();
 
 		m_iClientHealth = pev->health;
@@ -4293,7 +5217,7 @@ void CBasePlayer::UpdateClientData()
 		ASSERT(gmsgTrain > 0);
 		// send "health" update message
 		MESSAGE_BEGIN(MSG_ONE, gmsgTrain, NULL, pev);
-		WRITE_BYTE(m_iTrain & 0xF);
+		WRITE_BYTE(0); // the original sends 0 (no train HUD), the SDK m_iTrain & 0xF
 		MESSAGE_END();
 
 		m_iTrain &= ~TRAIN_NEW;
@@ -4359,28 +5283,9 @@ void CBasePlayer::UpdateClientData()
 			m_rgpPlayerItems[i]->UpdateClientData(this);
 	}
 
-	//Active item is becoming null, or we're sending all HUD state to client
-	//Only if we're not in Observer mode, which uses the target player's weapon
-	if (pev->iuser1 == OBS_NONE && !m_pActiveItem && ((m_pClientActiveItem != m_pActiveItem) || fullHUDInitRequired))
-	{
-		//Tell ammo hud that we have no weapon selected
-		MESSAGE_BEGIN(MSG_ONE, gmsgCurWeapon, NULL, pev);
-		WRITE_BYTE(0);
-		WRITE_BYTE(0);
-		WRITE_BYTE(0);
-		MESSAGE_END();
-	}
-
 	// Cache and client weapon change
 	m_pClientActiveItem = m_pActiveItem;
 	m_iClientFOV = m_iFOV;
-
-	// Update Status Bar
-	if (m_flNextSBarUpdateTime < gpGlobals->time)
-	{
-		UpdateStatusBar();
-		m_flNextSBarUpdateTime = gpGlobals->time + 0.2;
-	}
 
 	// Send new room type to client.
 	if (m_ClientSndRoomtype != m_SndRoomtype)
@@ -5047,20 +5952,30 @@ public:
 	bool Restore(CRestore& restore) override;
 	static TYPEDESCRIPTION m_SaveData[];
 
-	inline float Duration() { return pev->dmg_take; }
-	inline float HoldTime() { return pev->dmg_save; }
-	inline float MessageTime() { return m_messageTime; }
-	inline float LoadTime() { return m_loadTime; }
+	// out of line, as gcc 2.95 emitted them (orig 0x1f6cc0-0x1f6d60)
+	float Duration();
+	float HoldTime();
+	float MessageTime();
+	float LoadTime();
 
-	inline void SetDuration(float duration) { pev->dmg_take = duration; }
-	inline void SetHoldTime(float hold) { pev->dmg_save = hold; }
-	inline void SetMessageTime(float time) { m_messageTime = time; }
-	inline void SetLoadTime(float time) { m_loadTime = time; }
+	void SetDuration(float duration);
+	void SetHoldTime(float hold);
+	void SetMessageTime(float time);
+	void SetLoadTime(float time);
 
 private:
 	float m_messageTime;
 	float m_loadTime;
 };
+
+float CRevertSaved::Duration() { return pev->dmg_take; }						  // orig 0x1f6d60
+float CRevertSaved::HoldTime() { return pev->dmg_save; }						  // orig 0x1f6d40
+float CRevertSaved::MessageTime() { return m_messageTime; }					  // orig 0x1f6d30
+float CRevertSaved::LoadTime() { return m_loadTime; }							  // orig 0x1f6d20
+void CRevertSaved::SetDuration(float duration) { pev->dmg_take = duration; }	  // orig 0x1f6d00
+void CRevertSaved::SetHoldTime(float hold) { pev->dmg_save = hold; }			  // orig 0x1f6ce0
+void CRevertSaved::SetMessageTime(float time) { m_messageTime = time; }		  // orig 0x1f6cd0
+void CRevertSaved::SetLoadTime(float time) { m_loadTime = time; }				  // orig 0x1f6cc0
 
 LINK_ENTITY_TO_CLASS(player_loadsaved, CRevertSaved);
 
@@ -5164,8 +6079,14 @@ void CInfoIntermission::Think()
 
 LINK_ENTITY_TO_CLASS(info_intermission, CInfoIntermission);
 
-// TEMP STUB (merge of panth-squid-turret): Rocket Crowbar's player ID display (orig 0x1ee750,
-// 2107 bytes) is reconstructed with the rest of player.cpp's RC additions.
-void CBasePlayer::PlayerDoID()
+// TEMP STUB (w2-player-core): real one belongs in hornetgun.cpp (orig 0x1b0c60). Should remove
+// pev's freeze timer; does nothing until hornetgun.cpp is reconstructed.
+void DestroyFreezeTimer(entvars_t* pev)
+{
+}
+
+// TEMP STUB (w2-player-core): real one belongs in handgrenade.cpp (orig 0x1a3860). Should remove
+// pev's friction timer; does nothing until handgrenade.cpp is reconstructed.
+void DestroyFrictionTimer(entvars_t* pev)
 {
 }

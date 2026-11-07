@@ -21,12 +21,19 @@
 #include "items.h"
 #include "gamerules.h"
 #include "UserMessages.h"
+#include "weapons.h"
+#include "Preff.h"
 
 class CHealthKit : public CItem
 {
 	void Spawn() override;
 	void Precache() override;
 	bool MyTouch(CBasePlayer* pPlayer) override;
+
+public:
+	// Rocket Crowbar 1.9's bot interface (not virtual in the original)
+	bool BotCanHaveItem(CBaseEntity* pBot);
+	int GetBotWeight(CBot* pBot, CBaseEntity* pEnemy);
 
 	/*
 	int		Save( CSave &save ) override; 
@@ -63,14 +70,11 @@ void CHealthKit::Precache()
 	PRECACHE_SOUND("items/smallmedkit1.wav");
 }
 
+// orig 0x1ab180. RC: the amount comes from rc.ini. The original has no dead-player check
+// (halflife-updated added one), so a dead player can still take a kit.
 bool CHealthKit::MyTouch(CBasePlayer* pPlayer)
 {
-	if (pPlayer->pev->deadflag != DEAD_NO)
-	{
-		return false;
-	}
-
-	if (pPlayer->TakeHealth(gSkillData.healthkitCapacity, DMG_GENERIC))
+	if (pPlayer->TakeHealth(PREFS_KeyLoopUpFloat("ITEMS", "HealthkitGive", gSkillData.healthkitCapacity), DMG_GENERIC))
 	{
 		MESSAGE_BEGIN(MSG_ONE, gmsgItemPickup, NULL, pPlayer->pev);
 		WRITE_STRING(STRING(pev->classname));
@@ -111,6 +115,11 @@ public:
 	int ObjectCaps() override { return (CBaseToggle::ObjectCaps() | FCAP_CONTINUOUS_USE) & ~FCAP_ACROSS_TRANSITION; }
 	bool Save(CSave& save) override;
 	bool Restore(CRestore& restore) override;
+
+	// Rocket Crowbar 1.9's bot interface (not virtual in the original)
+	bool BotCanHaveItem(CBaseEntity* pBot);
+	int GetBotWeight(CBot* pBot, CBaseEntity* pEnemy);
+	void BotUseMe(CBot* pBot);
 
 	static TYPEDESCRIPTION m_SaveData[];
 
@@ -154,6 +163,7 @@ bool CWallHealth::KeyValue(KeyValueData* pkvd)
 	return CBaseToggle::KeyValue(pkvd);
 }
 
+// orig 0x1ab630
 void CWallHealth::Spawn()
 {
 	Precache();
@@ -164,7 +174,7 @@ void CWallHealth::Spawn()
 	UTIL_SetOrigin(pev, pev->origin); // set size and link into world
 	UTIL_SetSize(pev, pev->mins, pev->maxs);
 	SET_MODEL(ENT(pev), STRING(pev->model));
-	m_iJuice = gSkillData.healthchargerCapacity;
+	m_iJuice = (int)PREFS_KeyLoopUpFloat("ITEMS", "WallHealthMaxUnits", gSkillData.healthchargerCapacity); // RC: rc.ini
 	pev->frame = 0;
 }
 
@@ -176,6 +186,7 @@ void CWallHealth::Precache()
 }
 
 
+// orig 0x1ab770. RC: health per unit and the rate come from rc.ini.
 void CWallHealth::Use(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE useType, float value)
 {
 	// Make sure that we have a caller
@@ -228,19 +239,19 @@ void CWallHealth::Use(CBaseEntity* pActivator, CBaseEntity* pCaller, USE_TYPE us
 
 
 	// charge the player
-	if (player->TakeHealth(1, DMG_GENERIC))
+	if (player->TakeHealth(PREFS_KeyLoopUpFloat("ITEMS", "WallHealthPerUnit", 1.0), DMG_GENERIC))
 	{
 		m_iJuice--;
 	}
 
 	// govern the rate of charge
-	m_flNextCharge = gpGlobals->time + 0.1;
+	m_flNextCharge = gpGlobals->time + PREFS_KeyLoopUpFloat("ITEMS", "WallHealthGiveRate", 0.1);
 }
 
 void CWallHealth::Recharge()
 {
 	EMIT_SOUND(ENT(pev), CHAN_ITEM, "items/medshot4.wav", 1.0, ATTN_NORM);
-	m_iJuice = gSkillData.healthchargerCapacity;
+	m_iJuice = (int)PREFS_KeyLoopUpFloat("ITEMS", "WallHealthMaxUnits", gSkillData.healthchargerCapacity); // orig 0x1ab9c0
 	pev->frame = 0;
 	SetThink(&CWallHealth::SUB_DoNothing);
 }
@@ -260,4 +271,62 @@ void CWallHealth::Off()
 	}
 	else
 		SetThink(&CWallHealth::SUB_DoNothing);
+}
+
+// The original bot's object (CBot, defined only in the bot library): its entvars come first,
+// as in dlls/weapons.cpp. The 16-bit field at +0x2c is compared with the same offset of this
+// entity, which the game library never writes (engine-zeroed), so ours compares with 0.
+// VERIFY: what the bot keeps at +0x2c.
+static entvars_t* RCBotPev(CBot* pBot) { return *reinterpret_cast<entvars_t**>(pBot); }
+static short RCBotField2c(CBot* pBot) { return *reinterpret_cast<short*>(reinterpret_cast<byte*>(pBot) + 0x2c); }
+
+// orig 0x1ab2b0
+bool CHealthKit::BotCanHaveItem(CBaseEntity* pBot)
+{
+	return pBot->pev->health < 100;
+}
+
+// orig 0x1ab2f0. Doesn't ask BotCanHaveItem.
+int CHealthKit::GetBotWeight(CBot* pBot, CBaseEntity* pEnemy)
+{
+	int iScale = RCBotField2c(pBot) == 0 ? 4 : 1;
+	float flHealth = RCBotPev(pBot)->health;
+
+	if (flHealth < 10)
+		return iScale * 100;
+	if (flHealth < 25)
+		return iScale * 50;
+	if (flHealth < 100)
+		return iScale * 5;
+	return 0;
+}
+
+// orig 0x1abb40
+bool CWallHealth::BotCanHaveItem(CBaseEntity* pBot)
+{
+	return m_iJuice > 0 && pBot->pev->health < pBot->pev->max_health;
+}
+
+// orig 0x1abb80
+int CWallHealth::GetBotWeight(CBot* pBot, CBaseEntity* pEnemy)
+{
+	if (!BotCanHaveItem(reinterpret_cast<CBaseEntity*>(pBot)))
+		return 0;
+
+	int iScale = RCBotField2c(pBot) == 0 ? 4 : 1;
+	float flHealth = RCBotPev(pBot)->health;
+
+	if (flHealth < 10)
+		return iScale * 55 * 2;
+	if (flHealth < 25)
+		return iScale * 55;
+	if (flHealth < 100)
+		return iScale * 3 * 2;
+	return 0;
+}
+
+// orig 0x1abc40: asks BotCanHaveItem and ignores the answer.
+void CWallHealth::BotUseMe(CBot* pBot)
+{
+	BotCanHaveItem(reinterpret_cast<CBaseEntity*>(pBot));
 }

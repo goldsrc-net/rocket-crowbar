@@ -85,11 +85,15 @@ extern void DispatchDissconnect(edict_t* pPlayer);
 extern void DispatchPlayerKilled(edict_t* pPlayer);
 extern int CountEntsClaimedByEnt(edict_t* pOwner, const char* pszClassname);
 extern int CountEntsInWorld(const char* pszClassname); // combat.cpp
+extern void ThrowFakeGibs(entvars_t* pevVictim, bool bHuman); // combat.cpp
 extern Vector GetPullCenter(edict_t* pPulled);
 extern bool IsValidEnitityClassname(char* pszClassname);
 extern bool IsClassnamePrecached(char* pszClassname);
 extern bool IsClassnamePrecachedNoInvalid(const char* pszClassname);
 extern void AddToPrecachedList(const char* pszClassname);
+extern char g_pFakeConstClassnames[256][128]; // Create's classname table
+extern int g_iCntFakeClassnames;
+extern bool g_bUnsafeCreate;
 
 typedef enum
 {

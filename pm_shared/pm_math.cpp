@@ -268,6 +268,34 @@ void VectorMA(const float* veca, float scale, const float* vecb, float* vecc)
 	vecc[2] = veca[2] + scale * vecb[2];
 }
 
+// The SDK 2.0 pm_math.c function forms of mathlib.h's DotProduct/VectorSubtract/VectorAdd/
+// VectorCopy macros (orig 0xdb170-0xdb200). halflife-updated dropped them; nothing calls them.
+float _DotProduct(const float* v1, const float* v2)
+{
+	return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
+}
+
+void _VectorSubtract(const float* veca, const float* vecb, float* out)
+{
+	out[0] = veca[0] - vecb[0];
+	out[1] = veca[1] - vecb[1];
+	out[2] = veca[2] - vecb[2];
+}
+
+void _VectorAdd(const float* veca, const float* vecb, float* out)
+{
+	out[0] = veca[0] + vecb[0];
+	out[1] = veca[1] + vecb[1];
+	out[2] = veca[2] + vecb[2];
+}
+
+void _VectorCopy(const float* in, float* out)
+{
+	out[0] = in[0];
+	out[1] = in[1];
+	out[2] = in[2];
+}
+
 void CrossProduct(const float* v1, const float* v2, float* cross)
 {
 	cross[0] = v1[1] * v2[2] - v1[2] * v2[1];

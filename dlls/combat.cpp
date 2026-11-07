@@ -29,6 +29,7 @@
 #include "animation.h"
 #include "weapons.h"
 #include "func_break.h"
+#include "player.h"
 
 extern Vector VecBModelOrigin(entvars_t* pevBModel);
 
@@ -49,6 +50,7 @@ void CGib::LimitVelocity()
 }
 
 
+// orig 0x105fa0
 void CGib::SpawnStickyGibs(entvars_t* pevVictim, Vector vecOrigin, int cGibs)
 {
 	int i;
@@ -58,6 +60,10 @@ void CGib::SpawnStickyGibs(entvars_t* pevVictim, Vector vecOrigin, int cGibs)
 		// no sticky gibs in germany right now!
 		return;
 	}
+
+	// Rocket Crowbar: no sticky gibs at all once 46 gibs exist (counted once, before the loop).
+	if (CountEntsInWorld("gib") > 45)
+		return;
 
 	for (i = 0; i < cGibs; i++)
 	{
@@ -118,8 +124,12 @@ void CGib::SpawnStickyGibs(entvars_t* pevVictim, Vector vecOrigin, int cGibs)
 	}
 }
 
+// orig 0x106320. RC: nothing once 46 gibs exist.
 void CGib::SpawnHeadGib(entvars_t* pevVictim)
 {
+	if (CountEntsInWorld("gib") > 45)
+		return;
+
 	CGib* pGib = GetClassPtr((CGib*)NULL);
 
 	if (g_Language == LANGUAGE_GERMAN)
@@ -176,12 +186,17 @@ void CGib::SpawnHeadGib(entvars_t* pevVictim)
 	pGib->LimitVelocity();
 }
 
+// orig 0x1066c0
 void CGib::SpawnRandomGibs(entvars_t* pevVictim, int cGibs, bool human)
 {
 	int cSplat;
 
 	for (cSplat = 0; cSplat < cGibs; cSplat++)
 	{
+		// Rocket Crowbar: stop throwing once 45 gibs exist (counted for each gib)
+		if (CountEntsInWorld("gib") > 44)
+			return;
+
 		CGib* pGib = GetClassPtr((CGib*)NULL);
 
 		if (g_Language == LANGUAGE_GERMAN)
@@ -296,6 +311,7 @@ void CBaseMonster::FadeMonster()
 // GibMonster - create some gore and get rid of a monster's
 // model.
 //=========================================================
+// orig 0x106b80
 void CBaseMonster::GibMonster()
 {
 	TraceResult tr;
@@ -310,6 +326,7 @@ void CBaseMonster::GibMonster()
 		{
 			CGib::SpawnHeadGib(pev);
 			CGib::SpawnRandomGibs(pev, 4, true); // throw some human gibs.
+			ThrowFakeGibs(pev, true);			  // Rocket Crowbar: client-side extras
 		}
 		gibbed = true;
 	}
@@ -318,6 +335,7 @@ void CBaseMonster::GibMonster()
 		if (CVAR_GET_FLOAT("violence_agibs") != 0) // Should never get here, but someone might call it directly
 		{
 			CGib::SpawnRandomGibs(pev, 4, false); // Throw alien gibs
+			ThrowFakeGibs(pev, false);			   // Rocket Crowbar: client-side extras
 		}
 		gibbed = true;
 	}
@@ -831,6 +849,7 @@ When a monster is poisoned via an arrow etc it takes all the poison damage at on
 GLOBALS ASSUMED SET:  g_iSkillLevel
 ============
 */
+// orig 0x107b30
 bool CBaseMonster::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType)
 {
 	float flTake;
@@ -839,15 +858,42 @@ bool CBaseMonster::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, f
 	if (0 == pev->takedamage)
 		return false;
 
+	// Rocket Crowbar: negative damage heals
+	if (flDamage < 0)
+		return TakeHealth(-flDamage, bitsDamageType);
+
 	if (!IsAlive())
 	{
 		return DeadTakeDamage(pevInflictor, pevAttacker, flDamage, bitsDamageType);
+	}
+
+	// Rocket Crowbar: with mp_deathballsonly 1 only deathballs hurt monsters. The original reads
+	// the inflictor unchecked (a NULL inflictor or one without an edict crashes); kept.
+	if (CVAR_GET_FLOAT("mp_deathballsonly") == 1)
+	{
+		if (0 != strcmp(STRING(VARS(pevInflictor->pContainingEntity)->classname), "deathball"))
+			return false;
 	}
 
 	if (pev->deadflag == DEAD_NO)
 	{
 		// no pain sound during death animation.
 		PainSound(); // "Ouch!"
+	}
+
+	// Rocket Crowbar curses: a player attacker's damage scale, then its damage mirror (the
+	// attacker takes the scaled damage times the mirror fraction, before this monster does)
+	if (!FNullEnt(pevAttacker) && pevAttacker != pev)
+	{
+		CBaseEntity* pAttacker = CBaseEntity::Instance(pevAttacker);
+		if (pAttacker && pAttacker->Classify() == CLASS_PLAYER)
+			flDamage *= static_cast<CBasePlayer*>(pAttacker)->m_fCurseDmgScale;
+	}
+	if (!FNullEnt(pevAttacker) && pevAttacker != pev)
+	{
+		CBaseEntity* pAttacker = CBaseEntity::Instance(pevAttacker);
+		if (pAttacker && pAttacker->Classify() == CLASS_PLAYER && static_cast<CBasePlayer*>(pAttacker)->m_fCurseDmgMirror != 0)
+			pAttacker->TakeDamage(pevInflictor, pevAttacker, flDamage * static_cast<CBasePlayer*>(pAttacker)->m_fCurseDmgMirror, bitsDamageType);
 	}
 
 	//!!!LATER - make armor consideration here!
@@ -863,7 +909,7 @@ bool CBaseMonster::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, f
 		CBaseEntity* pInflictor = CBaseEntity::Instance(pevInflictor);
 		if (pInflictor)
 		{
-			vecDir = (pInflictor->Center() - Vector(0, 0, 10) - Center()).Normalize();
+			vecDir = (pInflictor->Center() - Vector(0, 0, 18) - Center()).Normalize(); // RC: 18 (stock 10)
 			vecDir = g_vecAttackDir = vecDir.Normalize();
 		}
 	}
@@ -927,6 +973,10 @@ bool CBaseMonster::TakeDamage(entvars_t* pevInflictor, entvars_t* pevAttacker, f
 	// react to the damage (get mad)
 	if ((pev->flags & FL_MONSTER) != 0 && !FNullEnt(pevAttacker))
 	{
+		// Rocket Crowbar: a driven monster doesn't turn toward its attacker
+		if (IsDriveent())
+			return true;
+
 		if ((pevAttacker->flags & (FL_MONSTER | FL_CLIENT)) != 0)
 		{ // only if the attack was a monster or client!
 
@@ -1719,3 +1769,70 @@ int CountEntsInWorld(const char* pszClassname)
 	}
 	return iCount;
 }
+
+extern short g_iHGibModel; // world.cpp: CWorld::Precache sets both
+extern short g_iAGibModel;
+
+// orig 0x105960. Rocket Crowbar's "extragibs": every player in the victim's PVS who set the
+// extragibs userinfo key (CBasePlayer::m_iGibExtra, read in Spawn) gets that many extra gibs as
+// one client-side TE_BREAKMODEL, flying the way SpawnRandomGibs throws them. Nothing with
+// sv_lowlag 1.
+void ThrowFakeGibs(entvars_t* pevVictim, bool bHuman)
+{
+	if (CVAR_GET_FLOAT("sv_lowlag") == 1)
+		return;
+
+	edict_t* pentList = UTIL_EntitiesInPVS(pevVictim->pContainingEntity);
+
+	Vector vecCenter = pevVictim->origin + (pevVictim->mins + pevVictim->maxs) * 0.5;
+	Vector vecVelocity = g_vecAttackDir * -1 * RANDOM_FLOAT(300, 400);
+
+	if (pevVictim->health > -50)
+		vecVelocity = vecVelocity * 0.7;
+	else if (pevVictim->health > -200)
+		vecVelocity = vecVelocity * 2;
+	else
+		vecVelocity = vecVelocity * 4;
+
+	vecVelocity = vecVelocity * 0.55;
+
+	if (vecVelocity.Length() > 1500)
+		vecVelocity = vecVelocity.Normalize() * 1500;
+
+	for (edict_t* pent = pentList; pent; pent = pent->v.chain)
+	{
+		CBaseEntity* pEntity = CBaseEntity::Instance(pent);
+		if (!pEntity || !pEntity->IsNetClient())
+			continue;
+
+		CBasePlayer* pPlayer = static_cast<CBasePlayer*>(pEntity);
+		if (pPlayer->m_iGibExtra <= 0)
+			continue;
+
+		if (pPlayer->m_iGibExtra >= 255)
+			pPlayer->m_iGibExtra = 254;
+
+		MESSAGE_BEGIN(MSG_ONE_UNRELIABLE, SVC_TEMPENTITY, vecCenter, pent);
+		WRITE_BYTE(TE_BREAKMODEL);
+		WRITE_COORD(vecCenter.x);
+		WRITE_COORD(vecCenter.y);
+		WRITE_COORD(vecCenter.z);
+		WRITE_COORD(pevVictim->size.x);
+		WRITE_COORD(pevVictim->size.y);
+		WRITE_COORD(pevVictim->size.z);
+		WRITE_COORD(vecVelocity.x);
+		WRITE_COORD(vecVelocity.y);
+		WRITE_COORD(vecVelocity.z);
+		WRITE_BYTE((int)(vecVelocity.Length() * 0.15)); // random velocity spread
+		WRITE_SHORT(bHuman ? g_iHGibModel : g_iAGibModel);
+		WRITE_BYTE(pPlayer->m_iGibExtra);
+		WRITE_BYTE(200); // life, 0.1s units
+		WRITE_BYTE(BREAK_FLESH);
+		MESSAGE_END();
+	}
+}
+
+// TEMP STUB (w2-player-core): real ones belong in world.cpp (orig 0x31b6fc / 0x31b6fe, set in
+// CWorld::Precache 0x23f450).
+short g_iHGibModel = 0;
+short g_iAGibModel = 0;
