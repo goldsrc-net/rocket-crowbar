@@ -13,6 +13,13 @@ forced by the build, with its default and what it changes. Same convention as mo
   on `CBasePlayerItem`, `DoRetireWeapon`). Anything that reads the original's memory by offset or
   hooks it by vtable slot (Metamod or AMX Mod X plugins written for RC 1.9) needs our layout.
 
+- **The server is built without `CLIENT_WEAPONS`, as the original was** (decided 2026-11-07;
+  this is a change from halflife-updated, not from RC). The original's `GetWeaponData` zeroes the
+  data and its `UTIL_WeaponTimeBase()` returns `gpGlobals->time`: no client weapon prediction, and
+  every weapon timer absolute. Our server now compiles the SDK's non-prediction branches the same
+  way; the client target keeps `CLIENT_WEAPONS`. Players' clients run no weapon prediction
+  against an RC server, as in 2001.
+
 ## Cvars
 
 The cvar set is checked by `scripts/cvars.py` (`reference/cvars.tsv`).

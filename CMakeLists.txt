@@ -59,7 +59,10 @@ function(set_common_properties TARGET_NAME)
 	target_compile_definitions(${TARGET_NAME} PRIVATE
 		_CRT_SECURE_NO_WARNINGS
 		$<$<CONFIG:DEBUG>:_DEBUG>
-		CLIENT_WEAPONS
+		# Rocket Crowbar 1.9's server was built without client weapon prediction (its GetWeaponData
+		# zeroes the data, UTIL_WeaponTimeBase is gpGlobals->time): weapon timers are absolute.
+		# The client keeps it. reference/DEVIATIONS.md
+		$<$<STREQUAL:${TARGET_NAME},client>:CLIENT_WEAPONS>
 		# These are defined for OSX as well
 		$<$<PLATFORM_ID:Linux, Darwin>:POSIX _POSIX LINUX _LINUX GNUC>
 		$<$<PLATFORM_ID:Darwin>:OSX _OSX>
