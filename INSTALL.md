@@ -14,7 +14,9 @@ stock RC 1.9 content.
    server under RC 1.9's own names: `dlls/rc.so`, `rc_i386.so` and `rc_i686.so` for Linux (Steam's
    current engine loads `rc.so`, older ones `rc_i386.so`, Metamod-R `rc_i686.so`), `dlls/rc.dll` for
    Windows, and the 64-bit servers. RC 1.9's `liblist.gam` already names `dlls\rc.dll` and
-   `dlls/rc_i386.so`, so it stays as it is.
+   `dlls/rc_i386.so`, so it stays as it is. The exception is a 64-bit ReHLDS, which loads
+   `gamedll_linux` as written: on one, point it at `dlls/rc_amd64.so` (x86-64) or
+   `dlls/rc_arm64.so` (ARM). Xash3D finds the 64-bit name from the line by itself.
 3. Start the server with `-game rockcrowbar`.
 
 Going back: put the original `rc_i386.so` and `rc.dll` back in `rockcrowbar/dlls/`, and delete `rc.so`,

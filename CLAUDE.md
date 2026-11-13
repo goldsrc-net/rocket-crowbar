@@ -59,7 +59,9 @@ Every original function has a counterpart (4,878 of 4,888; the other 10 are stoc
 operators under modern names and gcc runtime). Builds for Linux i386, amd64, aarch64 and Win32
 here (Win64 only in CI, with MSVC), packaged as `reRC-<rev>` under RC 1.9's file names; the
 packaged i386 and Win32 servers boot a map on ReHLDS and on the Windows HLDS under Wine
-(`tools/rig/boot-package.sh`). CI is off on this repo until Steven turns it on. Boots, changes maps
+(`tools/rig/boot-package.sh`). CI is on (2026-11-12); its first run passed every job, its
+Linux libraries are byte-identical to local builds, and its MSVC Win32 server boots the same
+way. Boots, changes maps
 and quits on a 32-bit ReHLDS with logs matching the original's line for line
 (`tools/rig/smoke.py`), and a player can join, spawn and drive a monster. Gameplay has not been
 compared with the original beyond that.
