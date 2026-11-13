@@ -7,7 +7,6 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
-#include <strings.h>
 
 #include "extdll.h"
 #include "util.h"
@@ -75,7 +74,7 @@ const char* VM_InitVote(CBaseEntity* pInit, const char* szMap)
 			// VERIFY: as the original, a name starting with a character <= 12 ends the list.
 			if (szName[0] <= 12)
 				break;
-			if (!strcasecmp(szName, szMap))
+			if (!stricmp(szName, szMap))
 			{
 				bFound = true;
 				break;

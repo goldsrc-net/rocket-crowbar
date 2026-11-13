@@ -103,7 +103,7 @@ CBaseEntity* FindOtherSameSpawner(const char* szClassname)
 
 	while ((pEntity = UTIL_FindEntityByClassname(pEntity, "lc_respawner")) != NULL)
 	{
-		if (strcasecmp(szClassname, STRING(pEntity->pev->netname)) == 0)
+		if (stricmp(szClassname, STRING(pEntity->pev->netname)) == 0)
 			return pEntity;
 	}
 
@@ -254,7 +254,7 @@ int LC_ReadLine(FILE* pFile, char* szLine, int iSize)
 // orig 0x1bdfc0: szLine starts with szCommand, any case
 bool LC_CheckStartEqu(char* szLine, char* szCommand)
 {
-	return strncasecmp(szLine, szCommand, strlen(szCommand)) == 0;
+	return strnicmp(szLine, szCommand, strlen(szCommand)) == 0;
 }
 
 // orig 0x1be010: every entity of szClassname ("*prefix" for a prefix match)

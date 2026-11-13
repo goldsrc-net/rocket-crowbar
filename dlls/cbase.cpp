@@ -919,8 +919,8 @@ void AddToPrecachedList(const char* pszClassname)
 	if (IsClassnamePrecachedNoInvalid(pszClassname))
 		return;
 	// the original overwrites the last slot once full
-	strcpy(g_pPrecachedStuff[std::min(g_iCntPrecached, 255)], pszClassname);
-	g_iCntPrecached = std::min(g_iCntPrecached + 1, 256);
+	strcpy(g_pPrecachedStuff[V_min(g_iCntPrecached, 255)], pszClassname);
+	g_iCntPrecached = V_min(g_iCntPrecached + 1, 256);
 }
 
 // w2-client-rules-world: the original's CWorld::Precache sets g_iCntPrecached = 0 directly (an

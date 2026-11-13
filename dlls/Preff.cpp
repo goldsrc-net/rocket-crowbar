@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 
 #include "extdll.h"
 #include "util.h"
@@ -27,15 +26,15 @@ int PREFS_BinSearchHead(const char* szHeading)
 	int iHigh = g_iCountHeadings - 1;
 	while (iLow < iHigh)
 	{
-		if (!strcasecmp(g_pHeadings[iLow].szName, szHeading))
+		if (!stricmp(g_pHeadings[iLow].szName, szHeading))
 			return iLow;
-		if (!strcasecmp(g_pHeadings[iHigh].szName, szHeading))
+		if (!stricmp(g_pHeadings[iHigh].szName, szHeading))
 			return iHigh;
 		if (iHigh <= iLow + 1)
 			return -1;
 
 		int iMid = (iLow + iHigh) / 2;
-		int iCmp = strcasecmp(g_pHeadings[iMid].szName, szHeading);
+		int iCmp = stricmp(g_pHeadings[iMid].szName, szHeading);
 		if (!iCmp)
 			return iMid;
 		if (iCmp < 1)
@@ -50,7 +49,7 @@ int PREFS_BinSearchHead(const char* szHeading)
 		}
 	}
 
-	if (iLow >= g_iCountHeadings || strcasecmp(g_pHeadings[iLow].szName, szHeading))
+	if (iLow >= g_iCountHeadings || stricmp(g_pHeadings[iLow].szName, szHeading))
 		return -1;
 	return iLow;
 }
@@ -66,15 +65,15 @@ int PREFS_BinSearchKey(const char* szKey, int iHeading)
 	int iHigh = g_pHeadings[iHeading].iCount - 1;
 	while (iLow < iHigh)
 	{
-		if (!strcasecmp(pKeys[iLow].szKey, szKey))
+		if (!stricmp(pKeys[iLow].szKey, szKey))
 			return iLow;
-		if (!strcasecmp(pKeys[iHigh].szKey, szKey))
+		if (!stricmp(pKeys[iHigh].szKey, szKey))
 			return iHigh;
 		if (iHigh <= iLow + 1)
 			return -1;
 
 		int iMid = (iLow + iHigh) / 2;
-		int iCmp = strcasecmp(pKeys[iMid].szKey, szKey);
+		int iCmp = stricmp(pKeys[iMid].szKey, szKey);
 		if (!iCmp)
 			return iMid;
 		if (iCmp > 0)
@@ -89,7 +88,7 @@ int PREFS_BinSearchKey(const char* szKey, int iHeading)
 		}
 	}
 
-	if (iLow >= g_pHeadings[iHeading].iCount || strcasecmp(pKeys[iLow].szKey, szKey))
+	if (iLow >= g_pHeadings[iHeading].iCount || stricmp(pKeys[iLow].szKey, szKey))
 		return -1;
 	return iLow;
 }
@@ -148,7 +147,7 @@ void PREFS_SortAll()
 	{
 		for (int j = 0; j < i; j++)
 		{
-			if (strcasecmp(g_pHeadings[i].szName, g_pHeadings[j].szName) < 0)
+			if (stricmp(g_pHeadings[i].szName, g_pHeadings[j].szName) < 0)
 			{
 				sPrefHeading tmp = g_pHeadings[i];
 				g_pHeadings[i] = g_pHeadings[j];
@@ -163,7 +162,7 @@ void PREFS_SortAll()
 				sPrefKey* pKeys = g_pHeadings[i].pKeys;
 				for (int l = 0; l < k; l++)
 				{
-					if (strcasecmp(pKeys[k].szKey, pKeys[l].szKey) < 0)
+					if (stricmp(pKeys[k].szKey, pKeys[l].szKey) < 0)
 					{
 						sPrefKey tmp = pKeys[k];
 						pKeys[k] = pKeys[l];
@@ -182,7 +181,7 @@ int PREFS_AddHeading(const char* szHeading)
 	{
 		for (int i = 0; i < g_iCountHeadings; i++)
 		{
-			if (!strcasecmp(g_pHeadings[i].szName, szHeading))
+			if (!stricmp(g_pHeadings[i].szName, szHeading))
 				return i;
 		}
 	}
@@ -231,7 +230,7 @@ int PREFS_AddKey(const char* szKey, const char* szValue, int iHeading)
 	{
 		for (int i = 0; i < pHeading->iCount; i++)
 		{
-			if (!strcasecmp(pHeading->pKeys[i].szKey, szKey))
+			if (!stricmp(pHeading->pKeys[i].szKey, szKey))
 			{
 				free(pHeading->pKeys[i].szValue);
 				pHeading->pKeys[i].szValue = (char*)malloc(strlen(szValue) + 1);
@@ -394,7 +393,7 @@ bool PREFS_KeyLoopUpBool(const char* szHeading, const char* szKey, bool bDefault
 	char szDefault[16];
 	sprintf(szDefault, "%s", bDefault ? "true" : "false");
 	const char* szValue = PREFS_LookUpWithDefualtCreate(szHeading, szKey, szDefault);
-	return !strcasecmp(szValue, "true") || !strcasecmp(szValue, "1") || !strcasecmp(szValue, "yes");
+	return !stricmp(szValue, "true") || !stricmp(szValue, "1") || !stricmp(szValue, "yes");
 }
 
 // orig 0xe2650. The default is clamped before it is written; the stored value is clamped on
