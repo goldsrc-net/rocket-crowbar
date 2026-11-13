@@ -1,6 +1,6 @@
 # Installing
 
-The rebuild replaces one file of a Rocket Crowbar 1.9 server: its game library. Everything else (rc.ini,
+The rebuild replaces one thing of a Rocket Crowbar 1.9 server: its game library. Everything else (rc.ini,
 the per-map `.lec` and `.cfg` files, the models, sounds and sprites) is RC 1.9's own and stays as it is.
 Players need nothing new: RC 1.9 has no client library, so they join with Half-Life's client and the
 stock RC 1.9 content.
@@ -9,12 +9,17 @@ stock RC 1.9 content.
 
 1. Install RC 1.9 on the server as `rockcrowbar/` next to `valve/` (the release zip's `RockCrowbar`
    folder; on Linux the folder name is lowercase).
-2. Copy the rebuild's `hl.so` (`build-i386/dlls/hl.so` for a 32-bit HLDS, `build-amd64/dlls/hl.so` for a
-   64-bit one) to `rockcrowbar/dlls/hl.so`.
-3. In `rockcrowbar/liblist.gam`, set `gamedll_linux "dlls/hl.so"` (RC 1.9's is `dlls/rc_i386.so`).
-4. Start the server with `-game rockcrowbar`.
+2. Copy the `rockcrowbar/` folder of a `reRC-<rev>` package (CI's artifact or release, or
+   `scripts/package.sh`, [BUILDING.md](BUILDING.md)) over the server's `rockcrowbar/`. It holds the
+   server under RC 1.9's own names: `dlls/rc.so`, `rc_i386.so` and `rc_i686.so` for Linux (Steam's
+   current engine loads `rc.so`, older ones `rc_i386.so`, Metamod-R `rc_i686.so`), `dlls/rc.dll` for
+   Windows, and the 64-bit servers. RC 1.9's `liblist.gam` already names `dlls\rc.dll` and
+   `dlls/rc_i386.so`, so it stays as it is.
+3. Start the server with `-game rockcrowbar`.
 
-Going back: point `gamedll_linux` at `dlls/rc_i386.so` again.
+Going back: put the original `rc_i386.so` and `rc.dll` back in `rockcrowbar/dlls/`, and delete `rc.so`,
+`rc_i686.so` and the 64-bit servers, which RC 1.9 never had (Steam's engine would go on loading
+`rc.so`).
 
 Two things to know about current engines:
 

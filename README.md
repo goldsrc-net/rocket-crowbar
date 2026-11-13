@@ -11,9 +11,11 @@ name, models, sounds and configs are his; this replaces only the code. See [CRED
 
 ## Installing
 
-The rebuild is a server library for a stock RC 1.9 install: put `hl.so` in `rockcrowbar/dlls/` and point
-`gamedll_linux` in `rockcrowbar/liblist.gam` at it. [INSTALL.md](INSTALL.md) covers servers, the test
-setup that runs the original and the rebuild side by side, and going back.
+The rebuild is a server library for a stock RC 1.9 install, packaged as `reRC-<rev>`: its `rockcrowbar/`
+folder goes over the server's, with the server under RC 1.9's own names (`rc_i386.so` and its aliases for
+Linux, `rc.dll` for Windows) and the 64-bit builds, so RC's `liblist.gam` stays as it is.
+[INSTALL.md](INSTALL.md) covers servers, the test setup that runs the original and the rebuild side by
+side, and going back.
 
 ## Servers
 
@@ -28,8 +30,9 @@ keeps, are in [reference/ORIGINAL_BUGS.md](reference/ORIGINAL_BUGS.md).
 ## Building
 
 The Linux libraries build in the [goldsrc-net/buildchain](https://github.com/goldsrc-net/buildchain)
-Docker image (`scripts/build.sh i386`, `scripts/build.sh amd64`). [BUILDING.md](BUILDING.md) has the
-steps.
+Docker image (`scripts/build.sh i386|amd64|aarch64`), the Win32 one with clang-cl on Linux
+(`scripts/build-win.sh`) or MSVC, and `scripts/package.sh` packages them. CI builds every arch and the
+package on each push. [BUILDING.md](BUILDING.md) has the steps.
 
 ## How it was made
 

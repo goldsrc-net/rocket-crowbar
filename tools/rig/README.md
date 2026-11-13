@@ -47,6 +47,17 @@ latest `hl.so` every time and creates the rest only if missing.
 `--clean` strips run-specific noise so two logs diff. The rig for it is the first one (gamedirs
 `rockcrowbar` and `rcours` there; see its docstring).
 
+## Booting a package
+
+`tools/rig/boot-package.sh win|linux <package>/rockcrowbar <RC 1.9's rockcrowbar folder> <map>` boots a
+`reRC-<rev>` package's server (BUILDING.md, Packaging) under its shipped name and passes when it
+answers a server query on port 27045. `win` runs `rc.dll` in the Windows HLDS under Wine (`HLDS_WIN`,
+default `/media/Data3/Projects/goldsrc.net/hlds-win`, the one mod-ts fetches with steamcmd), `linux`
+the i386 server on this rig. It makes a `rockcrowbar-boot` gamedir there and removes it after. The
+rig's `rockcrowbar/` works as the content (its pak is unpacked) with the release zip's liblist.gam
+(`LIBLIST=`), since setup.sh writes its own. RC 1.9 ships no maps of its own and plays Half-Life's,
+so give it one from `valve/`, e.g. `crossfire`.
+
 ## Undo
 
 Move these three away (nothing else is touched):

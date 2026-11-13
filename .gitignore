@@ -20,3 +20,6 @@ scratchpad/
 __pycache__/
 *.pyc
 tools/rig/*.so
+
+# scripts/package.sh output
+dist/
