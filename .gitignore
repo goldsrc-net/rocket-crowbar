@@ -23,3 +23,7 @@ tools/rig/*.so
 
 # scripts/package.sh output
 dist/
+
+# The original mod's own libraries (reference/README.md): not ours to publish
+/reference/rc.dll
+/reference/rc_i386.so

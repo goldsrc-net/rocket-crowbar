@@ -30,7 +30,7 @@ the commit that drops the valve-gamedir gate, which a mod in its own gamedir nee
 | Path | What |
 |---|---|
 | `game/rockcrowbar/` | the mod's gamedir manifest (`liblist.gam`) |
-| `reference/` | the original libraries and everything derived from them (`reference/README.md`) |
+| `reference/` | the original libraries (gitignored: fetch them, `reference/README.md`) and everything derived from them |
 | `reference/RECONSTRUCTION.md` | the work list (from `scripts/inventory.py`) |
 | `reference/DEVIATIONS.md` | everything we do differently from the original |
 | `reference/ORIGINAL_BUGS.md` | the original's bugs, kept or guarded |

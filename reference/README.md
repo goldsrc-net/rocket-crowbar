@@ -3,6 +3,10 @@
 Source-of-truth binaries from the original mod, kept for reconstructing the game
 library as C++ on this SDK. Reference only, not linked into any build.
 
+The original libraries themselves are not in this repository: they are their authors' work. Put
+them here, under the names below (the checksums say which files), before running the scripts and
+the test rig that read them; both are in the v19 release zip (Provenance). `.gitignore` keeps them out of commits.
+
 | File | What it is |
 |---|---|
 | `rc_i386.so` | Linux 32-bit server library, egcs 1.1.2 / gcc 2.95.4, **not stripped**. 5,498 functions with names and addresses, and the names of the 130 source files it was built from. |
