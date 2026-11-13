@@ -5,7 +5,7 @@ counted as "stock" here when halflife-updated has a function of that name
 (`scripts/sdk_baseline.sh`), so nobody compared its body with what RC 1.9 actually shipped. RC 1.9
 was built on Half-Life SDK 2.1 (its strings match 2.1's code, not 2.2's or 2.3's). `sdk-drift.tsv`
 here lists the 668 functions the original has whose body in our tree differs from SDK 2.1's
-(`scripts/stock_drift.py --sdk /media/Data3/Software/hlsdk-archive/v2_1-full/src --loose
+(`scripts/stock_drift.py --sdk <SDK 2.1 src> --loose
 reference/audit/names-rc19.tsv`; columns rva, file, name). Each package `rN` owns the files in
 `rN.files`.
 
@@ -20,7 +20,7 @@ built with gcc 2.95, which we can't byte-match, so a function with an SDK name m
 changes. The authority is the original's typed decompile, `recovered/decomp/<Class>.c` (one file
 per class, every function by name; `scripts/ghidra/re.sh at <addr>` for one, with the address
 from `sdk-drift.tsv`, which is the `.so`'s). Read three bodies for each function: SDK 2.1's
-(`/media/Data3/Software/hlsdk-archive/v2_1-full/src/<same path>`), ours, and the original's.
+(`<SDK 2.1 src>/<same path>`), ours, and the original's.
 
 ```
 the original does          ours does                  class     action
